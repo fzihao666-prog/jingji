@@ -1,0 +1,52 @@
+.recent-test-performance {
+  min-width: 0;
+}
+
+.recent-test-description {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.recent-test-performance > select {
+  width: 100%;
+  min-height: 44px;
+  margin: 8px 0 16px;
+}
+
+.recent-test-summary {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+}
+
+.recent-test-summary dt {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.recent-test-summary dd {
+  margin: 6px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.recent-test-performance .app-echart {
+  height: 260px;
+  min-height: 260px;
+}
+
+.recent-test-performance details {
+  margin-top: 12px;
+}
+
+.recent-test-performance summary {
+  cursor: pointer;
+  padding: 12px 0;
+}
+
+.recent-test-performance table {
+  width: 100%;
+  text-align: left;
+}

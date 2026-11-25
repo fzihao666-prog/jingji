@@ -1,0 +1,76 @@
+{
+  "pages": [
+    "pages/login/login",
+    "pages/register/register",
+    "pages/index/index",
+    "pages/special/special",
+    "pages/strength/strength",
+    "pages/profile/profile",
+    "pages/training-report/training-report",
+    "pages/profile-edit/profile-edit",
+    "pages/athlete-create/athlete-create",
+    "pages/training-entry/training-entry",
+    "pages/wellness-entry/wellness-entry",
+    "pages/injury-report/injury-report",
+    "pages/test-entry/test-entry",
+    "pages/mine/mine",
+    "pages/data-import/data-import",
+    "pages/privacy/privacy",
+    "pages/team-plans/team-plans"
+  ],
+  "window": {
+    "navigationBarBackgroundColor": "#092b39",
+    "navigationBarTextStyle": "white",
+    "navigationBarTitleText": "竞迹",
+    "backgroundColor": "#edf3f4",
+    "backgroundTextStyle": "dark"
+  },
+  "tabBar": {
+    "color": "#6d8088",
+    "selectedColor": "#176f7f",
+    "backgroundColor": "#ffffff",
+    "borderStyle": "white",
+    "list": [
+      {
+        "pagePath": "pages/index/index",
+        "text": "训练总览",
+        "iconPath": "assets/tabbar/overview.png",
+        "selectedIconPath": "assets/tabbar/overview-active.png"
+      },
+      {
+        "pagePath": "pages/special/special",
+        "text": "专项训练",
+        "iconPath": "assets/tabbar/special.png",
+        "selectedIconPath": "assets/tabbar/special-active.png"
+      },
+      {
+        "pagePath": "pages/strength/strength",
+        "text": "体能训练",
+        "iconPath": "assets/tabbar/strength.png",
+        "selectedIconPath": "assets/tabbar/strength-active.png"
+      },
+      {
+        "pagePath": "pages/profile/profile",
+        "text": "档案",
+        "iconPath": "assets/tabbar/profile.png",
+        "selectedIconPath": "assets/tabbar/profile-active.png"
+      },
+      {
+        "pagePath": "pages/mine/mine",
+        "text": "我的",
+        "iconPath": "assets/tabbar/mine.png",
+        "selectedIconPath": "assets/tabbar/mine-active.png"
+      }
+    ]
+  },
+  "usingComponents": {
+    "scope-filter": "/components/scope-filter/index",
+    "pager-nav": "/components/pager-nav/index",
+    "icp-filing": "/components/icp-filing/index",
+    "athlete-selector": "/components/athlete-selector/index"
+  },
+  "style": "v2",
+  "__usePrivacyCheck__": true,
+  "lazyCodeLoading": "requiredComponents",
+  "sitemapLocation": "sitemap.json"
+}

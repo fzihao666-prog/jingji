@@ -1,0 +1,334 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Strength decision support */
+.strength-advice-shell {
+  margin-top: 18px;
+  border: 1px solid #d2e0e2;
+  background: #fff;
+  box-shadow: 0 18px 42px rgb(7 47 60 / 7%);
+}
+
+.strength-advice-shell.loading {
+  min-height: 150px;
+  color: #627b83;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 11px;
+  font-weight: 800;
+}
+
+.strength-advice-head {
+  min-height: 82px;
+  padding: 15px 18px;
+  border-bottom: 1px solid #dbe6e8;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.strength-advice-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  flex-wrap: wrap;
+}
+
+.advice-status.draft {
+  color: #9a6b0c;
+  background: #fff4ce;
+}
+
+.advice-status.approved {
+  color: #0b766e;
+  background: #e6f6f2;
+}
+
+.strength-advice-empty {
+  min-height: 235px;
+  color: #688087;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 10px;
+  text-align: center;
+}
+
+.strength-advice-empty > div {
+  width: 58px;
+  height: 58px;
+  color: #168f88;
+  background: #e7f5f2;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.strength-advice-empty strong {
+  color: #143d49;
+  font-size: 15px;
+}
+
+.strength-advice-empty p {
+  max-width: 520px;
+  font-size: 10px;
+  line-height: 1.6;
+}
+
+.strength-advice-document.web {
+  padding: 0 18px 18px;
+}
+
+.advice-evidence-grid .priority h3 i {
+  background: #dd5b43;
+}
+
+.advice-bottom-grid .caution {
+  border-left: 4px solid #dd5b43;
+  background: #fff9f7;
+}
+
+.strength-advice-pdf {
+  padding: 10mm 12mm 9mm;
+}
+
+.strength-advice-pdf .strength-advice-document {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.strength-advice-document.pdf .advice-proof-strip {
+  min-height: 8mm;
+  font-size: 6pt;
+}
+
+.strength-advice-document.pdf .advice-athlete-line > div {
+  min-height: 15mm;
+  padding: 2.8mm 3mm;
+}
+
+.strength-advice-document.pdf .advice-athlete-line span {
+  font-size: 5.8pt;
+}
+
+.strength-advice-document.pdf .advice-athlete-line strong {
+  margin-top: 1.2mm;
+  font-size: 8pt;
+}
+
+.strength-advice-document.pdf .advice-overview {
+  margin-top: 2.8mm;
+  min-height: 17mm;
+  padding: 3.4mm;
+  grid-template-columns: 22mm 1fr;
+  gap: 3mm;
+}
+
+.strength-advice-document.pdf .advice-overview span {
+  font-size: 6.5pt;
+}
+
+.strength-advice-document.pdf .advice-overview p {
+  font-size: 6.2pt;
+  line-height: 1.6;
+}
+
+.strength-advice-document.pdf .advice-evidence-grid,
+.strength-advice-document.pdf .advice-bottom-grid {
+  margin-top: 2.8mm;
+  gap: 2.8mm;
+}
+
+.strength-advice-document.pdf .advice-evidence-grid > section,
+.strength-advice-document.pdf .advice-bottom-grid > section {
+  min-height: 35mm;
+  padding: 3.4mm;
+}
+
+.strength-advice-document.pdf .advice-evidence-grid h3,
+.strength-advice-document.pdf .advice-bottom-grid h3 {
+  font-size: 7pt;
+}
+
+.strength-advice-document.pdf .advice-evidence-grid ul,
+.strength-advice-document.pdf .advice-bottom-grid ul {
+  margin-top: 2.2mm;
+  padding-left: 3.8mm;
+  font-size: 5.8pt;
+  line-height: 1.6;
+}
+
+.strength-advice-document.pdf .advice-four-weeks {
+  margin-top: 2.8mm;
+}
+
+.strength-advice-document.pdf .advice-four-weeks > header {
+  min-height: 11mm;
+  padding: 0 3.2mm;
+}
+
+.strength-advice-document.pdf .advice-four-weeks > header span {
+  font-size: 6.8pt;
+}
+
+.strength-advice-document.pdf .advice-four-weeks > header small {
+  font-size: 5pt;
+}
+
+.strength-advice-document.pdf .advice-four-weeks article {
+  min-height: 62mm;
+  padding: 4.5mm 2.8mm 2.8mm;
+}
+
+.strength-advice-document.pdf .advice-four-weeks article > b {
+  right: 2mm;
+  top: 1mm;
+  font-size: 24pt;
+}
+
+.strength-advice-document.pdf .advice-four-weeks article h3 {
+  font-size: 6.8pt;
+}
+
+.strength-advice-document.pdf .advice-four-weeks article strong {
+  margin-top: 1.8mm;
+  font-size: 5.4pt;
+}
+
+.strength-advice-document.pdf .advice-four-weeks article ul {
+  margin-top: 2.3mm;
+  padding-left: 3.4mm;
+  font-size: 5.3pt;
+  line-height: 1.6;
+}
+
+.strength-advice-document.pdf .advice-disclaimer {
+  margin-top: auto;
+  min-height: 9mm;
+  padding: 1.8mm 2mm;
+  font-size: 4.8pt;
+}
+
+@media (width <= 1050px) {
+  .strength-advice-head {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .strength-advice-actions {
+    width: 100%;
+    justify-content: flex-start;
+  }
+
+}
+
+@media (width <= 680px) {
+  .strength-advice-head {
+    padding: 14px;
+  }
+
+  .strength-advice-actions button {
+    flex: 1;
+  }
+
+  .strength-advice-document.web {
+    padding: 0 11px 12px;
+  }
+
+}
+
+.special-tests-page {
+  display: grid;
+  gap: 20px;
+}
+
+.special-tests-hero .eyebrow {
+  color: #7de7dc;
+}
+
+.special-tests-hero .secondary-button {
+  border-color: rgb(255 255 255 / 26%);
+  background: rgb(255 255 255 / 10%);
+  color: #fff;
+}
+
+.special-tests-hero .primary-button {
+  background: #fff;
+  color: #073c46;
+}
+
+.test-event-strip > button.active {
+  transform: translateY(-2px);
+  border-color: #1ba39a;
+  background: #ebf8f6;
+  box-shadow: 0 10px 24px rgb(20 121 118 / 12%);
+}
+
+.special-empty {
+  min-height: 170px;
+  flex: 1;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 8px;
+  border: 1px dashed #b8ced2;
+  border-radius: 18px;
+  color: #789097;
+  background: rgb(255 255 255 / 62%);
+}
+
+.special-empty svg {
+  color: #1b9b94;
+}
+
+.special-empty strong {
+  color: #123f4b;
+}
+
+.special-ranking-panel .panel-heading,
+.finish-gap-panel .panel-heading,
+.special-import-preview .panel-heading {
+  margin-bottom: 18px;
+}
+
+.ranking-table-wrap,
+.special-preview-table {
+  overflow-x: auto;
+}
+
+.rank-badge {
+  display: inline-grid;
+  width: 32px;
+  height: 32px;
+  place-items: center;
+  border-radius: 50%;
+  background: #edf3f4;
+  color: #587077;
+  font-weight: 900;
+}
+
+.rank-1 {
+  color: #7a4c00;
+  background: #f9d979;
+  box-shadow: 0 0 0 4px #fff8dc;
+}
+
+.rank-2 {
+  color: #4e6268;
+  background: #d8e0e2;
+}
+
+.rank-3 {
+  color: #7b4a2c;
+  background: #e8b08d;
+}
+
+.row-error td {
+  background: #fff1ef;
+  color: #a83d34;
+}
+

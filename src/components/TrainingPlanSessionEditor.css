@@ -1,0 +1,64 @@
+.plan-session-editor {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--paper);
+  min-width: 0;
+}
+
+.plan-session-editor h3 {
+  margin-top: 0;
+}
+
+.plan-session-editor form,
+.plan-session-editor label {
+  display: grid;
+  gap: 8px;
+}
+
+.plan-session-editor form {
+  gap: 16px;
+}
+
+.plan-session-editor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.plan-session-editor input,
+.plan-session-editor select,
+.plan-session-editor textarea {
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+  line-height: 1.5;
+}
+
+.plan-session-editor textarea {
+  resize: vertical;
+}
+
+.plan-session-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+@media (width <= 600px) {
+  .plan-session-editor-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.plan-session-editor textarea:focus-visible {
+  outline: 2px solid var(--river);
+  outline-offset: 3px;
+}

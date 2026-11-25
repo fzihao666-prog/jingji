@@ -26,6 +26,7 @@
 ## 环境要求
 
 ### 最低配置
+
 - **操作系统**: Ubuntu 24.04 LTS
 - **CPU**: 2 核心
 - **内存**: 4 GB RAM
@@ -33,11 +34,13 @@
 - **网络**: 可访问互联网
 
 ### 推荐配置
+
 - **CPU**: 4 核心及以上
 - **内存**: 8 GB RAM 及以上
 - **磁盘**: 50 GB SSD 及以上
 
 ### 软件依赖
+
 - **Node.js 22.x LTS 或更高版本**（必需，项目使用 `node:sqlite` 内置模块）
 - npm 10.x 或更高版本
 - Git
@@ -193,6 +196,7 @@ TZ=Asia/Shanghai
 ```
 
 **路径配置说明：**
+
 - 如果代码部署在 `/app/jingji`，建议将数据也放在 `/app/jingji/data` 方便管理
 - 如果使用 `/home/jingji/jingji-data`，确保该目录已创建且有写入权限
 - `.env` 中的路径必须与 `mkdir` 创建的目录路径完全匹配
@@ -289,7 +293,7 @@ module.exports = {
       exec_mode: 'fork',
       env: {
         NODE_ENV: 'production',
-        PORT: 8787
+        PORT: 8787,
       },
       // 日志配置
       log_file: './logs/combined.log',
@@ -305,9 +309,9 @@ module.exports = {
       // 监控
       watch: false,
       // 启动延迟
-      restart_delay: 3000
-    }
-  ]
+      restart_delay: 3000,
+    },
+  ],
 };
 ```
 
@@ -411,7 +415,7 @@ server {
         proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         proxy_set_header X-Forwarded-Proto $scheme;
         proxy_cache_bypass $http_upgrade;
-        
+
         # 超时设置
         proxy_connect_timeout 60s;
         proxy_send_timeout 60s;
@@ -436,6 +440,7 @@ server {
 ```
 
 > ⚠️ **路径配置说明**：
+>
 > - `root` 指令指向前端构建产物目录（`dist`），必须与 `.env` 中的项目路径一致
 > - `alias` 指令指向上传文件存储目录，必须与 `.env` 中的 `ATHLETE_PHOTO_ROOT` 配置一致
 > - 如果部署路径不同（如 `/home/jingji/...`），请相应修改上述路径
@@ -466,12 +471,15 @@ sudo chmod -R 755 /app/jingji/dist
 sudo chown -R www-data:www-data /app/jingji/data/uploads
 sudo chmod -R 755 /app/jingji/data/uploads
 ```
+
 sudo chmod -R 755 ~/jingji-training-monitor/dist
 
 # 确保 Nginx 可以访问上传目录
+
 sudo chown -R www-data:www-data ~/jingji-data/uploads
 sudo chmod -R 755 ~/jingji-data/uploads
-```
+
+````
 
 ---
 
@@ -490,7 +498,7 @@ sudo certbot --nginx -d your-domain.com
 
 # 自动续期测试
 sudo certbot renew --dry-run
-```
+````
 
 ### 方式二：手动配置证书
 
@@ -579,6 +587,7 @@ sudo ufw status verbose
 ### 2. 云服务器安全组配置
 
 如果使用阿里云、腾讯云等云服务器，还需要在安全组中开放：
+
 - 端口 22 (SSH)
 - 端口 80 (HTTP)
 - 端口 443 (HTTPS)
@@ -688,6 +697,7 @@ rclone config
 ### 1. Node.js 版本错误（ERR_UNKNOWN_BUILTIN_MODULE: node:sqlite）
 
 **错误现象：**
+
 ```
 Error [ERR_UNKNOWN_BUILTIN_MODULE]: No such built-in module: node:sqlite
 ```
@@ -695,6 +705,7 @@ Error [ERR_UNKNOWN_BUILTIN_MODULE]: No such built-in module: node:sqlite
 **原因：** 项目使用了 Node.js 22.x 引入的 `node:sqlite` 内置模块，当前 Node.js 版本过低。
 
 **解决方案：**
+
 ```bash
 # 升级到 Node.js 22.x
 curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
@@ -713,6 +724,7 @@ npm start
 ### 2. 数据目录错误（ENOENT: no such file or directory, mkdir）
 
 **错误现象：**
+
 ```
 Error: ENOENT: no such file or directory, mkdir '/app/jingji/data'
 ```
@@ -720,6 +732,7 @@ Error: ENOENT: no such file or directory, mkdir '/app/jingji/data'
 **原因：** `.env` 文件中的路径配置与实际数据目录不匹配，或数据目录未创建。
 
 **解决方案：**
+
 ```bash
 # 1. 检查 .env 中的路径配置
 cat .env | grep -E "DATABASE_PATH|ATHLETE_PHOTO_ROOT"
@@ -738,6 +751,7 @@ npm start
 ```
 
 **注意：** 如果 `/app/jingji/data` 是一个损坏的符号链接，先删除它：
+
 ```bash
 rm -f /app/jingji/data
 mkdir -p /app/jingji/data/uploads/athlete-photos
@@ -746,6 +760,7 @@ mkdir -p /app/jingji/data/uploads/athlete-photos
 ### 3. PM2 配置文件格式错误（module is not defined in ES module scope）
 
 **错误现象：**
+
 ```
 ReferenceError: module is not defined in ES module scope
 This file is being treated as an ES module because it has a '.js' file extension
@@ -754,6 +769,7 @@ This file is being treated as an ES module because it has a '.js' file extension
 **原因：** 项目 `package.json` 设置了 `"type": "module"`，PM2 配置文件不能用 `.js` 扩展名。
 
 **解决方案：**
+
 ```bash
 # 重命名配置文件为 .cjs
 mv ecosystem.config.js ecosystem.config.cjs
@@ -765,6 +781,7 @@ pm2 start ecosystem.config.cjs
 ### 4. PM2 找不到 tsx 解释器
 
 **错误现象：**
+
 ```
 Error: Interpreter tsx is NOT AVAILABLE in PATH
 ```
@@ -772,6 +789,7 @@ Error: Interpreter tsx is NOT AVAILABLE in PATH
 **原因：** `tsx` 没有全局安装，PM2 找不到它。
 
 **解决方案：**
+
 ```bash
 # 全局安装 tsx
 sudo npm install -g tsx
@@ -808,6 +826,7 @@ sudo -u www-data ls /app/jingji/dist/  # 修改为你的实际路径
 **常见解决方案：**
 
 **方案 A：路径不匹配**
+
 ```bash
 # 编辑 Nginx 配置，修改 root 和 alias 路径为你的实际路径
 sudo vim /etc/nginx/sites-available/jingji-monitor
@@ -822,6 +841,7 @@ sudo systemctl reload nginx
 ```
 
 **方案 B：dist 目录不存在**
+
 ```bash
 # 重新构建前端
 cd /app/jingji  # 修改为你的实际路径
@@ -832,6 +852,7 @@ ls -la dist/
 ```
 
 **方案 C：权限问题**
+
 ```bash
 # 设置正确的文件所有者
 sudo chown -R www-data:www-data /app/jingji/dist
@@ -1035,9 +1056,10 @@ htop
 ```
 
 > **注意**：实际路径取决于你的部署位置，确保 Nginx 配置中的路径与此一致。
-│   └── uploads/                # 上传文件
-│       └── athlete-photos/     # 运动员照片
-└── jingji-backup/              # 备份目录
+> │ └── uploads/ # 上传文件
+> │ └── athlete-photos/ # 运动员照片
+> └── jingji-backup/ # 备份目录
+
 ```
 
 ### 环境变量完整列表
@@ -1077,3 +1099,4 @@ htop
 - [ ] 禁用 root SSH 登录
 
 如有问题，请查看日志文件或联系技术支持。
+```

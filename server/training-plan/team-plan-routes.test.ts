@@ -1,0 +1,220 @@
+import { afterAll, beforeAll, expect, it, vi } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
+import express from 'express';
+import type { Server } from 'node:http';
+import type { TeamPlan } from '../../shared/team-plan.ts';
+import ExcelJS from 'exceljs';
+const fixture = vi.hoisted(() => ({ db: null as DatabaseSync | null, ids: [1, 2], role: 'SCC' }));
+vi.mock('../core/db.ts', () => ({
+  get db() {
+    return fixture.db;
+  },
+}));
+vi.mock('../core/permissions.ts', () => ({ accessibleAthleteIds: () => fixture.ids }));
+vi.mock('../core/auth.ts', () => ({
+  requireAuth: (req: express.Request, _res: express.Response, next: express.NextFunction) => {
+    Object.assign(req, { authUser: { id: 1, role: fixture.role, athleteId: 1 } });
+    next();
+  },
+  requireRole:
+    (...roles: string[]) =>
+    (_req: express.Request, res: express.Response, next: express.NextFunction) => {
+      if (!roles.includes(fixture.role)) return res.status(403).json({ message: '无权维护计划' });
+      next();
+    },
+}));
+let server: Server;
+let base: string;
+beforeAll(async () => {
+  const db = new DatabaseSync(':memory:');
+  fixture.db = db;
+  db.exec(
+    `CREATE TABLE audit_logs(user_id INTEGER,action TEXT,entity_type TEXT,entity_id INTEGER,detail TEXT);CREATE TABLE users(id INTEGER PRIMARY KEY);INSERT INTO users VALUES(1);CREATE TABLE project_teams(id INTEGER PRIMARY KEY,project TEXT,name TEXT,active INTEGER);INSERT INTO project_teams VALUES(1,'赛艇','队伍',1);CREATE TABLE athletes(id INTEGER PRIMARY KEY,name TEXT,team_id INTEGER,project TEXT,active INTEGER);INSERT INTO athletes VALUES(1,'甲',1,'赛艇',1),(2,'乙',1,'赛艇',1);CREATE TABLE training_plans(id INTEGER PRIMARY KEY,athlete_id INTEGER NOT NULL,plan_date TEXT,start_date TEXT,end_date TEXT,title TEXT,plan_data TEXT,created_by INTEGER,updated_by INTEGER,updated_at TEXT,UNIQUE(athlete_id,plan_date));`
+  );
+  const { migrateTeamPlans } = await import('../core/team-plan-migration.ts');
+  migrateTeamPlans(db);
+  const { registerTeamPlanRoutes } = await import('./team-plan-routes.ts');
+  const app = express();
+  app.use(express.json());
+  registerTeamPlanRoutes(app);
+  server = await new Promise((resolve) => {
+    const listener = app.listen(0, '127.0.0.1', () => resolve(listener));
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw Error('port');
+  base = `http://127.0.0.1:${address.port}`;
+});
+afterAll(async () => {
+  await new Promise<void>((resolve) => server.close(() => resolve()));
+  fixture.db?.close();
+});
+async function call(path: string, body?: unknown, method = 'POST') {
+  const response = await fetch(base + '/api/team-plans' + path, {
+    method,
+    headers: { 'Content-Type': 'application/json' },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return {
+    status: response.status,
+    ...((await response.json()) as { plan: TeamPlan; plans: TeamPlan[]; message?: string }),
+  };
+}
+const data = {
+  goal: '',
+  focus: '',
+  sessions: [
+    {
+      id: 's',
+      date: '2026-10-17',
+      category: 'special',
+      content: '训练',
+      durationMin: 90,
+      distanceKm: 16,
+    },
+  ],
+  overrides: [
+    { athleteId: 1, sessionId: 's', changes: { durationMin: 60 }, reason: '减量' },
+    { athleteId: 2, sessionId: 's', changes: { durationMin: 70 }, reason: '调整' },
+  ],
+};
+
+it('下载模板并导入多个队伍计划草稿，按整队和项目授权校验，重传不重复写入', async () => {
+  fixture.ids = [1, 2];
+  fixture.role = 'SCC';
+  const template = await fetch(base + '/api/team-plans/template');
+  expect(template.status).toBe(200);
+  expect(template.headers.get('content-type')).toContain('spreadsheetml.sheet');
+  const book = new ExcelJS.Workbook();
+  await book.xlsx.load(Buffer.from(await template.arrayBuffer()) as unknown as Parameters<typeof book.xlsx.load>[0]);
+  const first = book.getWorksheet(1)!;
+  first.name = '第48周';
+  first.getRow(2).values = ['2026-11-16', '星期一', '', '专项：水上划 30 分钟', '体能：力量训练'];
+  first.getRow(3).values = ['2026-11-22', '星期日', '', '休息'];
+  const second = book.addWorksheet('第49周');
+  second.addRows([first.getRow(1).values as unknown[], ['2026-11-23', '星期一', '', '水上250米X6'], ['2026-11-29', '星期日', '', '休息']]);
+  const upload = async (project = '赛艇') => {
+    const payload = new FormData();
+    const bytes = new Uint8Array(await book.xlsx.writeBuffer());
+    payload.append('file', new Blob([bytes]), '队伍计划.xlsx');
+    const response = await fetch(base + '/api/team-plans/import?' + new URLSearchParams({ project, teamId: '1' }), { method: 'POST', body: payload });
+    const result = await response.json() as { drafts?: { sessions: number }[]; skipped?: number };
+    return { status: response.status, ...result };
+  };
+  fixture.role = 'ATL';
+  expect((await upload()).status).toBe(403);
+  fixture.role = 'SCC';
+  fixture.ids = [1];
+  expect((await upload()).status).toBe(403);
+  fixture.ids = [1, 2];
+  expect((await upload('激流')).status).toBe(403);
+  second.getCell('A2').value = '错误日期';
+  expect((await upload()).status).toBe(400);
+  expect((await call('', undefined, 'GET')).plans).toHaveLength(0);
+  second.getCell('A2').value = '2026-11-23';
+  expect(await upload()).toMatchObject({ status: 200, drafts: [{ sessions: 2 }, { sessions: 1 }], skipped: 0 });
+  const drafts = (await call('', undefined, 'GET')).plans;
+  expect(drafts).toHaveLength(2);
+  expect(drafts.every((plan) => plan.status === 'draft')).toBe(true);
+  expect(drafts[1].data.focus).toContain('2026-11-22 上午：休息');
+  expect(drafts[1].data.sessions.map((session) => session.category)).toEqual(['special', 'physical']);
+  expect(await upload()).toMatchObject({ status: 200, drafts: [], skipped: 2 });
+  first.getCell('D2').value = '不同的计划内容';
+  expect((await upload()).status).toBe(409);
+  expect((await call('', undefined, 'GET')).plans).toHaveLength(2);
+  // 同文件既有测试共用内存库，恢复本用例新增的计划。
+  fixture.db?.exec('DELETE FROM training_plans; DELETE FROM audit_logs');
+});
+it('整队授权、草稿隔离、CAS、确认发布和修订版本保留', async () => {
+  fixture.ids = [1];
+  expect(
+    (
+      await call('', {
+        teamId: 1,
+        title: '队伍',
+        startDate: '2026-10-17',
+        endDate: '2026-10-17',
+        data,
+      })
+    ).status
+  ).toBe(403);
+  fixture.ids = [1, 2];
+  const created = await call('', {
+    teamId: 1,
+    title: '队伍',
+    startDate: '2026-10-17',
+    endDate: '2026-10-17',
+    data,
+  });
+  expect(created.status).toBe(200);
+  const id = created.plan.id;
+  fixture.role = 'ATL';
+  fixture.ids = [1];
+  expect((await call('', undefined, 'GET')).plans).toHaveLength(0);
+  expect((await call(`/${id}/transition`, { revision: 1, action: 'submit' })).status).toBe(403);
+  fixture.role = 'SCC';
+  fixture.ids = [1, 2];
+  expect((await call(`/${id}/transition`, { revision: 99, action: 'submit' })).status).toBe(409);
+  expect((await call(`/${id}/transition`, { revision: 1, action: 'submit' })).plan.status).toBe(
+    'pending'
+  );
+  expect((await call(`/${id}/transition`, { revision: 2, action: 'publish' })).status).toBe(409);
+  expect(
+    (await call(`/${id}/transition`, { revision: 2, action: 'publish', confirmed: true })).plan
+      .status
+  ).toBe('published');
+  fixture.role = 'ATL';
+  fixture.ids = [1];
+  expect((await call('', undefined, 'GET')).plans[0].data.overrides).toHaveLength(1);
+  fixture.role = 'SCC';
+  fixture.ids = [1, 2];
+  const revised = await call(`/${id}/transition`, { revision: 3, action: 'revise' });
+  expect(revised.plan.version).toBe(2);
+  await call(`/${revised.plan.id}/transition`, { revision: 1, action: 'submit' });
+  await call(`/${revised.plan.id}/transition`, { revision: 2, action: 'publish', confirmed: true });
+  const plans = (await call('', undefined, 'GET')).plans;
+  expect(plans.find((p: { id: number }) => p.id === id)?.status).toBe('archived');
+  expect(plans).toHaveLength(2);
+  expect(plans.find((plan) => plan.id === id)?.archivedAt).toBeTruthy();
+  expect(fixture.db?.prepare('SELECT count(*) AS n FROM audit_logs').get()).toEqual({ n: 6 });
+  expect((await call(`/${id}/transition`, { revision: -1, action: 'submit' })).status).toBe(400);
+  expect((await call('/bad/transition', { revision: 1, action: 'submit' })).status).toBe(400);
+});
+
+it('计划接口按队伍项目拒绝不适用活动，合法上下文保留且拒绝时无审计写入', async () => {
+  fixture.role = 'SCC';
+  fixture.ids = [1, 2, 3, 4];
+  const db = fixture.db!;
+  db.exec(
+    "INSERT INTO project_teams VALUES(2,'VOLLEYBALL','排球队',1);INSERT INTO athletes VALUES(3,'丙',2,'VOLLEYBALL',1),(4,'丁',2,'VOLLEYBALL',1)"
+  );
+  try {
+    const before = db.prepare('SELECT COUNT(*) AS n FROM audit_logs').get();
+    const body = {
+      teamId: 2,
+      title: '排球计划',
+      startDate: '2026-10-17',
+      endDate: '2026-10-17',
+      data: {
+        ...data,
+        overrides: [],
+        sessions: [{ ...data.sessions[0], activityCode: 'on_water', intensity: '' }],
+      },
+    };
+    expect((await call('', body)).status).toBe(400);
+    expect(db.prepare('SELECT COUNT(*) AS n FROM audit_logs').get()).toEqual(before);
+    const valid = await call('', {
+      ...body,
+      data: {
+        ...body.data,
+        sessions: [
+          { ...body.data.sessions[0], activityCode: 'volleyball_technique', intensitySystem: '' },
+        ],
+      },
+    });
+    expect(valid.status).toBe(200);
+    expect(valid.plan.data.sessions[0].activityCode).toBe('volleyball_technique');
+  } finally {
+    fixture.ids = [1, 2];
+    fixture.role = 'SCC';
+  }
+});

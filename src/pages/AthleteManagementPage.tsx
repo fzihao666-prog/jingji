@@ -1,3 +1,5 @@
+import { formatAthleteNumber, matchesAthleteNumber } from '../../shared/athlete-number';
+import { TECHNICAL_LEVELS as ALL_TECHNICAL_LEVELS } from '../../shared/athlete-technical-level';
 import {
   Activity,
   AlertCircle,
@@ -17,38 +19,26 @@ import {
   Upload,
   UserRound,
   X,
-} from "lucide-react";
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ROLE_META } from "../../shared/access";
-import { PROJECTS } from "../../shared/projects";
-import { PROVINCES, PROVINCE_CITIES } from "../../shared/regions";
-import { api } from "../api";
-import type {
-  Athlete,
-  InjuryRecord,
-  InjuryStatus,
-  ProjectTeam,
-  User,
-} from "../types";
+} from 'lucide-react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { ROLE_META } from '../../shared/access';
+import { PROJECTS, projectLabel } from '../../shared/projects';
+import { PROVINCES, PROVINCE_CITIES } from '../../shared/regions';
+import { api } from '../api';
+import { pageRange } from '../utils/pagination';
+import type { Athlete, InjuryRecord, InjuryStatus, ProjectTeam, User } from '../types';
 import { FilterBar, PageContainer, PageHeader } from '../components/PageLayout';
+import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
 
 const PAGE_SIZE = 6;
-const HEALTH_OPTIONS = ["健康", "观察", "训练受限", "康复中"];
-const ATHLETE_STATUS_OPTIONS = ["在训", "集训", "休整", "离队"];
-const TECHNICAL_LEVELS = [
-  "国际级运动健将",
-  "运动健将",
-  "一级运动员",
-  "二级运动员",
-  "三级运动员",
-];
+const HEALTH_OPTIONS = ['健康', '观察', '训练受限', '康复中'];
+const ATHLETE_STATUS_OPTIONS = ['在训', '集训', '休整', '离队'];
+const TECHNICAL_LEVELS = ALL_TECHNICAL_LEVELS;
 
-type CoachOption = { id: number; displayName: string };
 type AthleteForm = {
   name: string;
   gender: string;
   birthDate: string;
-  identityNumber: string;
   ethnicity: string;
   phone: string;
   bloodType: string;
@@ -59,6 +49,11 @@ type AthleteForm = {
   athletePosition: string;
   healthStatus: string;
   bestResult: string;
+  eventItem: string;
+  representativeUnit: string;
+  trainingYears: string;
+  bestResultEvent: string;
+  bestResultDate: string;
   nativePlace: string;
   homeAddress: string;
   project: string;
@@ -77,48 +72,50 @@ type AthleteForm = {
   originCoach: string;
   specialties: string;
   notes: string;
-  coachId: string;
   username: string;
   password: string;
   createAccount: boolean;
 };
 
 const blankForm: AthleteForm = {
-  name: "",
-  gender: "",
-  birthDate: "",
-  identityNumber: "",
-  ethnicity: "汉族",
-  phone: "",
-  bloodType: "",
-  emergencyContact: "",
-  emergencyPhone: "",
-  education: "",
-  technicalLevel: "",
-  athletePosition: "",
-  healthStatus: "健康",
-  bestResult: "",
-  nativePlace: "",
-  homeAddress: "",
-  project: "赛艇",
-  team: "",
-  region: "",
-  city: "",
-  county: "",
-  athleteStatus: "在训",
-  startSportDate: "",
-  trainingVenue: "",
-  currentEvent: "",
-  trainingPhase: "",
-  campPeriod: "",
-  originPlace: "",
-  originUnit: "",
-  originCoach: "",
-  specialties: "",
-  notes: "",
-  coachId: "",
-  username: "",
-  password: "",
+  name: '',
+  gender: '',
+  birthDate: '',
+  ethnicity: '汉族',
+  phone: '',
+  bloodType: '',
+  emergencyContact: '',
+  emergencyPhone: '',
+  education: '',
+  technicalLevel: '',
+  athletePosition: '',
+  healthStatus: '健康',
+  bestResult: '',
+  eventItem: '',
+  representativeUnit: '',
+  trainingYears: '',
+  bestResultEvent: '',
+  bestResultDate: '',
+  nativePlace: '',
+  homeAddress: '',
+  project: '',
+  team: '',
+  region: '',
+  city: '',
+  county: '',
+  athleteStatus: '在训',
+  startSportDate: '',
+  trainingVenue: '',
+  currentEvent: '',
+  trainingPhase: '',
+  campPeriod: '',
+  originPlace: '',
+  originUnit: '',
+  originCoach: '',
+  specialties: '',
+  notes: '',
+  username: '',
+  password: '',
   createAccount: false,
 };
 
@@ -126,22 +123,18 @@ function formFromAthlete(athlete: Athlete): AthleteForm {
   return {
     ...blankForm,
     ...Object.fromEntries(
-      Object.keys(blankForm).map((key) => [
-        key,
-        String(athlete[key as keyof Athlete] ?? ""),
-      ]),
+      Object.keys(blankForm).map((key) => [key, String(athlete[key as keyof Athlete] ?? '')])
     ),
-    coachId: String(athlete.coachUsers?.[0]?.id || ""),
-    username: "",
-    password: "",
+    username: '',
+    password: '',
     createAccount: false,
   } as AthleteForm;
 }
 
 function ageFromBirthDate(value: string | null) {
-  if (!value) return "—";
+  if (!value) return '—';
   const birth = new Date(value);
-  if (Number.isNaN(birth.getTime())) return "—";
+  if (Number.isNaN(birth.getTime())) return '—';
   const today = new Date();
   let age = today.getFullYear() - birth.getFullYear();
   if (
@@ -149,14 +142,14 @@ function ageFromBirthDate(value: string | null) {
     (today.getMonth() === birth.getMonth() && today.getDate() < birth.getDate())
   )
     age -= 1;
-  return age >= 0 ? String(age) : "—";
+  return age >= 0 ? String(age) : '—';
 }
 
 function monthKey(value: string) {
   const date = new Date(value);
   return Number.isNaN(date.getTime())
-    ? ""
-    : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}`;
+    ? ''
+    : `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
 }
 
 export function AthleteManagementPage({
@@ -172,18 +165,28 @@ export function AthleteManagementPage({
 }) {
   const [athletes, setAthletes] = useState(initialAthletes);
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
-  const [coaches, setCoaches] = useState<CoachOption[]>([]);
-  const [search, setSearch] = useState("");
-  const [projectFilter, setProjectFilter] = useState("");
-  const [teamFilter, setTeamFilter] = useState("");
-  const [healthFilter, setHealthFilter] = useState("");
-  const [eventFilter, setEventFilter] = useState("");
+  const [search, setSearch] = useState('');
+  const [projectFilter, setProjectFilter] = useState('');
+  const [affiliatedTeamIds, setAffiliatedTeamIds] = useState<number[]>([]);
+  const [teamFilter, setTeamFilter] = useState('');
+  const [healthFilter, setHealthFilter] = useState('');
+  const [eventFilter, setEventFilter] = useState('');
   const [advanced, setAdvanced] = useState({
-    venue: "",
-    technicalLevel: "",
-    athleteStatus: "",
-    createdFrom: "",
-    createdTo: "",
+    venue: '',
+    coach: '',
+    region: '',
+    eventItem: '',
+    position: '',
+    trainingPhase: '',
+    gender: '',
+    technicalLevel: '',
+    athleteStatus: '',
+    profileStatus: '',
+    accountStatus: '',
+    ageMin: '',
+    ageMax: '',
+    createdFrom: '',
+    createdTo: '',
   });
   const [monthlyOnly, setMonthlyOnly] = useState(false);
   const [page, setPage] = useState(1);
@@ -193,56 +196,75 @@ export function AthleteManagementPage({
   const [editingAthlete, setEditingAthlete] = useState<Athlete | null>(null);
   const [form, setForm] = useState<AthleteForm>(blankForm);
   const [photoFile, setPhotoFile] = useState<File | null>(null);
-  const [photoPreview, setPhotoPreview] = useState("");
+  const [photoPreview, setPhotoPreview] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkForm, setBulkForm] = useState({
-    technicalLevel: "",
-    athletePosition: "",
-    healthStatus: "",
-    currentEvent: "",
-    athleteStatus: "",
-    trainingPhase: "",
+    technicalLevel: '',
+    athletePosition: '',
+    healthStatus: '',
+    currentEvent: '',
+    athleteStatus: '',
+    trainingPhase: '',
   });
   const [injuryAthlete, setInjuryAthlete] = useState<Athlete | null>(null);
   const [injuryForm, setInjuryForm] = useState({
-    injuryName: "",
-    bodyPart: "",
-    side: "unspecified" as InjuryRecord["side"],
-    status: "observation" as InjuryStatus,
+    injuryName: '',
+    bodyPart: '',
+    side: 'unspecified' as InjuryRecord['side'],
+    status: 'observation' as InjuryStatus,
     painScore: 0,
-    onsetDate: "",
-    restrictions: "",
-    rehabPlan: "",
-    reviewDate: "",
-    note: "",
+    onsetDate: '',
+    restrictions: '',
+    rehabPlan: '',
+    reviewDate: '',
+    note: '',
   });
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [messageTone, setMessageTone] = useState<"success" | "error">(
-    "success",
-  );
+  const [message, setMessage] = useState('');
+  const [messageTone, setMessageTone] = useState<'success' | 'error'>('success');
 
-  const canEdit =
-    user.role === "SCC" || ROLE_META[user.role].level >= ROLE_META.PRJ.level;
-  const canAdmin = ROLE_META[user.role].level >= ROLE_META.PRJ.level;
+  const canEdit = user.role === 'SCC' || ROLE_META[user.role].level >= ROLE_META.REG.level;
+  const canAdmin = ROLE_META[user.role].level >= ROLE_META.REG.level;
+  const canDelete = user.role === 'SCC' || canAdmin;
+
+  const [inactiveAthletes, setInactiveAthletes] = useState<Awaited<ReturnType<typeof api.inactiveAthletes>>['athletes'] | null>(null);
+  const [restoreBusy, setRestoreBusy] = useState(false);
+  const showInactive = async () => {
+    try {
+      setInactiveAthletes((await api.inactiveAthletes()).athletes);
+    } catch (error) {
+      setMessageTone('error');
+      setMessage(error instanceof Error ? error.message : '停用运动员加载失败。');
+    }
+  };
+
+  const restore = async (id: number, teamId: number) => {
+    setRestoreBusy(true);
+    try {
+      const result = await api.restoreAthlete(id, teamId);
+      setInactiveAthletes(rows => rows?.filter(row => row.id !== id) ?? null);
+      setMessageTone('success');
+      setMessage(result.message);
+      await load();
+      onChanged();
+    } catch (error) {
+      setMessageTone('error');
+      setMessage(error instanceof Error ? error.message : '恢复运动员失败。');
+    } finally {
+      setRestoreBusy(false);
+    }
+  };
 
   const load = async () => {
     setLoading(true);
     try {
-      const [athleteResult, teamResult, assignmentResult] = await Promise.all([
-        api.athletes(),
-        api.adminTeams(),
-        api.assignments(),
-      ]);
+      const [athleteResult, teamResult] = await Promise.all([api.athletes(), api.adminTeams()]);
       setAthletes(athleteResult.athletes);
       setTeams(teamResult.teams);
-      setCoaches(assignmentResult.coaches);
     } catch (error) {
-      setMessageTone("error");
-      setMessage(
-        error instanceof Error ? error.message : "运动员名册加载失败。",
-      );
+      setMessageTone('error');
+      setMessage(error instanceof Error ? error.message : '运动员名册加载失败。');
     } finally {
       setLoading(false);
     }
@@ -256,43 +278,44 @@ export function AthleteManagementPage({
   }, [initialAthletes]);
 
   const projects = useMemo(
-    () => [
-      ...new Set([...PROJECTS, ...athletes.map((athlete) => athlete.project)]),
-    ],
-    [athletes],
+    () => [...new Set([...PROJECTS, ...athletes.map((athlete) => athlete.project)])],
+    [athletes]
   );
   const visibleTeams = useMemo(
-    () =>
-      teams.filter((team) => !projectFilter || team.project === projectFilter),
-    [teams, projectFilter],
+    () => teams.filter((team) => !projectFilter || team.project === projectFilter),
+    [teams, projectFilter]
   );
-  const formTeams = useMemo(
-    () => teams.filter((team) => team.project === form.project),
-    [teams, form.project],
+  const selectedFormTeam = teams.find(
+    (team) => team.name === form.team && team.project === form.project
   );
   const events = useMemo(
-    () => [
-      ...new Set(
-        athletes.map((athlete) => athlete.currentEvent).filter(Boolean),
-      ),
-    ],
-    [athletes],
+    () => [...new Set(athletes.map((athlete) => athlete.currentEvent).filter(Boolean))],
+    [athletes]
+  );
+  const eventItems = useMemo(
+    () => [...new Set(athletes.map((athlete) => athlete.eventItem).filter(Boolean))],
+    [athletes]
+  );
+  const trainingPhases = useMemo(
+    () => [...new Set(athletes.map((athlete) => athlete.trainingPhase).filter(Boolean))],
+    [athletes]
+  );
+  const genders = useMemo(
+    () => [...new Set(athletes.map((athlete) => athlete.gender).filter(Boolean))],
+    [athletes]
   );
   const currentMonth = monthKey(new Date().toISOString());
 
   const stats = useMemo(
     () => ({
       total: athletes.length,
-      training: athletes.filter((athlete) =>
-        ["在训", "集训"].includes(athlete.athleteStatus),
-      ).length,
-      recovery: athletes.filter((athlete) => athlete.healthStatus !== "健康")
+      training: athletes.filter((athlete) => ['在训', '集训'].includes(athlete.athleteStatus))
         .length,
-      newThisMonth: athletes.filter(
-        (athlete) => monthKey(athlete.createdAt) === currentMonth,
-      ).length,
+      recovery: athletes.filter((athlete) => athlete.healthStatus !== '健康').length,
+      newThisMonth: athletes.filter((athlete) => monthKey(athlete.createdAt) === currentMonth)
+        .length,
     }),
-    [athletes, currentMonth],
+    [athletes, currentMonth]
   );
 
   const filtered = useMemo(
@@ -300,47 +323,57 @@ export function AthleteManagementPage({
       athletes.filter((athlete) => {
         const query = search.trim().toLocaleLowerCase();
         if (projectFilter && athlete.project !== projectFilter) return false;
-        if (teamFilter && athlete.team !== teamFilter) return false;
-        if (healthFilter === "__risk" && athlete.healthStatus === "健康")
-          return false;
-        if (
-          healthFilter &&
-          healthFilter !== "__risk" &&
-          athlete.healthStatus !== healthFilter
-        )
+        if (teamFilter && athlete.team !== teamFilter && !athlete.affiliatedTeams?.some(team => team.name === teamFilter)) return false;
+        if (healthFilter === '__risk' && athlete.healthStatus === '健康') return false;
+        if (healthFilter && healthFilter !== '__risk' && athlete.healthStatus !== healthFilter)
           return false;
         if (eventFilter && athlete.currentEvent !== eventFilter) return false;
         if (
           advanced.venue &&
-          !athlete.trainingVenue
-            .toLocaleLowerCase()
-            .includes(advanced.venue.toLocaleLowerCase())
+          !athlete.trainingVenue.toLocaleLowerCase().includes(advanced.venue.toLocaleLowerCase())
         )
           return false;
+        if (
+          advanced.coach &&
+          !athlete.coaches.toLocaleLowerCase().includes(advanced.coach.toLocaleLowerCase())
+        )
+          return false;
+        if (
+          advanced.region &&
+          ![athlete.region, athlete.province, athlete.city, athlete.county]
+            .filter(Boolean)
+            .join(' ')
+            .toLocaleLowerCase()
+            .includes(advanced.region.toLocaleLowerCase())
+        )
+          return false;
+        if (advanced.eventItem && athlete.eventItem !== advanced.eventItem) return false;
+        if (
+          advanced.position &&
+          !athlete.athletePosition.toLocaleLowerCase().includes(advanced.position.toLocaleLowerCase())
+        )
+          return false;
+        if (advanced.trainingPhase && athlete.trainingPhase !== advanced.trainingPhase) return false;
+        if (advanced.gender && athlete.gender !== advanced.gender) return false;
         if (
           advanced.technicalLevel &&
-          athlete.technicalLevel !== advanced.technicalLevel
+          (athlete.technicalLevel || '未定级') !== advanced.technicalLevel
         )
           return false;
-        if (
-          advanced.athleteStatus &&
-          athlete.athleteStatus !== advanced.athleteStatus
-        )
+        if (advanced.athleteStatus && athlete.athleteStatus !== advanced.athleteStatus)
           return false;
-        if (
-          advanced.createdFrom &&
-          athlete.createdAt.slice(0, 10) < advanced.createdFrom
-        )
+        if (advanced.profileStatus && athlete.profileStatus !== advanced.profileStatus) return false;
+        if (advanced.accountStatus === 'has' && !athlete.hasAccount) return false;
+        if (advanced.accountStatus === 'none' && athlete.hasAccount) return false;
+        const age = Number(ageFromBirthDate(athlete.birthDate));
+        if (advanced.ageMin && (!Number.isFinite(age) || age < Number(advanced.ageMin))) return false;
+        if (advanced.ageMax && (!Number.isFinite(age) || age > Number(advanced.ageMax))) return false;
+        if (advanced.createdFrom && athlete.createdAt.slice(0, 10) < advanced.createdFrom)
           return false;
-        if (
-          advanced.createdTo &&
-          athlete.createdAt.slice(0, 10) > advanced.createdTo
-        )
-          return false;
-        if (monthlyOnly && monthKey(athlete.createdAt) !== currentMonth)
-          return false;
+        if (advanced.createdTo && athlete.createdAt.slice(0, 10) > advanced.createdTo) return false;
+        if (monthlyOnly && monthKey(athlete.createdAt) !== currentMonth) return false;
         if (!query) return true;
-        return [
+        return matchesAthleteNumber(athlete.id, query) || [
           athlete.name,
           athlete.project,
           athlete.team,
@@ -351,11 +384,11 @@ export function AthleteManagementPage({
           athlete.region,
           athlete.city,
         ].some((value) =>
-          String(value || "")
+          String(value || '')
             .toLocaleLowerCase()
-            .includes(query),
+            .includes(query)
         );
-      }),
+      }).sort((left, right) => left.id - right.id),
     [
       athletes,
       search,
@@ -366,31 +399,37 @@ export function AthleteManagementPage({
       advanced,
       monthlyOnly,
       currentMonth,
-    ],
+    ]
   );
 
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage = Math.min(page, pageCount);
-  const paged = filtered.slice(
-    (safePage - 1) * PAGE_SIZE,
-    safePage * PAGE_SIZE,
-  );
+  const pager = pageRange(page, PAGE_SIZE, filtered.length);
+  const paged = filtered.slice((pager.current - 1) * PAGE_SIZE, pager.current * PAGE_SIZE);
   useEffect(() => {
-    if (page > pageCount) setPage(pageCount);
-  }, [page, pageCount]);
+    if (page > pager.pageCount) setPage(pager.pageCount);
+  }, [page, pager.pageCount]);
 
   const resetFilters = () => {
-    setSearch("");
-    setProjectFilter("");
-    setTeamFilter("");
-    setHealthFilter("");
-    setEventFilter("");
+    setSearch('');
+    setProjectFilter('');
+    setTeamFilter('');
+    setHealthFilter('');
+    setEventFilter('');
     setAdvanced({
-      venue: "",
-      technicalLevel: "",
-      athleteStatus: "",
-      createdFrom: "",
-      createdTo: "",
+      venue: '',
+      coach: '',
+      region: '',
+      eventItem: '',
+      position: '',
+      trainingPhase: '',
+      gender: '',
+      technicalLevel: '',
+      athleteStatus: '',
+      profileStatus: '',
+      accountStatus: '',
+      ageMin: '',
+      ageMax: '',
+      createdFrom: '',
+      createdTo: '',
     });
     setMonthlyOnly(false);
     setPage(1);
@@ -398,116 +437,117 @@ export function AthleteManagementPage({
 
   const openCreate = () => {
     const first = athletes[0];
+    const initialTeam =
+      teams.find((team) => team.project === first?.project && team.name === first?.team) ||
+      (teams.length === 1 ? teams[0] : undefined);
     setEditingAthlete(null);
     setForm({
       ...blankForm,
-      project: first?.project || "赛艇",
-      team: first?.team || "",
-      region: first?.region || "",
-      city: first?.city || "",
-      county: first?.county || "",
+      project: initialTeam?.project || '',
+      team: initialTeam?.name || '',
+      region: first?.region || '',
+      city: first?.city || '',
+      county: first?.county || '',
     });
     setPhotoFile(null);
-    setPhotoPreview("");
+    setPhotoPreview('');
     setEditorOpen(true);
   };
 
   const openEdit = (athlete: Athlete) => {
     setEditingAthlete(athlete);
+    setAffiliatedTeamIds(athlete.affiliatedTeams?.map(team => team.id) ?? []);
     setForm(formFromAthlete(athlete));
     setPhotoFile(null);
-    setPhotoPreview(athlete.photoUrl || "");
+    setPhotoPreview('');
     setEditorOpen(true);
   };
 
   const choosePhoto = (file: File | null) => {
     setPhotoFile(file);
-    if (photoPreview.startsWith("blob:")) URL.revokeObjectURL(photoPreview);
-    setPhotoPreview(
-      file ? URL.createObjectURL(file) : editingAthlete?.photoUrl || "",
-    );
+    setPhotoPreview(file ? URL.createObjectURL(file) : '');
   };
 
-  const saveAthlete = async (
-    event: FormEvent,
-    requestedOpenProfile = false,
-  ) => {
+  useEffect(() => {
+    if (!editorOpen || !photoPreview) return;
+    return () => URL.revokeObjectURL(photoPreview);
+  }, [editorOpen, photoPreview]);
+
+  const saveAthlete = async (event: FormEvent, requestedOpenProfile = false) => {
     event.preventDefault();
-    const submitter = (event.nativeEvent as SubmitEvent)
-      .submitter as HTMLButtonElement | null;
-    const openProfileAfter =
-      requestedOpenProfile || submitter?.value === "profile";
+    const submitter = (event.nativeEvent as SubmitEvent).submitter as HTMLButtonElement | null;
+    const openProfileAfter = requestedOpenProfile || submitter?.value === 'profile';
     setSaving(true);
-    setMessage("");
+    setMessage('');
     try {
+      if (!selectedFormTeam) throw new Error('请选择有效的所属队伍。');
+      const payload = {
+        ...form,
+        project: selectedFormTeam.project,
+        team: selectedFormTeam.name,
+        trainingYears: form.trainingYears === '' ? null : Number(form.trainingYears),
+      };
       let athleteId = editingAthlete?.id || 0;
-      if (editingAthlete) await api.updateAthlete(editingAthlete.id, form);
-      else athleteId = (await api.createAthlete(form)).id;
+      if (editingAthlete) await api.updateAthlete(editingAthlete.id, {
+        ...payload,
+        affiliatedTeamIds: affiliatedTeamIds.filter(id => teams.some(team =>
+          team.id === id && team.project === selectedFormTeam.project && team.id !== selectedFormTeam.id
+        )),
+      });
+      else athleteId = (await api.createAthlete(payload)).id;
       if (photoFile) await api.uploadAthletePhoto(athleteId, photoFile);
       await load();
       onChanged();
       setEditorOpen(false);
-      setMessageTone("success");
+      setMessageTone('success');
       setMessage(
         editingAthlete
-          ? "运动员资料已更新。"
+          ? '运动员资料已更新。'
           : form.createAccount
-            ? "运动员及登录账号已创建。"
-            : "运动员档案已创建，暂未创建登录账号。",
+            ? '运动员及登录账号已创建。'
+            : '运动员档案已创建，暂未创建登录账号。'
       );
       if (openProfileAfter) {
         const result = await api.athletes();
-        const target = result.athletes.find(
-          (athlete) => athlete.id === athleteId,
-        );
+        const target = result.athletes.find((athlete) => athlete.id === athleteId);
         if (target) onOpenProfile(target);
       }
     } catch (error) {
-      setMessageTone("error");
-      setMessage(
-        error instanceof Error ? error.message : "运动员资料保存失败。",
-      );
+      setMessageTone('error');
+      setMessage(error instanceof Error ? error.message : '运动员资料保存失败。');
     } finally {
       setSaving(false);
     }
   };
 
   const deleteOne = async (athlete: Athlete) => {
-    if (
-      !window.confirm(
-        `确认删除运动员“${athlete.name}”？账号将同步停用，历史数据继续保留。`,
-      )
-    )
+    if (!window.confirm(`确认停用运动员“${athlete.name}”？账号将同步停用，历史数据继续保留。`))
       return;
     try {
       const result = await api.deleteAthlete(athlete.id);
-      setMessageTone("success");
+      setMessageTone('success');
       setMessage(result.message);
       await load();
       onChanged();
     } catch (error) {
-      setMessageTone("error");
-      setMessage(error instanceof Error ? error.message : "删除失败。");
+      setMessageTone('error');
+      setMessage(error instanceof Error ? error.message : '停用失败。');
     }
   };
 
   const deleteSelected = async () => {
     const ids = [...selectedIds];
-    if (
-      !ids.length ||
-      !window.confirm(`确认删除选中的 ${ids.length} 名运动员？`)
-    )
-      return;
+    if (!ids.length || !window.confirm(`确认停用选中的 ${ids.length} 名运动员？账号将同步停用，历史数据继续保留。`)) return;
     try {
       const result = await api.bulkDeleteAthletes(ids);
-      setMessageTone("success");
+      setMessageTone('success');
       setMessage(result.message);
       setSelectedIds(new Set());
       await load();
       onChanged();
     } catch (error) {
-      setMessageTone("error");
-      setMessage(error instanceof Error ? error.message : "批量删除失败。");
+      setMessageTone('error');
+      setMessage(error instanceof Error ? error.message : '批量停用失败。');
     }
   };
 
@@ -515,15 +555,15 @@ export function AthleteManagementPage({
     setSaving(true);
     try {
       const result = await api.bulkUpdateAthletes([...selectedIds], bulkForm);
-      setMessageTone("success");
+      setMessageTone('success');
       setMessage(result.message);
       setBulkOpen(false);
       setSelectedIds(new Set());
       await load();
       onChanged();
     } catch (error) {
-      setMessageTone("error");
-      setMessage(error instanceof Error ? error.message : "批量修改失败。");
+      setMessageTone('error');
+      setMessage(error instanceof Error ? error.message : '批量修改失败。');
     } finally {
       setSaving(false);
     }
@@ -535,14 +575,14 @@ export function AthleteManagementPage({
     setSaving(true);
     try {
       const result = await api.createInjuryRecord(injuryAthlete.id, injuryForm);
-      setMessageTone("success");
+      setMessageTone('success');
       setMessage(result.message);
       setInjuryAthlete(null);
       await load();
       onChanged();
     } catch (error) {
-      setMessageTone("error");
-      setMessage(error instanceof Error ? error.message : "伤病记录保存失败。");
+      setMessageTone('error');
+      setMessage(error instanceof Error ? error.message : '伤病记录保存失败。');
     } finally {
       setSaving(false);
     }
@@ -555,24 +595,28 @@ export function AthleteManagementPage({
       else next.add(id);
       return next;
     });
-  const pageAllSelected =
-    paged.length > 0 && paged.every((athlete) => selectedIds.has(athlete.id));
+  const pageAllSelected = paged.length > 0 && paged.every((athlete) => selectedIds.has(athlete.id));
   const setPageSelection = () =>
     setSelectedIds((current) => {
       const next = new Set(current);
-      for (const athlete of paged)
-        pageAllSelected ? next.delete(athlete.id) : next.add(athlete.id);
+      for (const athlete of paged) pageAllSelected ? next.delete(athlete.id) : next.add(athlete.id);
       return next;
     });
 
   return (
     <PageContainer className="athlete-management-page">
-      <PageHeader className="athlete-management-heading" eyebrow="ATHLETE OPERATIONS" title="运动员管理" actions={canEdit && (
-          <button className="athlete-primary-action" onClick={openCreate}>
-            <Plus size={17} />
-            新增运动员
-          </button>
-        )}/>
+      <PageHeader
+        className="athlete-management-heading"
+        title="运动员管理"
+        actions={
+          canEdit && (
+            <button className="athlete-primary-action" onClick={openCreate}>
+              <Plus size={17} />
+              新增运动员
+            </button>
+          )
+        }
+      />
       {message && (
         <div className={`message-banner ${messageTone}`}>
           <Check size={16} />
@@ -580,13 +624,41 @@ export function AthleteManagementPage({
         </div>
       )}
 
+      {canAdmin && (
+        <button type="button" className="secondary-button" aria-pressed={inactiveAthletes !== null}
+          onClick={() => inactiveAthletes ? setInactiveAthletes(null) : void showInactive()}>
+          已停用运动员
+        </button>
+      )}
+      {canAdmin && inactiveAthletes && (
+        <section aria-label="已停用运动员">
+          {inactiveAthletes.length ? <ul>{inactiveAthletes.map(athlete => {
+            const options = teams.filter(team => team.project === athlete.project);
+            return (
+              <li key={athlete.id}>
+                <span>{athlete.name} · {athlete.team || '未设队伍'} · {athlete.sessionCount} 条训练记录</span>
+                {athlete.recentSessionDates && <div>最近训练日期：{athlete.recentSessionDates.split(',').join('、')}</div>}
+                <form onSubmit={(event) => {
+                  event.preventDefault();
+                  const teamId = Number(new FormData(event.currentTarget).get('teamId'));
+                  if (teamId && !restoreBusy) void restore(athlete.id, teamId);
+                }}>
+                  <select name="teamId" aria-label={`${athlete.name}的恢复队伍`} required
+                    defaultValue={options.some(team => team.id === athlete.teamId) ? athlete.teamId ?? '' : ''}>
+                    <option value="">选择启用队伍</option>
+                    {options.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+                  </select>
+                  <button type="submit" className="primary-button" disabled={restoreBusy || !options.length}>恢复档案</button>
+                </form>
+              </li>
+            );
+          })}</ul> : <p>暂无已停用运动员。</p>}
+        </section>
+      )}
+
       <section className="athlete-pulse-rail" aria-label="运动员状态统计">
         <button
-          className={
-            !monthlyOnly && !healthFilter && !advanced.athleteStatus
-              ? "active"
-              : ""
-          }
+          className={!monthlyOnly && !healthFilter && !advanced.athleteStatus ? 'active' : ''}
           onClick={resetFilters}
         >
           <small>全部在档</small>
@@ -594,10 +666,10 @@ export function AthleteManagementPage({
           <span>查看全部人员</span>
         </button>
         <button
-          className={advanced.athleteStatus === "在训" ? "active" : ""}
+          className={advanced.athleteStatus === '在训' ? 'active' : ''}
           onClick={() => {
             resetFilters();
-            setAdvanced((value) => ({ ...value, athleteStatus: "在训" }));
+            setAdvanced((value) => ({ ...value, athleteStatus: '在训' }));
           }}
         >
           <small>在训运动员</small>
@@ -605,10 +677,10 @@ export function AthleteManagementPage({
           <span>当前训练状态</span>
         </button>
         <button
-          className={healthFilter === "__risk" ? "active risk" : "risk"}
+          className={healthFilter === '__risk' ? 'active risk' : 'risk'}
           onClick={() => {
             resetFilters();
-            setHealthFilter("__risk");
+            setHealthFilter('__risk');
           }}
         >
           <small>健康关注</small>
@@ -616,7 +688,7 @@ export function AthleteManagementPage({
           <span>观察、受限或康复</span>
         </button>
         <button
-          className={monthlyOnly ? "active" : ""}
+          className={monthlyOnly ? 'active' : ''}
           onClick={() => {
             resetFilters();
             setMonthlyOnly(true);
@@ -637,7 +709,7 @@ export function AthleteManagementPage({
               setSearch(event.target.value);
               setPage(1);
             }}
-            placeholder="搜索姓名、队伍、教练、赛事或地区"
+            placeholder="搜索姓名、编号、队伍、教练、赛事或地区"
             aria-label="搜索运动员"
           />
         </label>
@@ -645,14 +717,16 @@ export function AthleteManagementPage({
           value={projectFilter}
           onChange={(event) => {
             setProjectFilter(event.target.value);
-            setTeamFilter("");
+            setTeamFilter('');
             setPage(1);
           }}
           aria-label="筛选运动项目"
         >
           <option value="">全部项目</option>
           {projects.map((project) => (
-            <option key={project}>{project}</option>
+            <option key={project} value={project}>
+              {projectLabel(project)}
+            </option>
           ))}
         </select>
         <select
@@ -694,10 +768,7 @@ export function AthleteManagementPage({
             <option key={event}>{event}</option>
           ))}
         </select>
-        <button
-          className="athlete-filter-button"
-          onClick={() => setAdvancedOpen(true)}
-        >
+        <button className="athlete-filter-button" onClick={() => setAdvancedOpen(true)}>
           <Filter size={16} />
           高级筛选
         </button>
@@ -722,22 +793,21 @@ export function AthleteManagementPage({
         )}
       </FilterBar>
 
-      {canAdmin && (
-        <section
-          className={`athlete-batch-bar ${selectedIds.size ? "visible" : ""}`}
-        >
+      {canDelete && (
+        <section className={`athlete-batch-bar ${selectedIds.size ? 'visible' : ''}`}>
           <span>
             已选择 <strong>{selectedIds.size}</strong> 名运动员
           </span>
+          {canAdmin && (
           <button
             onClick={() => {
               setBulkForm({
-                technicalLevel: "",
-                athletePosition: "",
-                healthStatus: "",
-                currentEvent: "",
-                athleteStatus: "",
-                trainingPhase: "",
+                technicalLevel: '',
+                athletePosition: '',
+                healthStatus: '',
+                currentEvent: '',
+                athleteStatus: '',
+                trainingPhase: '',
               });
               setBulkOpen(true);
             }}
@@ -746,13 +816,14 @@ export function AthleteManagementPage({
             <PencilLine size={15} />
             批量修改
           </button>
+          )}
           <button
             className="danger"
             onClick={() => void deleteSelected()}
             disabled={!selectedIds.size}
           >
             <Trash2 size={15} />
-            批量删除
+            批量停用
           </button>
         </section>
       )}
@@ -763,18 +834,28 @@ export function AthleteManagementPage({
             <strong>运动员名册</strong>
             <span>当前 {filtered.length} 条</span>
           </div>
-          <small>
-            每页显示 {PAGE_SIZE} 人，档案与伤病记录直接关联个人数据。
-          </small>
+          <small>每页显示 {PAGE_SIZE} 人，档案与伤病记录直接关联个人数据。</small>
         </header>
         <div className="athlete-table-wrap">
           <table className="athlete-directory-table">
+            <colgroup>
+              {canDelete && <col className="athlete-col-selection" />}
+              <col className="athlete-col-person" />
+              <col className="athlete-col-team" />
+              <col className="athlete-col-position" />
+              <col className="athlete-col-level" />
+              <col className="athlete-col-health" />
+              <col className="athlete-col-coach" />
+              <col className="athlete-col-event" />
+              <col className="athlete-col-status" />
+              <col className="athlete-col-actions" />
+            </colgroup>
             <thead>
               <tr>
-                {canAdmin && (
-                  <th>
+                {canDelete && (
+                  <th scope="col" className="athlete-selection-cell">
                     <button
-                      className={`athlete-checkbox ${pageAllSelected ? "checked" : ""}`}
+                      className={`athlete-checkbox ${pageAllSelected ? 'checked' : ''}`}
                       onClick={setPageSelection}
                       aria-label="选择本页运动员"
                     >
@@ -782,24 +863,24 @@ export function AthleteManagementPage({
                     </button>
                   </th>
                 )}
-                <th>运动员</th>
-                <th>项目与队伍</th>
-                <th>位置/号位</th>
-                <th>等级</th>
-                <th>身体状态</th>
-                <th>负责教练</th>
-                <th>备战赛事</th>
-                <th>训练状态</th>
-                <th>操作</th>
+                <th scope="col">运动员</th>
+                <th scope="col">项目与队伍</th>
+                <th scope="col">位置/号位</th>
+                <th scope="col">等级</th>
+                <th scope="col">身体状态</th>
+                <th scope="col">负责教练</th>
+                <th scope="col">备战赛事</th>
+                <th scope="col">训练状态</th>
+                <th scope="col">操作</th>
               </tr>
             </thead>
             <tbody>
               {paged.map((athlete) => (
                 <tr key={athlete.id}>
-                  {canAdmin && (
-                    <td>
+                  {canDelete && (
+                    <td className="athlete-selection-cell">
                       <button
-                        className={`athlete-checkbox ${selectedIds.has(athlete.id) ? "checked" : ""}`}
+                        className={`athlete-checkbox ${selectedIds.has(athlete.id) ? 'checked' : ''}`}
                         onClick={() => toggleSelected(athlete.id)}
                         aria-label={`选择${athlete.name}`}
                       >
@@ -809,60 +890,60 @@ export function AthleteManagementPage({
                   )}
                   <td>
                     <div className="athlete-person-cell">
-                      {athlete.photoUrl ? (
-                        <img src={athlete.photoUrl} alt="" />
-                      ) : (
-                        <span>{athlete.name.slice(0, 1)}</span>
-                      )}
-                      <div>
+                      <ProtectedAthletePhoto
+                        athlete={athlete}
+                        alt=""
+                        fallback={<span>{athlete.name.slice(0, 1)}</span>}
+                      />
+                      <div className="athlete-person-details">
                         <strong>{athlete.name}</strong>
-                        <small>
-                          {athlete.gender || "性别未填"} ·{" "}
-                          {ageFromBirthDate(athlete.birthDate)} 岁
-                          {athlete.profileStatus === "incomplete" ? " · 档案待补全" : ""}
-                          {!athlete.hasAccount ? " · 无登录账号" : ""}
-                        </small>
+                        <div className="athlete-person-meta">
+                          <span>编号 {athlete.athleteNumber || formatAthleteNumber(athlete.id)}</span>
+                          <span>{athlete.gender || '性别未填'}</span>
+                          <span>{ageFromBirthDate(athlete.birthDate)} 岁</span>
+                        </div>
+                        {(athlete.profileStatus === 'incomplete' ||
+                          !athlete.hasAccount ||
+                          athlete.source === 'self_registered') && (
+                          <div className="athlete-person-notes">
+                            {athlete.profileStatus === 'incomplete' && <span>档案待补全</span>}
+                            {!athlete.hasAccount && <span>无登录账号</span>}
+                            {athlete.source === 'self_registered' && <span>入队待核实</span>}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </td>
                   <td>
                     <div className="athlete-team-cell">
-                      <strong>{athlete.project}</strong>
-                      <small>{athlete.team || "未分队"}</small>
+                      <strong>{projectLabel(athlete.project)}</strong>
+                      <small>{athlete.team || '未分队'}</small>
                     </div>
                   </td>
                   <td>
                     <span className="athlete-event-copy">
-                      {athlete.athletePosition || "未填写"}
+                      {athlete.athletePosition || '未填写'}
                     </span>
                   </td>
                   <td>
-                    <span className="athlete-level-tag">
-                      {athlete.technicalLevel || "未定级"}
-                    </span>
+                    <span className="athlete-level-tag">{athlete.technicalLevel || '未定级'}</span>
                   </td>
                   <td>
                     <span
-                      className={`athlete-health-tag ${athlete.healthStatus === "健康" ? "healthy" : "attention"}`}
+                      className={`athlete-health-tag ${athlete.healthStatus === '健康' ? 'healthy' : 'attention'}`}
                     >
                       <i />
                       {athlete.healthStatus}
                     </span>
                   </td>
                   <td>
-                    <span className="athlete-coach-copy">
-                      {athlete.coaches || "未关联"}
-                    </span>
+                    <span className="athlete-coach-copy">{athlete.coaches || '暂无负责教练'}</span>
                   </td>
                   <td>
-                    <span className="athlete-event-copy">
-                      {athlete.currentEvent || "暂无赛事"}
-                    </span>
+                    <span className="athlete-event-copy">{athlete.currentEvent || '暂无赛事'}</span>
                   </td>
                   <td>
-                    <span className="athlete-training-status">
-                      {athlete.athleteStatus}
-                    </span>
+                    <span className="athlete-training-status">{athlete.athleteStatus}</span>
                   </td>
                   <td>
                     <div className="athlete-row-actions">
@@ -874,16 +955,16 @@ export function AthleteManagementPage({
                         onClick={() => {
                           setInjuryAthlete(athlete);
                           setInjuryForm({
-                            injuryName: "",
-                            bodyPart: "",
-                            side: "unspecified",
-                            status: "observation",
+                            injuryName: '',
+                            bodyPart: '',
+                            side: 'unspecified',
+                            status: 'observation',
                             painScore: 0,
                             onsetDate: new Date().toISOString().slice(0, 10),
-                            restrictions: "",
-                            rehabPlan: "",
-                            reviewDate: "",
-                            note: "",
+                            restrictions: '',
+                            rehabPlan: '',
+                            reviewDate: '',
+                            note: '',
                           });
                         }}
                       >
@@ -896,13 +977,10 @@ export function AthleteManagementPage({
                           编辑
                         </button>
                       )}
-                      {canAdmin && (
-                        <button
-                          className="danger"
-                          onClick={() => void deleteOne(athlete)}
-                        >
+                      {canDelete && (
+                        <button className="danger" onClick={() => void deleteOne(athlete)}>
                           <Trash2 size={14} />
-                          删除
+                          停用
                         </button>
                       )}
                     </div>
@@ -911,9 +989,7 @@ export function AthleteManagementPage({
               ))}
             </tbody>
           </table>
-          {loading && (
-            <div className="athlete-table-state">正在刷新运动员名册…</div>
-          )}
+          {loading && <div className="athlete-table-state">正在刷新运动员名册…</div>}
           {!loading && !paged.length && (
             <div className="athlete-table-state empty">
               <Search size={28} />
@@ -925,23 +1001,28 @@ export function AthleteManagementPage({
         </div>
         <footer>
           <span>
-            显示 {filtered.length ? (safePage - 1) * PAGE_SIZE + 1 : 0}–
-            {Math.min(safePage * PAGE_SIZE, filtered.length)}，共{" "}
-            {filtered.length} 人
+            显示 {pager.start}–{pager.end}，共 {filtered.length} 人
           </span>
           <nav aria-label="运动员分页">
             <button
-              disabled={safePage === 1}
+              type="button"
+              aria-label="上一页"
+              disabled={!pager.hasPrev}
               onClick={() => setPage((value) => Math.max(1, value - 1))}
             >
               <ChevronLeft size={16} />
             </button>
             <span>
-              {safePage} / {pageCount}
+              {pager.current} / {pager.pageCount}
+            </span>
+            <span className="visually-hidden" aria-live="polite" aria-atomic="true">
+              当前第 {pager.current} 页，共 {pager.pageCount} 页
             </span>
             <button
-              disabled={safePage === pageCount}
-              onClick={() => setPage((value) => Math.min(pageCount, value + 1))}
+              type="button"
+              aria-label="下一页"
+              disabled={!pager.hasNext}
+              onClick={() => setPage((value) => Math.min(pager.pageCount, value + 1))}
             >
               <ChevronRight size={16} />
             </button>
@@ -953,7 +1034,7 @@ export function AthleteManagementPage({
         <div
           className="modal-backdrop athlete-modal-backdrop"
           role="presentation"
-          onMouseDown={(event) => {
+          onPointerDown={(event) => {
             if (event.target === event.currentTarget) setAdvancedOpen(false);
           }}
         >
@@ -967,7 +1048,7 @@ export function AthleteManagementPage({
               <div>
                 <span>ADVANCED FILTER</span>
                 <h2 id="athlete-filter-title">高级筛选</h2>
-                <p>进一步按训练属性和建档时间缩小范围。</p>
+                <p>按训练属性、档案状态、基本信息和建档时间精确筛选。</p>
               </div>
               <button
                 className="icon-button"
@@ -982,11 +1063,69 @@ export function AthleteManagementPage({
                 <span>训练场地</span>
                 <input
                   value={advanced.venue}
-                  onChange={(event) =>
-                    setAdvanced({ ...advanced, venue: event.target.value })
-                  }
+                  onChange={(event) => setAdvanced({ ...advanced, venue: event.target.value })}
                   placeholder="例如：水上基地"
                 />
+              </label>
+              <label>
+                <span>负责教练</span>
+                <input
+                  value={advanced.coach}
+                  onChange={(event) => setAdvanced({ ...advanced, coach: event.target.value })}
+                  placeholder="输入教练姓名"
+                />
+              </label>
+              <label>
+                <span>所属区域</span>
+                <input
+                  value={advanced.region}
+                  onChange={(event) => setAdvanced({ ...advanced, region: event.target.value })}
+                  placeholder="省、市或区域名称"
+                />
+              </label>
+              <label>
+                <span>具体小项</span>
+                <select
+                  value={advanced.eventItem}
+                  onChange={(event) => setAdvanced({ ...advanced, eventItem: event.target.value })}
+                >
+                  <option value="">全部小项</option>
+                  {eventItems.map((item) => (
+                    <option key={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>位置/号位</span>
+                <input
+                  value={advanced.position}
+                  onChange={(event) => setAdvanced({ ...advanced, position: event.target.value })}
+                  placeholder="例如：一号位"
+                />
+              </label>
+              <label>
+                <span>训练阶段</span>
+                <select
+                  value={advanced.trainingPhase}
+                  onChange={(event) => setAdvanced({ ...advanced, trainingPhase: event.target.value })}
+                >
+                  <option value="">全部阶段</option>
+                  {trainingPhases.map((phase) => (
+                    <option key={phase}>{phase}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>性别</span>
+                <select
+                  value={advanced.gender}
+                  onChange={(event) => setAdvanced({ ...advanced, gender: event.target.value })}
+                >
+                  <option value="">全部性别</option>
+                  {genders.map((gender) => (
+                    <option key={gender}>{gender}</option>
+                  ))}
+                </select>
               </label>
               <label>
                 <span>技术等级</span>
@@ -1023,6 +1162,48 @@ export function AthleteManagementPage({
                 </select>
               </label>
               <label>
+                <span>档案状态</span>
+                <select
+                  value={advanced.profileStatus}
+                  onChange={(event) => setAdvanced({ ...advanced, profileStatus: event.target.value })}
+                >
+                  <option value="">全部档案</option>
+                  <option value="complete">资料完整</option>
+                  <option value="incomplete">待补全</option>
+                </select>
+              </label>
+              <label>
+                <span>登录账号</span>
+                <select
+                  value={advanced.accountStatus}
+                  onChange={(event) => setAdvanced({ ...advanced, accountStatus: event.target.value })}
+                >
+                  <option value="">全部账号状态</option>
+                  <option value="has">已创建账号</option>
+                  <option value="none">未创建账号</option>
+                </select>
+              </label>
+              <label>
+                <span>最小年龄</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={advanced.ageMin}
+                  onChange={(event) => setAdvanced({ ...advanced, ageMin: event.target.value })}
+                  placeholder="不限"
+                />
+              </label>
+              <label>
+                <span>最大年龄</span>
+                <input
+                  type="number"
+                  min="0"
+                  value={advanced.ageMax}
+                  onChange={(event) => setAdvanced({ ...advanced, ageMax: event.target.value })}
+                  placeholder="不限"
+                />
+              </label>
+              <label>
                 <span>建档开始日期</span>
                 <input
                   type="date"
@@ -1040,9 +1221,7 @@ export function AthleteManagementPage({
                 <input
                   type="date"
                   value={advanced.createdTo}
-                  onChange={(event) =>
-                    setAdvanced({ ...advanced, createdTo: event.target.value })
-                  }
+                  onChange={(event) => setAdvanced({ ...advanced, createdTo: event.target.value })}
                 />
               </label>
             </div>
@@ -1051,11 +1230,21 @@ export function AthleteManagementPage({
                 className="secondary-button"
                 onClick={() =>
                   setAdvanced({
-                    venue: "",
-                    technicalLevel: "",
-                    athleteStatus: "",
-                    createdFrom: "",
-                    createdTo: "",
+                    venue: '',
+                    coach: '',
+                    region: '',
+                    eventItem: '',
+                    position: '',
+                    trainingPhase: '',
+                    gender: '',
+                    technicalLevel: '',
+                    athleteStatus: '',
+                    profileStatus: '',
+                    accountStatus: '',
+                    ageMin: '',
+                    ageMax: '',
+                    createdFrom: '',
+                    createdTo: '',
                   })
                 }
               >
@@ -1076,10 +1265,7 @@ export function AthleteManagementPage({
       )}
 
       {editorOpen && (
-        <div
-          className="modal-backdrop athlete-editor-backdrop"
-          role="presentation"
-        >
+        <div className="modal-backdrop athlete-editor-backdrop" role="presentation">
           <section
             className="athlete-editor-modal"
             role="dialog"
@@ -1088,9 +1274,9 @@ export function AthleteManagementPage({
           >
             <header>
               <div>
-                <span>{editingAthlete ? "EDIT ATHLETE" : "NEW ATHLETE"}</span>
+                <span>{editingAthlete ? 'EDIT ATHLETE' : 'NEW ATHLETE'}</span>
                 <h2 id="athlete-editor-title">
-                  {editingAthlete ? "编辑运动员资料" : "新增运动员"}
+                  {editingAthlete ? '编辑运动员资料' : '新增运动员'}
                 </h2>
                 <p>先建立人员档案，必要信息可以稍后补充；登录账号按需创建。</p>
               </div>
@@ -1109,6 +1295,12 @@ export function AthleteManagementPage({
                   <div>
                     {photoPreview ? (
                       <img src={photoPreview} alt="运动员照片预览" />
+                    ) : editingAthlete ? (
+                      <ProtectedAthletePhoto
+                        athlete={editingAthlete}
+                        alt="运动员照片预览"
+                        fallback={<UserRound size={34} aria-hidden="true" />}
+                      />
                     ) : (
                       <UserRound size={34} />
                     )}
@@ -1119,9 +1311,7 @@ export function AthleteManagementPage({
                     <input
                       type="file"
                       accept="image/jpeg,image/png"
-                      onChange={(event) =>
-                        choosePhoto(event.target.files?.[0] || null)
-                      }
+                      onChange={(event) => choosePhoto(event.target.files?.[0] || null)}
                     />
                   </label>
                   <small>支持 JPG/PNG，建议使用正方形证件照。</small>
@@ -1136,9 +1326,7 @@ export function AthleteManagementPage({
                         <span>姓名*</span>
                         <input
                           value={form.name}
-                          onChange={(event) =>
-                            setForm({ ...form, name: event.target.value })
-                          }
+                          onChange={(event) => setForm({ ...form, name: event.target.value })}
                           required
                         />
                       </label>
@@ -1146,9 +1334,7 @@ export function AthleteManagementPage({
                         <span>性别</span>
                         <select
                           value={form.gender}
-                          onChange={(event) =>
-                            setForm({ ...form, gender: event.target.value })
-                          }
+                          onChange={(event) => setForm({ ...form, gender: event.target.value })}
                         >
                           <option value="">暂不填写</option>
                           <option>男</option>
@@ -1160,40 +1346,21 @@ export function AthleteManagementPage({
                         <input
                           type="date"
                           value={form.birthDate}
-                          onChange={(event) =>
-                            setForm({ ...form, birthDate: event.target.value })
-                          }
-                        />
-                      </label>
-                      <label>
-                        <span>身份证号</span>
-                        <input
-                          value={form.identityNumber}
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              identityNumber: event.target.value.toUpperCase(),
-                            })
-                          }
-                          maxLength={18}
+                          onChange={(event) => setForm({ ...form, birthDate: event.target.value })}
                         />
                       </label>
                       <label>
                         <span>民族</span>
                         <input
                           value={form.ethnicity}
-                          onChange={(event) =>
-                            setForm({ ...form, ethnicity: event.target.value })
-                          }
+                          onChange={(event) => setForm({ ...form, ethnicity: event.target.value })}
                         />
                       </label>
                       <label>
                         <span>手机号</span>
                         <input
                           value={form.phone}
-                          onChange={(event) =>
-                            setForm({ ...form, phone: event.target.value })
-                          }
+                          onChange={(event) => setForm({ ...form, phone: event.target.value })}
                           maxLength={11}
                         />
                       </label>
@@ -1201,9 +1368,7 @@ export function AthleteManagementPage({
                         <span>血型</span>
                         <input
                           value={form.bloodType}
-                          onChange={(event) =>
-                            setForm({ ...form, bloodType: event.target.value })
-                          }
+                          onChange={(event) => setForm({ ...form, bloodType: event.target.value })}
                           placeholder="例如 A型"
                         />
                       </label>
@@ -1211,9 +1376,7 @@ export function AthleteManagementPage({
                         <span>学历</span>
                         <input
                           value={form.education}
-                          onChange={(event) =>
-                            setForm({ ...form, education: event.target.value })
-                          }
+                          onChange={(event) => setForm({ ...form, education: event.target.value })}
                         />
                       </label>
                       <label>
@@ -1273,56 +1436,60 @@ export function AthleteManagementPage({
                     </h3>
                     <div className="athlete-form-grid">
                       <label>
-                        <span>运动项目*</span>
-                        <select
-                          value={form.project}
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              project: event.target.value,
-                              team: "",
-                            })
-                          }
-                        >
-                          {PROJECTS.map((project) => (
-                            <option key={project}>{project}</option>
-                          ))}
-                        </select>
-                      </label>
-                      <label>
                         <span>所属队伍*</span>
                         <select
-                          value={form.team}
-                          onChange={(event) =>
-                            setForm({ ...form, team: event.target.value })
-                          }
+                          value={selectedFormTeam?.id || ''}
+                          onChange={(event) => {
+                            const team = teams.find(
+                              (team) => team.id === Number(event.target.value)
+                            );
+                            setForm({
+                              ...form,
+                              team: team?.name || '',
+                              project: team?.project || '',
+                            });
+                          }}
                           required
                         >
                           <option value="">请选择队伍</option>
-                          {formTeams.map((team) => (
-                            <option key={team.id}>{team.name}</option>
+                          {teams.map((team) => (
+                            <option key={team.id} value={team.id}>
+                              {team.name}（{projectLabel(team.project)}）
+                            </option>
                           ))}
                         </select>
+                        <small>运动项目由所属队伍自动确定，无需填写。</small>
                       </label>
+                      {editingAthlete && selectedFormTeam && teams.some(team =>
+                        team.project === selectedFormTeam.project && team.id !== selectedFormTeam.id
+                      ) && (
+                        <label>
+                          <span>兼属队伍</span>
+                          <select
+                            multiple
+                            value={affiliatedTeamIds.map(String)}
+                            onChange={event => setAffiliatedTeamIds(
+                              Array.from(event.currentTarget.selectedOptions, option => Number(option.value))
+                            )}
+                          >
+                            {teams.filter(team => team.project === selectedFormTeam.project && team.id !== selectedFormTeam.id)
+                              .map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
+                          </select>
+                        </label>
+                      )}
                       <label>
                         <span>负责教练</span>
-                        {user.role === "SCC" ? (
-                          <input value={user.displayName} disabled />
-                        ) : (
-                          <select
-                            value={form.coachId}
-                            onChange={(event) =>
-                              setForm({ ...form, coachId: event.target.value })
-                            }
-                          >
-                            <option value="">暂不关联</option>
-                            {coaches.map((coach) => (
-                              <option key={coach.id} value={coach.id}>
-                                {coach.displayName}
-                              </option>
-                            ))}
-                          </select>
-                        )}
+                        <input
+                          value={
+                            editingAthlete &&
+                            form.project === editingAthlete.project &&
+                            form.team === editingAthlete.team
+                              ? editingAthlete.coaches || '暂无负责教练'
+                              : '保存后按所属队伍自动确定'
+                          }
+                          readOnly
+                        />
+                        <small>负责运动员由负责队伍自动确定</small>
                       </label>
                       <label>
                         <span>位置/号位</span>
@@ -1349,7 +1516,7 @@ export function AthleteManagementPage({
                             })
                           }
                         >
-                          <option value="">未定级</option>
+                          <option value="">未填写</option>
                           {TECHNICAL_LEVELS.map((level) => (
                             <option key={level}>{level}</option>
                           ))}
@@ -1386,6 +1553,18 @@ export function AthleteManagementPage({
                             <option key={status}>{status}</option>
                           ))}
                         </select>
+                      </label>
+                      <label>
+                        <span>具体小项</span>
+                        <input maxLength={120} value={form.eventItem} onChange={event => setForm({ ...form, eventItem: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>代表单位</span>
+                        <input maxLength={120} value={form.representativeUnit} onChange={event => setForm({ ...form, representativeUnit: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>填报训练年限（年）</span>
+                        <input type="number" min={0} step="any" value={form.trainingYears} onChange={event => setForm({ ...form, trainingYears: event.target.value })} />
                       </label>
                       <label>
                         <span>开始运动日期</span>
@@ -1440,9 +1619,7 @@ export function AthleteManagementPage({
                         <span>集训时间</span>
                         <input
                           value={form.campPeriod}
-                          onChange={(event) =>
-                            setForm({ ...form, campPeriod: event.target.value })
-                          }
+                          onChange={(event) => setForm({ ...form, campPeriod: event.target.value })}
                         />
                       </label>
                       <label>
@@ -1461,10 +1638,16 @@ export function AthleteManagementPage({
                         <span>最好成绩</span>
                         <input
                           value={form.bestResult}
-                          onChange={(event) =>
-                            setForm({ ...form, bestResult: event.target.value })
-                          }
+                          onChange={(event) => setForm({ ...form, bestResult: event.target.value })}
                         />
+                      </label>
+                      <label>
+                        <span>最好成绩对应赛事</span>
+                        <input maxLength={120} value={form.bestResultEvent} onChange={event => setForm({ ...form, bestResultEvent: event.target.value })} />
+                      </label>
+                      <label>
+                        <span>成绩日期</span>
+                        <input type="date" value={form.bestResultDate} onChange={event => setForm({ ...form, bestResultDate: event.target.value })} />
                       </label>
                       <label>
                         <span>输送地</span>
@@ -1482,9 +1665,7 @@ export function AthleteManagementPage({
                         <span>输送单位</span>
                         <input
                           value={form.originUnit}
-                          onChange={(event) =>
-                            setForm({ ...form, originUnit: event.target.value })
-                          }
+                          onChange={(event) => setForm({ ...form, originUnit: event.target.value })}
                         />
                       </label>
                       <label>
@@ -1514,8 +1695,8 @@ export function AthleteManagementPage({
                             setForm({
                               ...form,
                               region: event.target.value,
-                              city: "",
-                              county: "",
+                              city: '',
+                              county: '',
                             })
                           }
                         >
@@ -1534,12 +1715,12 @@ export function AthleteManagementPage({
                             setForm({
                               ...form,
                               city: event.target.value,
-                              county: "",
+                              county: '',
                             })
                           }
                         >
                           <option value="">暂不填写</option>
-                          {form.city === "未设置" && <option value="未设置">暂不填写</option>}
+                          {form.city === '未设置' && <option value="未设置">暂不填写</option>}
                           {(PROVINCE_CITIES[form.region] || []).map((city) => (
                             <option key={city}>{city}</option>
                           ))}
@@ -1549,9 +1730,7 @@ export function AthleteManagementPage({
                         <span>区县</span>
                         <input
                           value={form.county}
-                          onChange={(event) =>
-                            setForm({ ...form, county: event.target.value })
-                          }
+                          onChange={(event) => setForm({ ...form, county: event.target.value })}
                           placeholder="可稍后补充"
                         />
                       </label>
@@ -1559,24 +1738,55 @@ export function AthleteManagementPage({
                         <>
                           <label className="wide">
                             <span>登录账号</span>
-                            <select value={form.createAccount ? "yes" : "no"} onChange={(event) => setForm({ ...form, createAccount: event.target.value === "yes", username: "", password: "" })}>
+                            <select
+                              value={form.createAccount ? 'yes' : 'no'}
+                              onChange={(event) =>
+                                setForm({
+                                  ...form,
+                                  createAccount: event.target.value === 'yes',
+                                  username: '',
+                                  password: '',
+                                })
+                              }
+                            >
                               <option value="no">暂不创建账号</option>
                               <option value="yes">同时创建运动员账号</option>
                             </select>
                           </label>
-                          {form.createAccount && <>
-                            <label><span>登录账号*</span><input value={form.username} onChange={(event) => setForm({ ...form, username: event.target.value.toLowerCase() })} placeholder="字母、数字或下划线" required /></label>
-                            <label><span>初始密码*</span><input type="password" value={form.password} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="至少8位，含字母和数字" required /></label>
-                          </>}
+                          {form.createAccount && (
+                            <>
+                              <label>
+                                <span>登录账号*</span>
+                                <input
+                                  value={form.username}
+                                  onChange={(event) =>
+                                    setForm({ ...form, username: event.target.value.toLowerCase() })
+                                  }
+                                  placeholder="字母、数字或下划线"
+                                  required
+                                />
+                              </label>
+                              <label>
+                                <span>初始密码*</span>
+                                <input
+                                  type="password"
+                                  value={form.password}
+                                  onChange={(event) =>
+                                    setForm({ ...form, password: event.target.value })
+                                  }
+                                  placeholder="至少8位，含字母和数字"
+                                  required
+                                />
+                              </label>
+                            </>
+                          )}
                         </>
                       )}
                       <label className="wide">
                         <span>备注</span>
                         <textarea
                           value={form.notes}
-                          onChange={(event) =>
-                            setForm({ ...form, notes: event.target.value })
-                          }
+                          onChange={(event) => setForm({ ...form, notes: event.target.value })}
                           rows={3}
                         />
                       </label>
@@ -1593,22 +1803,16 @@ export function AthleteManagementPage({
                 >
                   取消
                 </button>
-                <button
-                  type="submit"
-                  className="secondary-button"
-                  disabled={saving}
-                >
-                  {saving ? "保存中…" : "保存资料"}
+                <button type="submit" className="secondary-button" disabled={saving}>
+                  {saving ? '保存中…' : '保存资料'}
                 </button>
                 <button
                   type="button"
                   className="primary-button"
                   disabled={saving}
-                  onClick={(event) =>
-                    void saveAthlete(event as unknown as FormEvent, true)
-                  }
+                  onClick={(event) => void saveAthlete(event as unknown as FormEvent, true)}
                 >
-                  {saving ? "保存中…" : "保存并查看表现"}
+                  {saving ? '保存中…' : '保存并查看表现'}
                 </button>
               </footer>
             </form>
@@ -1617,10 +1821,7 @@ export function AthleteManagementPage({
       )}
 
       {bulkOpen && (
-        <div
-          className="modal-backdrop athlete-modal-backdrop"
-          role="presentation"
-        >
+        <div className="modal-backdrop athlete-modal-backdrop" role="presentation">
           <section
             className="athlete-compact-modal"
             role="dialog"
@@ -1633,11 +1834,7 @@ export function AthleteManagementPage({
                 <h2 id="athlete-bulk-title">批量修改 {selectedIds.size} 人</h2>
                 <p>只会覆盖已填写的项目，留空内容保持不变。</p>
               </div>
-              <button
-                className="icon-button"
-                onClick={() => setBulkOpen(false)}
-                aria-label="关闭"
-              >
+              <button className="icon-button" onClick={() => setBulkOpen(false)} aria-label="关闭">
                 <X size={18} />
               </button>
             </header>
@@ -1732,18 +1929,11 @@ export function AthleteManagementPage({
               </label>
             </div>
             <footer>
-              <button
-                className="secondary-button"
-                onClick={() => setBulkOpen(false)}
-              >
+              <button className="secondary-button" onClick={() => setBulkOpen(false)}>
                 取消
               </button>
-              <button
-                className="primary-button"
-                onClick={() => void saveBulk()}
-                disabled={saving}
-              >
-                {saving ? "保存中…" : "保存批量修改"}
+              <button className="primary-button" onClick={() => void saveBulk()} disabled={saving}>
+                {saving ? '保存中…' : '保存批量修改'}
               </button>
             </footer>
           </section>
@@ -1751,10 +1941,7 @@ export function AthleteManagementPage({
       )}
 
       {injuryAthlete && (
-        <div
-          className="modal-backdrop athlete-modal-backdrop"
-          role="presentation"
-        >
+        <div className="modal-backdrop athlete-modal-backdrop" role="presentation">
           <section
             className="athlete-injury-modal"
             role="dialog"
@@ -1766,7 +1953,7 @@ export function AthleteManagementPage({
                 <span>INJURY RECORD</span>
                 <h2 id="athlete-injury-title">新增伤病记录</h2>
                 <p>
-                  {injuryAthlete.name} · {injuryAthlete.project} ·{" "}
+                  {injuryAthlete.name} · {projectLabel(injuryAthlete.project)} ·{' '}
                   {injuryAthlete.team}
                 </p>
               </div>
@@ -1814,7 +2001,7 @@ export function AthleteManagementPage({
                     onChange={(event) =>
                       setInjuryForm({
                         ...injuryForm,
-                        side: event.target.value as InjuryRecord["side"],
+                        side: event.target.value as InjuryRecord['side'],
                       })
                     }
                   >
@@ -1914,9 +2101,7 @@ export function AthleteManagementPage({
                   <span>备注</span>
                   <input
                     value={injuryForm.note}
-                    onChange={(event) =>
-                      setInjuryForm({ ...injuryForm, note: event.target.value })
-                    }
+                    onChange={(event) => setInjuryForm({ ...injuryForm, note: event.target.value })}
                   />
                 </label>
               </div>
@@ -1931,7 +2116,7 @@ export function AthleteManagementPage({
                 </button>
                 <button className="primary-button" disabled={saving}>
                   <ClipboardPlus size={15} />
-                  {saving ? "保存中…" : "保存伤病记录"}
+                  {saving ? '保存中…' : '保存伤病记录'}
                 </button>
               </footer>
             </form>

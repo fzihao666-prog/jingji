@@ -1,0 +1,32 @@
+<view class="scope-filter">
+  <view wx:if="{{(showAthlete && showSearch) || showAddAthlete}}" class="scope-keyword-row {{showAthlete && showSearch && showAddAthlete ? 'has-add-action' : ''}}">
+    <input wx:if="{{showAthlete && showSearch}}" class="scope-keyword-input" value="{{keyword}}" bindinput="onKeywordInput" placeholder="搜索姓名、编号或队伍" confirm-type="search" aria-label="按姓名、编号或队伍筛选运动员" />
+    <button wx:if="{{showAddAthlete}}" class="scope-add-athlete" bindtap="onAddAthlete" aria-label="添加运动员">+ 添加运动员</button>
+  </view>
+  <view class="scope-picker-row">
+    <picker class="scope-picker" mode="selector" range="{{projectItems}}" range-key="label" value="{{projectIndex}}" bindchange="onProjectChange">
+      <view class="scope-picker-control">
+        <text class="scope-picker-label">项目</text>
+        <text class="scope-picker-value">{{projectItems[projectIndex].label || '选择项目'}}</text>
+        <text class="scope-picker-arrow">⌄</text>
+      </view>
+    </picker>
+    <picker wx:if="{{showTeam}}" class="scope-picker" mode="selector" range="{{teamItems}}" range-key="name" value="{{teamIndex}}" bindchange="onTeamChange">
+      <view class="scope-picker-control">
+        <text class="scope-picker-label">队伍</text>
+        <text class="scope-picker-value">{{teamItems[teamIndex].name}}</text>
+        <text class="scope-picker-arrow">⌄</text>
+      </view>
+    </picker>
+    <picker wx:if="{{showAthlete}}" class="scope-picker athlete-picker" disabled="{{!athleteItems.length}}" mode="selector" range="{{athleteItems}}" range-key="label" value="{{athleteIndex}}" bindchange="onAthleteChange">
+      <view class="scope-picker-control">
+        <text class="scope-picker-label">运动员</text>
+        <text class="scope-picker-value">{{athleteItems.length ? athleteItems[athleteIndex].label : '未找到匹配运动员'}}</text>
+        <text class="scope-picker-arrow">⌄</text>
+      </view>
+    </picker>
+  </view>
+  <view class="scope-range" aria-label="时间范围">
+    <button wx:for="{{rangeOptions}}" wx:key="value" class="scope-range-button {{range === item.value ? 'active' : ''}}" data-value="{{item.value}}" bindtap="onRangeChange" aria-label="时间范围：{{item.label}}，{{range === item.value ? '已选中' : '未选中'}}">{{item.label}}</button>
+  </view>
+</view>

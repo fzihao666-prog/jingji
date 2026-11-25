@@ -1,0 +1,6 @@
+<template name="training-state">
+  <view class="state {{chart ? 'training-chart-empty' : ''}}" aria-live="polite">
+    <view class="state-title">{{loading ? '正在加载数据' : (error || message)}}</view>
+    <button wx:if="{{error || loading}}" class="mini-button" disabled="{{loading}}" bindtap="loadPage" aria-label="{{loading ? '正在加载训练数据' : (error ? '重试加载训练数据' : '刷新训练数据')}}">{{loading ? '正在加载' : (error ? '重试' : '刷新')}}</button>
+  </view>
+</template>

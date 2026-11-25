@@ -25,17 +25,14 @@ function ensureReplace(file, transform) {
 
 function ensureLucideIcon(source, iconName) {
   if (new RegExp(`\\b${iconName}\\b`).test(source)) return source;
-  return source.replace(
-    /import\s*\{([\s\S]*?)\}\s*from ['"]lucide-react['"];?/,
-    (_match, body) => {
-      const names = body
-        .split(',')
-        .map((item) => item.trim())
-        .filter(Boolean);
-      if (!names.includes(iconName)) names.push(iconName);
-      return `import {\n  ${names.join(',\n  ')}\n} from 'lucide-react';`;
-    }
-  );
+  return source.replace(/import\s*\{([\s\S]*?)\}\s*from ['"]lucide-react['"];?/, (_match, body) => {
+    const names = body
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    if (!names.includes(iconName)) names.push(iconName);
+    return `import {\n  ${names.join(',\n  ')}\n} from 'lucide-react';`;
+  });
 }
 
 function ensurePageKey(source) {
@@ -50,16 +47,10 @@ function ensureNavItem(source) {
   if (source.includes("label: '蓝牙连接'")) return source;
   const navItem = "  { key: 'bluetooth', label: '蓝牙连接', icon: BluetoothConnected },";
   if (source.includes("{ key: 'weeklyPlan'")) {
-    return source.replace(
-      /(\n\s*\{\s*key:\s*'weeklyPlan'[^}]*\},)/,
-      `$1\n${navItem}`
-    );
+    return source.replace(/(\n\s*\{\s*key:\s*'weeklyPlan'[^}]*\},)/, `$1\n${navItem}`);
   }
   if (source.includes("{ key: 'plans'")) {
-    return source.replace(
-      /(\n\s*\{\s*key:\s*'plans'[^}]*\},)/,
-      `$1\n${navItem}`
-    );
+    return source.replace(/(\n\s*\{\s*key:\s*'plans'[^}]*\},)/, `$1\n${navItem}`);
   }
   return source;
 }
@@ -521,21 +512,34 @@ ensureReplace('src/components/AppShell.tsx', (source) => {
 ensureReplace('src/App.tsx', (source) => {
   let next = source;
   if (!/import\s+\{\s*BluetoothConnectPage\s*\}/.test(next)) {
-    const weeklyImport = /import \{ WeeklyTrainingPlanPage \} from ['"]\.\/pages\/WeeklyTrainingPlanPage['"];?/;
+    const weeklyImport =
+      /import \{ WeeklyTrainingPlanPage \} from ['"]\.\/pages\/WeeklyTrainingPlanPage['"];?/;
     const planImport = /import \{ TrainingPlanPage \} from ['"]\.\/pages\/TrainingPlanPage['"];?/;
     if (weeklyImport.test(next)) {
-      next = next.replace(weeklyImport, (match) => `${match}\nimport { BluetoothConnectPage } from './pages/BluetoothConnectPage';`);
+      next = next.replace(
+        weeklyImport,
+        (match) => `${match}\nimport { BluetoothConnectPage } from './pages/BluetoothConnectPage';`
+      );
     } else {
-      next = next.replace(planImport, (match) => `${match}\nimport { BluetoothConnectPage } from './pages/BluetoothConnectPage';`);
+      next = next.replace(
+        planImport,
+        (match) => `${match}\nimport { BluetoothConnectPage } from './pages/BluetoothConnectPage';`
+      );
     }
   }
   if (!next.includes("page === 'bluetooth'")) {
     const weeklyRender = /(\s*\{page === 'weeklyPlan' && <WeeklyTrainingPlanPage[^\n]+\/>\})/;
     const planRender = /(\s*\{page === 'plans' && <TrainingPlanPage[^\n]+\/>\})/;
     if (weeklyRender.test(next)) {
-      next = next.replace(weeklyRender, `$1\n        {page === 'bluetooth' && <BluetoothConnectPage user={user} />}`);
+      next = next.replace(
+        weeklyRender,
+        `$1\n        {page === 'bluetooth' && <BluetoothConnectPage user={user} />}`
+      );
     } else {
-      next = next.replace(planRender, `$1\n        {page === 'bluetooth' && <BluetoothConnectPage user={user} />}`);
+      next = next.replace(
+        planRender,
+        `$1\n        {page === 'bluetooth' && <BluetoothConnectPage user={user} />}`
+      );
     }
   }
   return next;

@@ -1,0 +1,185 @@
+<import src="../../templates/training-state.wxml" />
+<view class="page">
+  <view class="page-head">
+    <view class="page-title">运动员档案</view>
+    <view class="page-description">{{readOnly ? '个人画像、训练与测试' : '个人画像、训练、测试与伤病恢复'}}</view>
+  </view>
+
+  <view wx:if="{{createAccessError}}" class="error-box"><text>{{createAccessError}}</text><button class="error-retry" bindtap="loadPage">重试</button></view>
+  <scope-filter show-add-athlete="{{canAddAthlete}}" bindaddathlete="openAthleteCreate" projects="{{projects}}" project="{{project}}" athletes="{{athletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" allow-all="{{false}}" range="{{range}}" bindprojectchange="onScopeChange" bindathletechange="onScopeChange" bindrangechange="onScopeChange" />
+  <view class="privacy-notice"><image src="/assets/shield-check.svg" mode="aspectFit" />敏感信息已按权限脱敏展示</view>
+  <view wx:if="{{loading || error || moduleError || !selectedAthleteId}}" class="training-page-status" aria-live="polite">
+    <text>{{loading ? '正在加载运动员档案' : (error || moduleError || (!selectedAthleteId ? '暂无可查看运动员' : ''))}}</text>
+    <button wx:if="{{!loading && (error || moduleError)}}" class="mini-button" bindtap="loadPage">重试</button>
+  </view>
+
+  <block>
+    <view class="card profile-hero">
+      <view class="profile-photo"><image wx:if="{{photoUrl}}" src="{{photoUrl}}" mode="aspectFill" /><view wx:else class="profile-photo-placeholder">{{athleteInitial}}</view></view>
+      <view class="profile-hero-info">
+        <view class="profile-name-row">
+          <view class="profile-name">{{athleteName}}</view>
+          <button wx:if="{{(canEditSelf || canCoachFill) && selectedAthleteId}}" class="hero-edit-button" hover-class="hero-edit-button-pressed" bindtap="editMyProfile" aria-label="编辑运动员资料"><text class="hero-edit-icon">✎</text><text>编辑</text></button>
+        </view>
+        <text wx:if="{{athleteNumber}}" class="profile-line">运动员编号 {{athleteNumber}}</text>
+        <text class="profile-line">{{athleteMeta}}</text><text class="profile-line">{{athleteSubline}}</text>
+      </view>
+    </view>
+
+    <button wx:if="{{selectedAthleteId}}" class="secondary-button profile-report-entry" bindtap="openTrainingReport">训练报告</button>
+    <view class="section-head"><view class="section-head-title">基本信息</view><view class="section-head-note">常用资料优先展示</view></view>
+    <view class="profile-grid"><view wx:for="{{primaryCells}}" wx:key="label" class="profile-cell"><view class="profile-cell-label">{{item.label}}</view><text class="profile-cell-value">{{item.value}}</text></view></view>
+    <view wx:if="{{showMore}}" class="profile-grid more-grid"><view wx:for="{{moreCells}}" wx:key="label" class="profile-cell"><view class="profile-cell-label">{{item.label}}</view><text class="profile-cell-value">{{item.value}}</text></view></view>
+    <button class="text-button profile-more" bindtap="toggleMore">{{showMore ? '收起更多资料' : '查看更多资料'}}</button>
+
+    <view class="section-head"><view class="section-head-title">训练与数据概览</view><view class="section-head-note">{{from}} 至 {{to}}</view></view>
+    <template wx:if="{{overviewError}}" is="training-state" data="{{loading, error: overviewError}}" />
+    <view class="compact-grid"><view wx:for="{{trainingSummary}}" wx:key="label" class="compact-stat"><view class="compact-stat-label">{{item.label}}</view><view class="compact-stat-value">{{item.value}}<text>{{item.unit}}</text></view><text class="compact-stat-note">{{item.note}}</text></view></view>
+
+    <view class="section-head"><view class="section-head-title">制胜要素分析</view><view class="section-head-note">目标达成制，不用于选材或伤病诊断</view></view>
+    <view class="card">
+      <block wx:if="{{benchmarkSummary}}"><view class="benchmark-score"><view><text>综合结果</text><text class="benchmark-value">{{benchmarkSummary.score}}</text></view><view><text>达成指标</text><text class="benchmark-value">{{benchmarkSummary.achieved}}/{{benchmarkSummary.comparable}}</text></view></view><view class="notice"><text>主要差距：{{benchmarkSummary.primaryGap}}</text><text class="notice-line">数据来源：{{benchmarkSummary.source}}</text></view></block>
+      <block wx:else><template is="training-state" data="{{loading, error: error || benchmarkError, message: '待配置', chart: false}}" /></block>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">力量测试个人评价</view><view class="section-head-note">最近测试 {{latestTestDate || '未录入'}}</view></view>
+    <view class="card"><template wx:if="{{!latestTestDate || overviewError}}" is="training-state" data="{{loading, error: error || overviewError, message: '待采集'}}" /><view wx:if="{{testMetrics.length}}" class="ratio-list"><view wx:for="{{testMetrics}}" wx:key="key"><view class="ratio-row-head"><text>{{item.label}} · {{item.value}}{{item.unit}}</text><text>{{item.rate}}</text></view><view class="ratio-track"><view class="ratio-fill" style="width: {{item.rateWidth}}%;" /></view></view></view><view wx:else class="state"><view class="state-icon">—</view><view class="state-title">待采集</view></view></view>
+
+    <block wx:if="{{!readOnly}}">
+    <view class="section-head injury-head">
+      <view class="injury-head-copy">
+        <view class="section-head-title">运动损伤与恢复</view>
+        <view class="section-head-note">仅展示当前运动员有权查看的记录</view>
+      </view>
+      <button wx:if="{{selectedAthleteId && canReportRole}}" class="text-button injury-report-entry" bindtap="reportInjury" aria-label="{{canEditSelf ? '提交本人疼痛反馈' : '为当前运动员新增伤病记录'}}">{{canEditSelf ? '提交疼痛反馈' : '新增伤病记录'}}</button>
+    </view>
+    <view wx:if="{{selectedAthleteId && canCoachFill}}" class="card coach-fill-card">
+      <view class="card-head"><view><view class="card-head-title">教练代填</view><view class="todo-note">为当前运动员补充训练课次或恢复日报</view></view></view>
+      <view class="coach-fill-actions">
+        <button class="secondary-button" bindtap="fillTraining" aria-label="为当前运动员代填训练记录">代填训练</button>
+        <button class="secondary-button" bindtap="fillWellness" aria-label="为当前运动员代填恢复日报">代填日报</button>
+      </view>
+    </view>
+    <view class="card"><view wx:if="{{injuries.length}}" class="list"><view wx:for="{{injuries}}" wx:key="id" class="list-row"><view class="list-row-main"><view><view class="list-row-title">{{item.title}}</view><text class="list-row-meta">{{item.meta}}</text></view><view class="list-row-value">{{item.pain}}</view></view><text class="tag {{item.statusClass}}">{{item.status}}</text><text class="injury-note">{{item.restriction}}</text></view></view><block wx:else><template is="training-state" data="{{loading, error: error || injuryError, message: '暂无伤病记录', chart: false}}" /></block></view>
+    <view class="card pain-trend" aria-label="疼痛趋势">
+      <view class="card-head"><view><view class="card-title">疼痛趋势 · 近 {{painTrend.days || 30}} 天</view><view class="todo-note">按部位展示每日最新疼痛评分，点击柱体查看明细</view></view></view>
+      <block wx:if="{{!painTrend}}"><template is="training-state" data="{{loading, error: error || painError, message: '暂无疼痛趋势数据', chart: true}}" /></block>
+      <view wx:for="{{painTrend.parts}}" wx:for-item="part" wx:for-index="partIndex" wx:key="bodyPart" class="pain-part">
+        <view class="pain-part-head">
+          <text class="pain-part-name">{{part.bodyPart}}</text>
+          <text class="tag {{part.statusClass}}">{{part.statusLabel}}</text>
+          <text class="pain-part-latest">最新疼痛 {{part.latestPain}}</text>
+        </view>
+        <scroll-view class="pain-bars-scroll" scroll-x enhanced show-scrollbar="false">
+          <view class="pain-bars">
+            <button wx:for="{{part.bars}}" wx:for-item="bar" wx:for-index="barIndex" wx:key="date" class="pain-bar" style="height: {{bar.height}}%;" data-part-index="{{partIndex}}" data-bar-index="{{barIndex}}" bindtap="showPainDetail" aria-label="{{part.bodyPart}}，{{bar.date}}，疼痛 {{bar.pain}} 分，查看明细"></button>
+          </view>
+        </scroll-view>
+      </view>
+    </view>
+    <view class="section-head"><view class="section-head-title">恢复状态</view><view class="section-head-note">{{from}} 至 {{to}} · 个人与队均</view></view>
+    <view class="card">
+      <view class="card-head"><view><view class="card-title">恢复趋势</view><text class="chart-note">柱高按各指标波动范围归一；横杠为当日队均，点击柱体看当日明细</text></view></view>
+      <view class="radar-legend">
+        <text class="radar-legend-item personal">个人实测</text>
+        <text class="radar-legend-item reference">当日队均</text>
+      </view>
+      <view wx:for="{{wellnessTrend.metrics}}" wx:key="key" class="trend-metric">
+        <view class="trend-metric-head">
+          <text class="trend-metric-name">{{item.label}}</text>
+          <text class="trend-metric-value">{{item.latestText}}<text class="trend-metric-unit">{{item.unit}}</text></text>
+          <text class="trend-delta">{{item.diffText}}{{item.diffText != '--' ? item.unit : ''}}</text>
+        </view>
+        <text class="compare-note">{{item.note}}{{item.latestDate ? ' · ' + item.latestDate : ''}}</text>
+        <view class="profile-trend-stage"><block wx:if="{{!item.hasData || wellnessError || error}}"><template is="training-state" data="{{loading, error: error || wellnessError, message: '暂无恢复数据', chart: false}}" /></block>
+        <scroll-view wx:else class="trend-scroll" scroll-x enhanced show-scrollbar="false">
+          <view class="trend-bars">
+            <view wx:for="{{item.points}}" wx:for-item="point" wx:for-index="pointIndex" wx:key="date" class="trend-slot">
+              <view wx:if="{{point.teamPct != null}}" class="trend-team-mark" style="bottom: {{point.teamPct}}%;"></view>
+              <button class="trend-bar {{point.missing ? 'is-missing' : ''}}" style="height: {{point.height}}%;" data-metric-index="{{index}}" data-point-index="{{pointIndex}}" bindtap="showWellnessDetail" aria-label="{{item.label}}，{{point.date}}，个人 {{point.valueText}}{{item.unit}}，{{point.teamText ? '队均 ' + point.teamText + item.unit : '当日队均样本不足'}}，查看明细"></button>
+            </view>
+          </view>
+        </scroll-view></view>
+      </view>
+    </view>
+    </block>
+    <view class="section-head"><view class="section-head-title">身体成分</view><view class="section-head-note">最近实测与个人变化</view></view>
+    <view class="card body-summary">
+      <block wx:if="{{!bodyCompositionSummary.hasData || bodyError || error}}"><template is="training-state" data="{{loading, error: error || bodyError, message: '暂无身体成分数据', chart: false}}" /></block>
+      <text class="body-summary-date">测量更新 {{bodyCompositionSummary.latestDate || '--'}}</text>
+      <view class="comparison-columns comparison-table-head"><text>指标 / 单位</text><text>最近实测</text><text>较上次实测</text></view>
+        <view wx:for="{{bodyCompositionSummary.core}}" wx:for-item="metric" wx:key="key" class="body-summary-row">
+          <view class="comparison-columns">
+            <view class="comparison-metric-label">{{metric.label}}<text class="comparison-metric-unit">{{metric.unit}}</text></view>
+            <text class="comparison-personal" aria-label="{{metric.label}}，{{metric.latestDate ? metric.latestDate + '实测' : '暂无实测'}}，{{metric.latestText}}{{metric.latestDate ? metric.unit : ''}}">{{metric.latestText}}</text>
+            <view class="body-change" aria-label="{{metric.label}}，{{metric.previousDate ? '较' + metric.previousDate + '实测' : '暂无上次可比实测'}}，{{metric.deltaText}}{{metric.deltaUnit}}"><text>{{metric.deltaText}}</text><text wx:if="{{metric.deltaUnit}}" class="body-change-unit">{{metric.deltaUnit}}</text></view>
+          </view>
+          <text wx:if="{{metric.isOlder}}" class="body-measurement-date">最近实测 {{metric.latestDate}}</text>
+        </view>
+      <button wx:if="{{bodyCompositionSummary.more.length}}" class="body-more-toggle" bindtap="toggleBodyMore" aria-expanded="{{showBodyMore}}">{{showBodyMore ? '收起其他指标' : '其他指标（' + bodyCompositionSummary.more.length + '项）'}}</button>
+      <view wx:if="{{showBodyMore}}">
+        <view wx:for="{{bodyCompositionSummary.more}}" wx:for-item="metric" wx:key="key" class="body-summary-row">
+          <view class="comparison-columns">
+            <view class="comparison-metric-label">{{metric.label}}<text class="comparison-metric-unit">{{metric.unit}}</text></view>
+            <text class="comparison-personal" aria-label="{{metric.label}}，{{metric.latestDate ? metric.latestDate + '实测' : '暂无实测'}}，{{metric.latestText}}{{metric.latestDate ? metric.unit : ''}}">{{metric.latestText}}</text>
+            <view class="body-change" aria-label="{{metric.label}}，{{metric.previousDate ? '较' + metric.previousDate + '实测' : '暂无上次可比实测'}}，{{metric.deltaText}}{{metric.deltaUnit}}"><text>{{metric.deltaText}}</text><text wx:if="{{metric.deltaUnit}}" class="body-change-unit">{{metric.deltaUnit}}</text></view>
+          </view>
+          <text wx:if="{{metric.isOlder}}" class="body-measurement-date">最近实测 {{metric.latestDate}}</text>
+        </view>
+      </view>
+      <text class="comparison-footnote">基于最近 6 次记录，按每项最近两次有效实测比较；-- 表示暂无可比记录。</text>
+    </view>
+    <view class="section-head"><view class="section-head-title">训练情况对比</view><view class="section-head-note">{{from}} 至 {{to}} · 团队平均对照</view></view>
+    <view class="card comparison-summary">
+      <block wx:if="{{!comparisonView.hasData || comparisonError || error}}"><template is="training-state" data="{{loading, error: error || comparisonError, message: '暂无训练数据', chart: false}}" /></block>
+      <view class="comparison-columns comparison-table-head"><text>指标 / 单位</text><text>个人</text><text>队均</text></view>
+      <view wx:for="{{comparisonView.metrics}}" wx:for-item="metric" wx:key="key" class="comparison-summary-row">
+        <view class="comparison-columns">
+          <view class="comparison-metric-label"><text>{{metric.label}}</text><text class="comparison-metric-unit">{{metric.unit}}</text></view>
+          <text class="comparison-personal" aria-label="{{metric.label}}，个人 {{metric.personalText}}{{metric.unit}}">{{metric.personalText}}</text>
+          <text class="comparison-team" aria-label="{{metric.label}}，队均 {{metric.teamText}}{{metric.unit}}">{{metric.teamText}}</text>
+        </view>
+        <view class="comparison-reference"><text>{{metric.referenceText}}</text><text wx:if="{{metric.sampleText}}" class="comparison-sample">{{metric.sampleText}}</text></view>
+      </view>
+      <text class="comparison-footnote">同队、同周期参照；差异不代表训练优劣。</text>
+    </view>
+    <view class="section-head"><view class="section-head-title">冠军参考模型</view><view class="section-head-note">展示对标含估算参考，非正式评分</view></view>
+    <view class="card">
+      <template wx:if="{{physicalReferenceError}}" is="training-state" data="{{loading, error: physicalReferenceError}}" />
+      <view class="notice">{{physicalReferenceNote}}</view>
+      <view wx:for="{{physicalReferenceRows}}" wx:key="key" class="radar-dim">
+        <text class="card-label">{{item.label}} · {{item.date}}</text>
+        <view class="radar-dim-values"><text>实测 {{item.value}} {{item.unit}}</text><text>参考 {{item.reference}} {{item.unit}}</text><text>达成 {{item.achieved}}%</text></view>
+        <view class="chart-note">{{item.source}} · {{item.version}}</view>
+        <view wx:if="{{item.protocol}}" class="chart-note">{{item.protocol}}</view>
+        <view wx:if="{{item.pending}}" class="chart-note">{{item.pending}}</view>
+      </view>
+      <template wx:if="{{!physicalReferenceRows.length && !physicalReferenceError}}" is="training-state" data="{{loading, message: '待配置参考或待采集实测', chart: false}}" />
+    </view>
+
+    <view class="section-head"><view class="section-head-title">历史雷达模型对照</view><view class="section-head-note">{{from}} 至 {{to}} · 旧版只读结果</view></view>
+    <block>
+      <view wx:for="{{radarGroups}}" wx:key="canvasId" class="card radar-card">
+        <view class="card-head"><view><view class="card-title">{{item.title}}</view><text class="chart-note">参考标准多边形固定 100%，个人按达成度绘制；缺失维度处断线，详细数值见下表</text></view></view>
+        <view class="radar-legend">
+          <text class="radar-legend-item personal">个人达成度</text>
+          <text class="radar-legend-item reference">参考标准 100%</text>
+          <text class="radar-legend-item scale">上限 {{item.maxValue}}%</text>
+        </view>
+        <view class="profile-radar-stage"><canvas type="2d" id="{{item.canvasId}}" canvas-id="{{item.canvasId}}" class="radar-canvas" aria-label="{{item.title}}：个人达成度与参考标准对照雷达图，详细数值见下方列表"></canvas>
+        <view wx:if="{{!item.hasChart || radarError || error}}" class="profile-radar-empty"><template is="training-state" data="{{loading, error: error || radarError, message: item.emptyMessage, chart: false}}" /></view></view>
+        <view class="card-body">
+          <view wx:for="{{item.dimensions}}" wx:for-item="dim" wx:key="key" class="radar-dim">
+            <text class="card-label">{{dim.label}}</text>
+            <view class="radar-dim-values">
+              <text class="radar-dim-value">{{dim.valueText}}</text>
+              <text class="radar-dim-ref">参考 {{dim.referenceText}}</text>
+              <text class="radar-dim-achieved">{{dim.achievedText}}</text>
+              <text class="tag {{dim.statusLabel == '已测' ? '' : 'warn'}}">{{dim.statusLabel}}</text>
+            </view>
+          </view>
+        </view>
+      </view>
+    </block>
+  </block>
+</view>

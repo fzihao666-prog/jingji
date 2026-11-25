@@ -1,0 +1,15 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* 动画效果 */
+@keyframes fade-in-up {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+

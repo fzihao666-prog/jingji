@@ -1,16 +1,51 @@
-import type { SpecialTrainingAnalytics } from '../shared/special-training';
+import type { TrainingRecordTemplate } from '../shared/training-record-template';
+import type { CustomTestTrend } from '../shared/custom-test-trend';
+import type { TestTemplateGroup, TestTemplateGroupInput, TestTemplateMetric, TestTemplateMetricInput, TestTemplatePreview } from '../shared/test-template';
+import type { BasicSubmissionReport, SubmissionReport } from '../shared/submission-report';
+import type { TeamTrainingColumnMapping, TeamTrainingImportResult, TeamTrainingPeriod, TeamTrainingBoard } from '../shared/team-training-stats';
+import type { AiManagementData, AiSettings } from '../shared/ai-management';
+import type { EnodeImportResult, EnodePersonDecision, EnodePreview, EnodeQuery, EnodeData } from '../shared/enode';
+import type { WeeklyGenerationInput } from '../shared/team-weekly-generation';
+import type { ImportStatistics } from '../shared/import-statistics';
+import type { TeamPlan } from '../shared/team-plan';
+import {
+  reportPreviewSchema,
+  reportCommentarySchema,
+  savedReportSchema,
+  reportHistorySchema,
+  type ReportRange,
+  type ReportCommentary,
+} from '../shared/training-report';
+import type { CatalogPlan, PlanExecutionRow } from '../shared/training-plan-catalog';
+import {
+  resetAccountPasswordSchema,
+  resetAccountPasswordResponseSchema,
+} from '../shared/account-password';
+import { LOGIN_ERROR_MESSAGES } from '../shared/login-errors';
+import { profilePhysiologyRecordSchema } from '../shared/profile-physiology';
+import { z } from 'zod';
+import { physicalChampionPayloadSchema } from '../shared/physical-champion';
+import type {
+  SpecialTestComparison,
+  SpecialTrainingAnalytics,
+  SpecialTrainingAthlete,
+} from '../shared/special-training';
 import type {
   AccessPayload,
   AreaPermission,
   Athlete,
+  AthleteRadarModelsPayload,
   AuditLog,
   BodyCompositionRecord,
+  AerobicEndurancePayload,
+  WellnessTrendsPayload,
+  ProfileComparisonPayload,
+  ProfileTrainingStatusPayload,
   ChampionBenchmarkPayload,
   DataImportBatch,
   DataImportBatchSummary,
   InjuryRecord,
   InjuryStatus,
-  OverviewLayoutState,
   OverviewPayload,
   Project,
   ProjectTeam,
@@ -23,11 +58,13 @@ import type {
   StrengthTrainingSession,
   TeamPermission,
   TrainingPlan,
-  TrainingPlanData,
   TrainingRecord,
-  User
+  User,
+  ErgometerChampionModelPayload,
 } from './types';
 import type { RowingPeriodAnalysis } from '../shared/rowing-model';
+import type { SportRules, SPORT_MODULES } from '../shared/sport-rules';
+import type { CoachWorkStatus, CoachWorkStatusRecord } from '../shared/coach-work-status';
 import type { CoachCategory } from '../shared/coach-categories';
 
 const TOKEN_KEY = 'training-monitor-token';
@@ -41,28 +78,338 @@ export function setToken(token: string | null) {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
-async function request<T>(path: string, options: RequestInit = {}): Promise<T> {
-  const headers = new Headers(options.headers);
+/** 携带结构化信息的请求错误：业务错误码、HTTP 状态与失败类别，供登录等流程按码映射提示。 */
+export class ApiRequestError extends Error {
+  readonly code?: string;
+  readonly status?: number;
+  readonly timedOut: boolean;
+  readonly networkError: boolean;
+  readonly serverMessage: string;
+  readonly fieldErrors?: Partial<Record<'gender' | 'birthDate', string>>;
+
+  constructor(
+    message: string,
+    detail: {
+      code?: string;
+      status?: number;
+      timedOut?: boolean;
+      networkError?: boolean;
+      serverMessage?: string;
+      fieldErrors?: Partial<Record<'gender' | 'birthDate', string>>;
+    } = {}
+  ) {
+    super(message);
+    this.name = 'ApiRequestError';
+    this.code = detail.code;
+    this.status = detail.status;
+    this.timedOut = detail.timedOut ?? false;
+    this.networkError = detail.networkError ?? false;
+    this.serverMessage = detail.serverMessage ?? '';
+    this.fieldErrors = detail.fieldErrors;
+  }
+}
+
+type ApiRequestOptions = RequestInit & {
+  /** 为 false 时不附加令牌，401 也不触发会话清理与刷新（登录、注册等免登录接口）。 */
+  auth?: boolean;
+  responseType?: 'json' | 'blob' | 'image' | 'docx' | 'xlsx';
+  /** 请求超时毫秒数；仅对需要快速失败的接口（如登录）启用。 */
+  timeoutMs?: number;
+};
+
+async function request<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
+  const { auth = true, timeoutMs, responseType = 'json', ...init } = options;
+  const headers = new Headers(init.headers);
   const token = getToken();
-  if (token) headers.set('Authorization', `Bearer ${token}`);
-  if (options.body && !(options.body instanceof FormData)) headers.set('Content-Type', 'application/json');
-  const response = await fetch(path, { ...options, headers });
+  if (token && auth !== false) headers.set('Authorization', `Bearer ${token}`);
+  if (init.body && !(init.body instanceof FormData))
+    headers.set('Content-Type', 'application/json');
+  const controller = timeoutMs ? new AbortController() : undefined;
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : undefined;
+  const signal = controller && init.signal ? AbortSignal.any([controller.signal, init.signal]) : controller?.signal ?? init.signal;
+  let response: Response;
+  try {
+    response = await fetch(path, {
+      ...init,
+      headers,
+      signal,
+    });
+  } catch {
+    const timedOut = controller?.signal.aborted ?? false;
+    throw new ApiRequestError(
+      timedOut ? LOGIN_ERROR_MESSAGES.TIMEOUT : LOGIN_ERROR_MESSAGES.NETWORK_ERROR,
+      { timedOut, networkError: !timedOut }
+    );
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
   const isJson = response.headers.get('content-type')?.includes('application/json');
-  const payload = isJson ? await response.json() : null;
-  if (!response.ok) throw new Error(payload?.message || `请求失败（${response.status}）`);
+  let payload: unknown = null;
+  if (isJson) {
+    try {
+      payload = await response.json();
+    } catch {
+      payload = null;
+    }
+  }
+  const body = payload as { message?: unknown; code?: unknown; fieldErrors?: unknown } | null;
+  const code = typeof body?.code === 'string' ? body.code : undefined;
+  const serverMessage = typeof body?.message === 'string' ? body.message : '';
+  if (!response.ok) {
+    // 只清除服务端已确认失效的当前令牌，避免旧请求影响新会话。
+    if (response.status === 401 && code === 'SESSION_EXPIRED' && auth && token && token === getToken()) {
+      setToken(null);
+      window.location.reload();
+    }
+    throw new ApiRequestError(serverMessage || `请求失败（${response.status}）`, {
+      code,
+      status: response.status,
+      serverMessage,
+      fieldErrors: (() => {
+        const parsed = z
+          .object({
+            gender: z.string().max(200).optional(),
+            birthDate: z.string().max(200).optional(),
+          })
+          .safeParse(body?.fieldErrors);
+        return parsed.success ? parsed.data : undefined;
+      })(),
+    });
+  }
+  if (isJson && payload === null) {
+    throw new ApiRequestError('服务响应异常，请稍后重试', { status: response.status });
+  }
+  if (responseType === 'image') {
+    if (!response.headers.get('content-type')?.includes('image/jpeg'))
+      throw new ApiRequestError('照片响应格式异常。');
+    return (await response.blob()) as T;
+  }
+  if (responseType === 'blob' || responseType === 'docx' || responseType === 'xlsx') {
+    const expectedType =
+      responseType === 'docx'
+        ? 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+        : responseType === 'xlsx'
+          ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+          : 'application/pdf';
+    if (response.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== expectedType)
+      throw new ApiRequestError(responseType === 'xlsx' ? '测试模板响应格式异常，请重试。' : '报告响应格式异常，请重试。');
+    return (await response.blob()) as T;
+  }
   return payload as T;
 }
 
 export const api = {
+  submissionReport(signal?: AbortSignal) {
+    return request<SubmissionReport>('/api/reports/submissions', { signal, timeoutMs: 35_000 });
+  },
+  basicSubmissionReport(signal?: AbortSignal) {
+    return request<BasicSubmissionReport>('/api/reports/submissions/basic', { signal, timeoutMs: 35_000 });
+  },
+  async importTeamTrainingStats(file: File, project: Project, teamId: number, mappings: Record<string, TeamTrainingColumnMapping>) {
+    const body = new FormData();
+    body.append('file', file);
+    body.append('project', project);
+    body.append('teamId', String(teamId));
+    body.append('mappings', JSON.stringify(mappings));
+    return request<TeamTrainingImportResult>('/api/team-training-stats/import', { method: 'POST', body });
+  },
+  teamPlanTemplate() {
+    return request<Blob>('/api/team-plans/template', { responseType: 'xlsx' });
+  },
+  importTeamPlanWorkbook(file: File, project: Project, teamId: number) {
+    const query = new URLSearchParams({ project, teamId: String(teamId) });
+    const body = new FormData();
+    body.append('file', file);
+    return request<{ drafts: { id: number; title: string; sessions: number }[]; skipped: number }>(`/api/team-plans/import?${query}`, { method: 'POST', body });
+  },
+  teamTrainingStats(project: Project, teamId: number, period: TeamTrainingPeriod, date?: string, signal?: AbortSignal) {
+    const params = new URLSearchParams({ project, teamId: String(teamId), period, view: 'board' });
+    if (date) params.set('date', date);
+    return request<TeamTrainingBoard>(`/api/team-training-stats?${params}`, { signal });
+  },
+  previewEnode(files: File[], project: Project) {
+    const body = new FormData();
+    files.forEach(file => body.append('files', file));
+    body.append('project', project);
+    return request<EnodePreview>('/api/enode/preview', { method: 'POST', body });
+  },
+  async importEnode(files: File[], project: Project, decisions: Record<string, EnodePersonDecision>) {
+    const body = new FormData();
+    files.forEach(file => body.append('files', file));
+    body.append('project', project);
+    body.append('decisions', JSON.stringify(decisions));
+    return request<{ results: EnodeImportResult[]; summary: { linked: number; created: number; skipped: number } }>('/api/enode/import', { method: 'POST', body });
+  },
+  enodeData(query: EnodeQuery) {
+    const params = new URLSearchParams();
+    Object.entries(query).forEach(([key, value]) => { if (value !== undefined) params.set(key, String(value)); });
+    return request<EnodeData>(`/api/enode/data?${params}`);
+  },
+  submitTrainingSession: (
+    mode: 'self' | 'coach',
+    athleteId: number,
+    data: Record<string, string | number>,
+    key?: string
+  ) =>
+    request<{ session: { id: number } }>(
+      mode === 'self'
+        ? '/api/me/training-sessions'
+        : `/api/athletes/${encodeURIComponent(athleteId)}/training-sessions`,
+      {
+        method: 'POST',
+        body: JSON.stringify(data),
+        headers: mode === 'self' && key ? { 'Idempotency-Key': key } : undefined,
+      }
+    ),
+  projectRules: (project: string) =>
+    request<{ rules: SportRules; modules: typeof SPORT_MODULES }>(
+      `/api/projects/rules?${new URLSearchParams({ project })}`
+    ),
+  async downloadWeeklyReport(input: WeeklyGenerationInput) {
+    const blob = await request<Blob>('/api/reports/weekly/generate', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      responseType: 'docx',
+      timeoutMs: 260000,
+    });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `竞迹_训练周总结_${input.query.date}.docx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  },
+  async reportPreview(id: number, range: ReportRange) {
+    return reportPreviewSchema.parse(
+      await request<unknown>(`/api/athletes/${id}/reports/preview?${new URLSearchParams(range)}`)
+    );
+  },
+  async reportCommentary(id: number, range: ReportRange, fingerprint: string) {
+    return reportCommentarySchema.parse(
+      await request<unknown>(`/api/athletes/${id}/reports/commentary`, {
+        method: 'POST',
+        body: JSON.stringify({ range, fingerprint, consent: true }),
+        timeoutMs: 240000,
+      })
+    );
+  },
+  async saveReport(
+    id: number,
+    range: ReportRange,
+    fingerprint: string,
+    commentary: ReportCommentary
+  ) {
+    return savedReportSchema.parse(
+      await request<unknown>(`/api/athletes/${id}/reports`, {
+        method: 'POST',
+        body: JSON.stringify({ range, fingerprint, commentary, confirmed: true }),
+      })
+    );
+  },
+  async reportHistory(id: number) {
+    return reportHistorySchema.parse(await request<unknown>(`/api/athletes/${id}/reports`));
+  },
+  async reportDetail(id: number, reportId: string) {
+    return savedReportSchema.parse(
+      await request<unknown>(`/api/athletes/${id}/reports/${encodeURIComponent(reportId)}`)
+    );
+  },
+  async physicalChampion(query: {
+    project: string;
+    from: string;
+    to: string;
+    teamId?: number | null;
+  }) {
+    const params = new URLSearchParams({ project: query.project, from: query.from, to: query.to });
+    if (query.teamId) params.set('teamId', String(query.teamId));
+    const payload = await request<unknown>(`/api/physical-champion?${params}`);
+    return physicalChampionPayloadSchema.parse(payload);
+  },
+  async updatePhysicalChampionValues(
+    body: import('../shared/physical-champion').PhysicalChampionValuesInput
+  ) {
+    return z.object({ message: z.string() }).parse(
+      await request<unknown>('/api/physical-champion/model-values', {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      })
+    );
+  },
+  async updatePhysicalReference(
+    id: number,
+    body: {
+      expectedRevision: number;
+      draft: import('../shared/physical-champion').PhysicalReferenceDraft;
+    }
+  ) {
+    return z.object({ message: z.string() }).parse(
+      await request<unknown>(`/api/physical-champion/references/${id}`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      })
+    );
+  },
+  async createPhysicalReference(
+    body: import('../shared/physical-champion').PhysicalReferenceDraft
+  ) {
+    return z.object({ message: z.string() }).parse(
+      await request<unknown>('/api/physical-champion/references', {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+    );
+  },
+  async reviewPhysicalReference(
+    id: number,
+    body: { expectedRevision: number; status: 'reviewed' | 'disabled' }
+  ) {
+    return z.object({ message: z.string() }).parse(
+      await request<unknown>(`/api/physical-champion/references/${id}/review`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+    );
+  },
+
   async teams() {
     return request<{ teams: ProjectTeam[] }>('/api/teams');
   },
-  async adminTeams() {
-    return request<{ teams: ProjectTeam[]; canCreateProjects: Project[] }>('/api/admin/teams');
+  async registrationTeams() {
+    return request<{ teams: ProjectTeam[] }>('/api/registration/teams', { auth: false });
   },
-  async createTeam(project: string, name: string) {
+  async adminTeams() {
+    return request<{ teams: ProjectTeam[]; canCreateProjects: Project[]; canViewInactive: boolean }>('/api/admin/teams');
+  },
+  async inactiveTeams() {
+    return request<{ teams: Array<Pick<ProjectTeam, 'id' | 'project' | 'name'> & { planCount: number; latestPublishedPlan: string | null }> }>(
+      '/api/admin/teams/inactive'
+    );
+  },
+  async inactiveAthletes() {
+    return request<{ athletes: Array<Pick<Athlete, 'id' | 'name' | 'project' | 'team'> & {
+      teamId: number | null;
+      sessionCount: number;
+      recentSessionDates: string | null;
+    }> }>('/api/admin/athletes/inactive');
+  },
+  async restoreAthlete(id: number, teamId: number) {
+    return request<{ message: string }>(`/api/admin/athletes/${id}/restore`, {
+      method: 'POST',
+      body: JSON.stringify({ teamId }),
+    });
+  },
+  async createTeam(project: string, name: string, restore = false) {
     return request<{ message: string; id: number }>('/api/admin/teams', {
-      method: 'POST', body: JSON.stringify({ project, name })
+      method: 'POST',
+      body: JSON.stringify({ project, name, restore }),
+    });
+  },
+  async renameTeam(id: number, name: string, merge = false) {
+    return request<{ message: string }>(`/api/admin/teams/${id}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ name, merge }),
     });
   },
   async deleteTeam(id: number) {
@@ -71,23 +418,29 @@ export const api = {
   async login(username: string, password: string) {
     return request<{ token: string; user: User }>('/api/auth/login', {
       method: 'POST',
-      body: JSON.stringify({ username, password })
+      body: JSON.stringify({ username, password }),
+      auth: false,
+      timeoutMs: 30000,
     });
   },
   async register(input: {
     username: string;
     password: string;
     displayName: string;
-    role: 'ATL';
+    role: 'ATL' | 'SCC';
+    coachCategory?: CoachCategory;
     project?: string;
     team?: string;
-    gender?: string;
-    identityNumber: string;
+    createTeam?: boolean;
+    gender: string;
+    birthDate: string;
+    phone: string;
     nativePlace: string;
   }) {
     return request<{ message: string }>('/api/auth/register', {
       method: 'POST',
-      body: JSON.stringify(input)
+      body: JSON.stringify(input),
+      auth: false,
     });
   },
   async me() {
@@ -96,52 +449,58 @@ export const api = {
   async changePassword(currentPassword: string, newPassword: string) {
     return request<{ message: string }>('/api/auth/change-password', {
       method: 'POST',
-      body: JSON.stringify({ currentPassword, newPassword })
+      body: JSON.stringify({ currentPassword, newPassword }),
     });
+  },
+  async logout() {
+    return request<{ message: string }>('/api/auth/logout', { method: 'POST' });
   },
   async updateProfileName(name: string) {
     return request<{ message: string; user: User }>('/api/profile/name', {
       method: 'PUT',
-      body: JSON.stringify({ name })
+      body: JSON.stringify({ name }),
     });
   },
   async renameUser(id: number, name: string) {
     return request<{ message: string; displayName: string }>(`/api/users/${id}/name`, {
       method: 'PUT',
-      body: JSON.stringify({ name })
+      body: JSON.stringify({ name }),
     });
   },
   async renameAthlete(id: number, name: string) {
     return request<{ message: string; name: string }>(`/api/admin/athletes/${id}/name`, {
       method: 'PUT',
-      body: JSON.stringify({ name })
+      body: JSON.stringify({ name }),
     });
   },
   async athletes() {
     return request<{ athletes: Athlete[] }>('/api/athletes');
   },
   async createAthlete(input: Record<string, unknown>) {
-    return request<{ message: string; id: number; accountId: number | null }>('/api/admin/athletes', {
-      method: 'POST',
-      body: JSON.stringify(input)
-    });
+    return request<{ message: string; id: number; accountId: number | null }>(
+      '/api/admin/athletes',
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
   },
   async updateAthlete(id: number, input: Record<string, unknown>) {
     return request<{ message: string }>(`/api/admin/athletes/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(input)
+      body: JSON.stringify(input),
     });
   },
   async updateAthletePosition(id: number, athletePosition: string) {
     return request<{ message: string; athletePosition: string }>(`/api/athletes/${id}/position`, {
       method: 'PUT',
-      body: JSON.stringify({ athletePosition })
+      body: JSON.stringify({ athletePosition }),
     });
   },
   async saveBodyComposition(id: number, input: Record<string, unknown>) {
     return request<{ message: string }>(`/api/athletes/${id}/body-composition`, {
       method: 'PUT',
-      body: JSON.stringify(input)
+      body: JSON.stringify(input),
     });
   },
   async getBodyCompositionHistory(id: number) {
@@ -149,19 +508,65 @@ export const api = {
   },
   async personalOverview(id: number, from: string, to: string, project: Project) {
     const params = new URLSearchParams({ from, to, project });
-    return request<{ overview: OverviewPayload }>(`/api/athletes/${id}/overview?${params}`);
+    const result = await request<{ overview: OverviewPayload }>(
+      `/api/athletes/${id}/overview?${params}`
+    );
+    return {
+      ...result,
+      overview: {
+        ...result.overview,
+        physiologyRecords: z
+          .array(profilePhysiologyRecordSchema)
+          .parse(result.overview.physiologyRecords ?? []),
+      },
+    };
+  },
+  async wellnessTrends(id: number, from: string, to: string, project: Project) {
+    return request<WellnessTrendsPayload>(
+      `/api/athletes/${id}/wellness-trends?${new URLSearchParams({ from, to, project })}`
+    );
+  },
+  async aerobicEndurance(id: number, from: string, to: string, project: Project) {
+    return request<AerobicEndurancePayload>(
+      `/api/athletes/${id}/aerobic-endurance?${new URLSearchParams({ from, to, project })}`
+    );
+  },
+  async profileComparison(id: number, from: string, to: string, project: Project) {
+    return request<{
+      comparison: ProfileComparisonPayload;
+      trainingStatus: ProfileTrainingStatusPayload;
+    }>(`/api/athletes/${id}/profile-comparison?${new URLSearchParams({ from, to, project })}`);
   },
   async championBenchmark(id: number) {
     return request<{ benchmark: ChampionBenchmarkPayload }>(`/api/athletes/${id}/champion-model`);
+  },
+  async radarModels(id: number, from: string, to: string) {
+    const params = new URLSearchParams({ from, to });
+    return request<AthleteRadarModelsPayload>(`/api/athletes/${id}/radar-models?${params}`);
   },
   async specialChampionModels(project: Project) {
     const params = new URLSearchParams({ project });
     return request<SpecialChampionModelPayload>(`/api/special-champion-models?${params}`);
   },
+  async ergometerChampionModels(
+    project: Project,
+    gender: 'MALE' | 'FEMALE',
+    testType: '2000M' | '5000M' | '30MIN_20SPM'
+  ) {
+    const params = new URLSearchParams({
+      project,
+      gender,
+      testType,
+    });
+
+    return request<ErgometerChampionModelPayload>(
+      `/api/special-champion-models/ergometer?${params}`
+    );
+  },
   async bulkUpdateAthletes(ids: number[], input: Record<string, unknown>) {
     return request<{ message: string }>('/api/admin/athletes/bulk/profile', {
       method: 'PUT',
-      body: JSON.stringify({ ids, ...input })
+      body: JSON.stringify({ ids, ...input }),
     });
   },
   async deleteAthlete(id: number) {
@@ -170,24 +575,51 @@ export const api = {
   async bulkDeleteAthletes(ids: number[]) {
     return request<{ message: string }>('/api/admin/athletes/bulk/delete', {
       method: 'POST',
-      body: JSON.stringify({ ids })
+      body: JSON.stringify({ ids }),
     });
   },
-  async records(from: string, to: string, athleteId: number | null | undefined, project: Project) {
+  async records(
+    from: string,
+    to: string,
+    athleteId: number | null | undefined,
+    project: Project,
+    teamId?: number | null,
+    signal?: AbortSignal
+  ) {
     const params = new URLSearchParams({ from, to, project });
     if (athleteId) params.set('athleteId', String(athleteId));
-    return request<{ records: TrainingRecord[] }>(`/api/records?${params}`);
+    if (teamId) params.set('teamId', String(teamId));
+    return request<{ records: TrainingRecord[] }>(`/api/records?${params}`, { signal });
   },
-  async saveSpecialTrainingSessions(sessions: Array<{
-    athleteId: number; project: Project; date: string; type: string; content: string;
-    duration: number; distance: number; rpe: number; strokeRate: number;
-    heartRate: number; maxHeartRate: number; power: number; source: 'manual' | 'import';
-  }>) {
+  async saveSpecialTrainingSessions(
+    sessions: Array<{
+      athleteId: number;
+      project: Project;
+      date: string;
+      type: string;
+      content: string;
+      duration: number;
+      distance: number;
+      rpe: number;
+      strokeRate: number;
+      heartRate: number;
+      maxHeartRate: number;
+      power: number;
+      source: 'manual' | 'import';
+    }>
+  ) {
     return request<{ message: string; imported: number }>('/api/special-training/sessions', {
-      method: 'POST', body: JSON.stringify({ sessions })
+      method: 'POST',
+      body: JSON.stringify({ sessions }),
     });
   },
-  async overview(from: string, to: string, athleteId: number | null | undefined, project: Project, teamId?: number | null) {
+  async overview(
+    from: string,
+    to: string,
+    athleteId: number | null | undefined,
+    project: Project,
+    teamId?: number | null
+  ) {
     const params = new URLSearchParams({ from, to, project });
     if (athleteId) params.set('athleteId', String(athleteId));
     if (teamId) params.set('teamId', String(teamId));
@@ -197,22 +629,35 @@ export const api = {
     const params = new URLSearchParams({ project });
     return request<{ teams: ProjectTeam[] }>(`/api/overview/teams?${params}`);
   },
-  async getOverviewLayout(project: Project, scope: 'self' | 'team') {
-    const params = new URLSearchParams({ project, scope });
-    return request<{ layout: OverviewLayoutState | null; updatedAt: string | null }>(`/api/preferences/overview-layout?${params}`);
-  },
-  async saveOverviewLayout(project: Project, scope: 'self' | 'team', layout: OverviewLayoutState) {
-    return request<{ message: string; updatedAt: string }>('/api/preferences/overview-layout', {
-      method: 'PUT',
-      body: JSON.stringify({ project, scope, layout })
-    });
-  },
   async analysisSummary(from: string, to: string, athleteId: number, project: Project) {
     const params = new URLSearchParams({ from, to, athleteId: String(athleteId), project });
     return request<{
       standard: { version: string; decision: string; missingDataRule: string };
       analysis: RowingPeriodAnalysis;
     }>(`/api/analysis/summary?${params}`);
+  },
+  pendingProjectFacts(athleteId: number) {
+    return request<{
+      training: { id: number; date: string; content: string }[];
+      tests: { id: number; date: string; content: string }[];
+    }>(`/api/athletes/${athleteId}/pending-project-facts`);
+  },
+  verifyFactProject(kind: 'training-sessions' | 'test-sessions', id: number, project: Project) {
+    return request<{ message: string }>(`/api/${kind}/${id}/verify-project`, {
+      method: 'POST',
+      body: JSON.stringify({ project }),
+    });
+  },
+  async strengthDashboardData(athleteIds: number[], from: string, to: string) {
+    if (!athleteIds.length) return { sessions: [], tests: [] };
+    const params = new URLSearchParams({ athleteIds: athleteIds.join(','), from, to });
+    const [results, tests] = await Promise.all([
+      request<{ sessions: Array<StrengthTrainingSession & { athleteId: number }> }>(
+        `/api/strength-training/results?${params}`
+      ),
+      request<{ tests: StrengthTest[] }>(`/api/strength-tests?${params}`),
+    ]);
+    return { sessions: results.sessions, tests: tests.tests };
   },
   async strengthTests(athleteId: number) {
     return request<{ tests: StrengthTest[] }>(`/api/strength-tests?athleteId=${athleteId}`);
@@ -223,11 +668,58 @@ export const api = {
     metrics: StrengthTest['metrics'];
     targets: StrengthTest['targets'];
     notes: string;
+    protocol?: string;
+    protocolVersion?: string;
+    contextKey?: string;
+    attemptOrder?: number;
   }) {
     return request<{ message: string; id: number }>('/api/strength-tests', {
       method: 'POST',
-      body: JSON.stringify(input)
+      body: JSON.stringify(input),
     });
+  },
+  async teamPlans(params: { athleteId?: number; project?: string } = {}) {
+    const query = new URLSearchParams();
+    if (params.athleteId !== undefined) query.set('athleteId', String(params.athleteId));
+    if (params.project) query.set('project', params.project);
+    return request<{
+      plans: TeamPlan[];
+      teams: Pick<ProjectTeam, 'id' | 'project' | 'name'>[];
+      athletes: Pick<Athlete, 'id' | 'name' | 'teamId' | 'project'>[];
+    }>(`/api/team-plans?${query}`);
+  },
+  async updateTeamPlan(plan: TeamPlan) {
+    return request<{ plan: TeamPlan }>(`/api/team-plans/${plan.id}`, {
+      method: 'PUT',
+      body: JSON.stringify({
+        revision: plan.revision,
+        title: plan.title,
+        startDate: plan.startDate,
+        endDate: plan.endDate,
+        data: plan.data,
+      }),
+    });
+  },
+  async transitionTeamPlan(
+    planId: number,
+    input: {
+      revision: number;
+      action: 'submit' | 'return' | 'publish' | 'archive' | 'revise';
+      confirmed?: boolean;
+    }
+  ) {
+    return request<{ plan: TeamPlan }>(`/api/team-plans/${planId}/transition`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    });
+  },
+  async trainingPlanCatalog() {
+    return request<{ plans: CatalogPlan[] }>('/api/training-plans/catalog');
+  },
+  async planExecution(project: string) {
+    return request<{ date: string; athletes: PlanExecutionRow[] }>(
+      `/api/coach/plan-execution?${new URLSearchParams({ project })}`
+    );
   },
   async trainingPlans(athleteId: number) {
     return request<{ plans: TrainingPlan[] }>(`/api/training-plans?athleteId=${athleteId}`);
@@ -235,130 +727,94 @@ export const api = {
   async injuryRecords(athleteId: number) {
     return request<{ records: InjuryRecord[] }>(`/api/athletes/${athleteId}/injuries`);
   },
-  async createInjuryRecord(athleteId: number, input: {
-    injuryName: string;
-    bodyPart: string;
-    side: InjuryRecord['side'];
-    status: InjuryStatus;
-    painScore: number;
-    onsetDate: string;
-    restrictions: string;
-    rehabPlan: string;
-    reviewDate: string;
-    note: string;
-  }) {
-    return request<{ message: string; record: InjuryRecord }>(`/api/athletes/${athleteId}/injuries`, {
-      method: 'POST',
-      body: JSON.stringify(input)
-    });
+  async createInjuryRecord(
+    athleteId: number,
+    input: {
+      injuryName: string;
+      bodyPart: string;
+      side: InjuryRecord['side'];
+      status: InjuryStatus;
+      painScore: number;
+      onsetDate: string;
+      restrictions: string;
+      rehabPlan: string;
+      reviewDate: string;
+      note: string;
+    }
+  ) {
+    return request<{ message: string; record: InjuryRecord }>(
+      `/api/athletes/${athleteId}/injuries`,
+      {
+        method: 'POST',
+        body: JSON.stringify(input),
+      }
+    );
   },
-  async saveTrainingPlan(athleteId: number, data: TrainingPlanData, planId?: number | null) {
-    return request<{ message: string; id: number }>('/api/training-plans', {
-      method: 'POST',
-      body: JSON.stringify({ athleteId, data, planId: planId || undefined })
-    });
-  },
-  // AI 体能训练 API
-  async analyzeAITrainingPlan(formData: FormData) {
-    return request<{
-      plan: {
-        title: string;
-        summary: string;
-        durationWeeks: number;
-        startDate: string;
-        endDate: string;
-        scheduleLabel: string;
-        bodyWeight: number | null;
-        age: number | null;
-        weeklyPlans: Array<{
-          weekNumber: number;
-          focus: string;
-          totalLoad: number;
-          days: Array<{
-            dayOfWeek: string;
-            exercises: Array<{
-              name: string;
-              sets: string;
-              reps: string;
-              percentage: number;
-              notes?: string;
-            }>;
-          }>;
-        }>;
-        exercises: Array<{
-          id: string;
-          name: string;
-          maxWeight: number | null;
-          unitNote: string;
-        }>;
-      };
-      aiMetadata: {
-        inputType: 'text';
-        inputContent: string;
-        fileMetadata?: {
-          filename: string;
-          mimetype: string;
-          size: number;
-        };
-        modelUsed: string;
-        attempts: number;
-        generatedAt: string;
-      };
-    }>('/api/training-plans/ai/analyze', {
-      method: 'POST',
-      body: formData
-    });
-  },
-  async saveAITrainingPlan(params: {
-    athleteId: number;
-    plan: unknown;
-    aiMetadata: unknown;
-  }) {
-    return request<{
-      message: string;
-      id: number;
-      created: number;
-      replaced: number;
-      skipped: number;
-      results: Array<{ athleteId: number; athleteName: string; status: 'created' | 'replaced' | 'skipped'; planId: number }>;
-    }>('/api/training-plans/ai/save', {
-      method: 'POST',
-      body: JSON.stringify(params)
-    });
-  },
-  async deleteTrainingPlan(planId: number) {
-    return request<{ message: string }>(`/api/training-plans/${planId}`, { method: 'DELETE' });
+  athletePhoto(athleteId: number, signal?: AbortSignal) {
+    return request<Blob>(`/api/athletes/${athleteId}/photo`, { responseType: 'image', signal });
   },
   async uploadAthletePhoto(athleteId: number, file: File) {
     const body = new FormData();
     body.append('photo', file);
     return request<{ message: string; photoUrl: string }>(`/api/athletes/${athleteId}/photo`, {
       method: 'POST',
-      body
+      body,
     });
   },
   async strengthTrainingResults(athleteId: number) {
-    return request<{ sessions: StrengthTrainingSession[] }>(`/api/strength-training/results?athleteId=${athleteId}`);
+    return request<{ sessions: StrengthTrainingSession[] }>(
+      `/api/strength-training/results?athleteId=${athleteId}`
+    );
   },
   async currentProject() {
-    return request<{ project: Project | null; projects: Project[] }>('/api/preferences/current-project');
+    return request<{ project: Project | null; projects: Project[] }>(
+      '/api/preferences/current-project'
+    );
   },
   async saveCurrentProject(project: Project) {
-    return request<{ project: Project }>('/api/preferences/current-project', { method: 'PUT', body: JSON.stringify({ project }) });
+    return request<{ project: Project }>('/api/preferences/current-project', {
+      method: 'PUT',
+      body: JSON.stringify({ project }),
+    });
   },
-  async downloadDataImportTemplate() {
-    const response = await fetch('/api/data-import/template', {
-      headers: { Authorization: `Bearer ${getToken()}` }
+  async downloadDataImportTemplate(
+    kind: 'profile' | 'training' | 'test',
+    project?: string,
+    team?: string
+  ) {
+    const params = new URLSearchParams({ kind });
+    if (project) params.set('project', project);
+    if (team) params.set('team', team);
+    const response = await fetch(`/api/data-import/template?${params.toString()}`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
-      throw new Error(payload?.message || '统一数据导入模板下载失败。');
+      throw new Error(payload?.message || '数据导入模板下载失败。');
     }
     const blob = await response.blob();
     const link = document.createElement('a');
     const objectUrl = URL.createObjectURL(blob);
     link.href = objectUrl;
-    link.download = '竞迹统一数据导入模板.xlsx';
+    link.download = `竞迹${project || ''}分用途导入模板.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
+  },
+  async downloadDataImportErrorReport(id: string, filename: string) {
+    const response = await fetch(`/api/data-import/batches/${encodeURIComponent(id)}/errors`, {
+      headers: { Authorization: `Bearer ${getToken()}` },
+    });
+    if (!response.ok) {
+      const payload = await response.json().catch(() => null);
+      throw new Error(payload?.message || '问题清单导出失败。');
+    }
+    const blob = await response.blob();
+    const link = document.createElement('a');
+    const objectUrl = URL.createObjectURL(blob);
+    link.href = objectUrl;
+    link.download = `竞迹导入问题清单_${filename.replace(/\.(xls|xlsx)$/i, '')}.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -366,7 +822,7 @@ export const api = {
   },
   async exportUnifiedData(project: Project) {
     const response = await fetch(`/api/data-import/export?project=${encodeURIComponent(project)}`, {
-      headers: { Authorization: `Bearer ${getToken()}` }
+      headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
@@ -382,77 +838,304 @@ export const api = {
     link.remove();
     window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
   },
-  async analyzeDataImport(file: File, project: Project, defaultDate?: string) {
+  async analyzeDataImport(
+    file: File,
+    project: Project,
+    defaultDate?: string,
+    options?: { reparse?: boolean; expectedRevision?: number; team?: string }
+  ) {
     const body = new FormData();
     body.append('file', file);
     body.append('project', project);
     if (defaultDate) body.append('defaultDate', defaultDate);
-    return request<{ batch: DataImportBatch }>('/api/data-import/analyze', { method: 'POST', body });
+    if (options?.team) body.append('team', options.team);
+    if (options?.reparse) body.append('reparse', '1');
+    if (options?.expectedRevision !== undefined)
+      body.append('expectedRevision', String(options.expectedRevision));
+    return request<{ batch: DataImportBatch }>('/api/data-import/analyze', {
+      method: 'POST',
+      body,
+    });
   },
   async dataImportBatches(project: Project) {
-    return request<{ batches: DataImportBatchSummary[] }>(`/api/data-import/batches?project=${encodeURIComponent(project)}`);
+    return request<{ batches: DataImportBatchSummary[] }>(
+      `/api/data-import/batches?project=${encodeURIComponent(project)}`
+    );
   },
   async dataImportBatch(id: string) {
-    return request<{ batch: DataImportBatch }>(`/api/data-import/batches/${encodeURIComponent(id)}`);
+    return request<{ batch: DataImportBatch }>(
+      `/api/data-import/batches/${encodeURIComponent(id)}`
+    );
   },
-  async updateDataImportItems(id: string, corrections: Array<{
-    id: number;
-    athleteId?: number | null;
-    eventDate?: string;
-    valueNum?: number | null;
-    actualReps?: number | null;
-    actualWeightKg?: number | null;
-  }>) {
-    return request<{ batch: DataImportBatch }>(`/api/data-import/batches/${encodeURIComponent(id)}/items`, {
-      method: 'PUT', body: JSON.stringify({ corrections })
+  async expiredImportDrafts(project: Project) {
+    return request<import('../shared/import-draft-cleanup').ImportDraftCleanupPreview>(
+      `/api/data-import/draft-cleanup?project=${encodeURIComponent(project)}`
+    );
+  },
+  async cleanupExpiredImportDrafts(
+    project: Project,
+    drafts: Array<{ id: string; revision: number }>
+  ) {
+    return request<{ message: string; deletedCount: number; deletedIds: string[] }>(
+      '/api/data-import/draft-cleanup',
+      { method: 'POST', body: JSON.stringify({ project, drafts }) }
+    );
+  },
+  async discardDataImport(id: string, project: Project) {
+    return request<{ message: string }>(
+      `/api/data-import/batches/${encodeURIComponent(id)}?project=${encodeURIComponent(project)}`,
+      { method: 'DELETE' }
+    );
+  },
+  async updateDataImportItems(
+    id: string,
+    corrections: Array<{
+      id: number;
+      athleteId?: number | null;
+      eventDate?: string;
+      valueNum?: number | null;
+      actualReps?: number | null;
+      actualWeightKg?: number | null;
+      sourceCells?: Record<string, string | number | null>;
+      metricCode?: string;
+      side?: string;
+      payload?: Record<string, unknown>;
+      resolution?: '' | 'skip' | 'update';
+    }>,
+    reviewTargetId: number | undefined,
+    expectedRevision: number
+  ) {
+    return request<{ batch: DataImportBatch; partial: boolean }>(
+      `/api/data-import/batches/${encodeURIComponent(id)}/items`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ corrections, reviewTargetId, expectedRevision }),
+      }
+    );
+  },
+  async updateDataImportAthletes(
+    id: string,
+    corrections: Array<{
+      id: number;
+      name?: string;
+      team?: string;
+      gender?: string;
+      matchedAthleteId?: number | null;
+      excluded?: boolean;
+      confirmed?: boolean;
+    }>,
+    expectedRevision: number,
+    autoMatch = false
+  ) {
+    return request<{ batch: DataImportBatch }>(
+      `/api/data-import/batches/${encodeURIComponent(id)}/athletes`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ corrections, expectedRevision, autoMatch }),
+      }
+    );
+  },
+  async commitDataImport(id: string, conflictPolicy: 'skip' | 'update', expectedRevision: number) {
+    return request<{
+      message: string;
+      imported: number;
+      receipt?: ImportStatistics;
+      skipped: number;
+      createdAthletes: number;
+      linkedAthletes: number;
+      createdRecords: number;
+      updatedRecords: number;
+      filledProfileFields: number;
+      overwrittenProfileFields: number;
+      batch: DataImportBatch;
+    }>(`/api/data-import/batches/${encodeURIComponent(id)}/commit`, {
+      method: 'POST',
+      body: JSON.stringify({ conflictPolicy, expectedRevision }),
     });
   },
-  async updateDataImportAthletes(id: string, corrections: Array<{ id: number; name?: string; team?: string; gender?: string }>) {
-    return request<{ batch: DataImportBatch }>(`/api/data-import/batches/${encodeURIComponent(id)}/athletes`, {
-      method: 'PUT', body: JSON.stringify({ corrections })
-    });
+  customTestTrend(athleteId: number, query: {
+    project: Project; teamId: number; from: string; to: string; metricCode?: string;
+  }, signal?: AbortSignal) {
+    const { project, teamId, from, to, metricCode } = query;
+    const params = new URLSearchParams({ project, teamId: String(teamId), from, to });
+    if (metricCode) params.set('metricCode', metricCode);
+    return request<CustomTestTrend>(`/api/athletes/${athleteId}/custom-test-trend?${params}`, { signal });
   },
-  async commitDataImport(id: string, conflictPolicy: 'skip' | 'update') {
-    return request<{ message: string; imported: number; skipped: number; createdAthletes: number; batch: DataImportBatch }>(`/api/data-import/batches/${encodeURIComponent(id)}/commit`, {
-      method: 'POST', body: JSON.stringify({ conflictPolicy })
-    });
+  collectionProgress(project: Project, team: string, from: string, to: string, signal?: AbortSignal, expected?: { athleteIds: number[]; metricCodes: string[] }) {
+    type Person = { id: number; name: string };
+    return request<{ athleteCount: number; profileCompleteCount: number; athletes: Person[]; missingProfiles: Array<Person & { missing: string[] }>;
+      expectation: { athleteIds: number[]; metricCodes: string[] } | null;
+      metrics: Array<{ code: string; label: string; inTemplate: boolean; measured: number; missing: Person[];
+        coverage: { total: number; completed: number } | null }> }>(
+      `/api/data-import/test-template/progress?${new URLSearchParams({ project, team, from, to })}`, { signal, ...(expected ? { method: 'PUT', body: JSON.stringify(expected) } : {}) });
+  },
+  customTrainingDetails(athleteId: number, project: Project, teamId: number, from: string, to: string, signal?: AbortSignal) {
+    const params = new URLSearchParams({ project, teamId: String(teamId), from, to });
+    return request<{ rows: Array<{ date: string; session: string; sessionOrder: number; template: string;
+      detailOrder: number; field: string; unit: string; value: number | null; text: string | null }>;
+      truncated: boolean }>(`/api/athletes/${athleteId}/custom-training-details?${params}`, { signal });
+  },
+  trainingRecordTemplates(project: Project, team: string, signal?: AbortSignal) {
+    return request<{ templates: TrainingRecordTemplate[]; commonNames: string[]; names: string[]; columns?: string[]; athleteCount: number }>(
+      `/api/data-import/training-template?${new URLSearchParams({ project, team })}`, { signal });
+  },
+  saveTrainingRecordTemplate(project: Project, team: string, template: TrainingRecordTemplate, sourceName: string) {
+    return request<{ template: TrainingRecordTemplate }>(`/api/data-import/training-template?${new URLSearchParams({ project, team })}`,
+      { method: 'PUT', body: JSON.stringify({ ...template, sourceName }) });
+  },
+  saveTrainingTeamColumns(project: Project, team: string, names: string[], columns: string[]) {
+    return request<{ names: string[]; columns: string[] }>(`/api/data-import/training-template/config?${new URLSearchParams({ project, team })}`,
+      { method: 'PUT', body: JSON.stringify({ names, columns }) });
+  },
+  async downloadTrainingRecordTemplate(project: Project, team: string) {
+    const blob = await request<Blob>(`/api/data-import/training-template/download?${new URLSearchParams({ project, team })}`,
+      { responseType: 'xlsx' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `竞迹${team}训练记录模板.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  },
+  testTemplatePreview(project: Project, team: string, signal?: AbortSignal) {
+    return request<TestTemplatePreview>(`/api/data-import/test-template?${new URLSearchParams({ project, team })}`, { signal });
+  },
+  createTestTemplateGroup(project: Project, team: string, input: TestTemplateGroupInput) {
+    return request<{ group: TestTemplateGroup; metrics: TestTemplateMetric[] }>(
+      `/api/data-import/test-template/groups?${new URLSearchParams({ project, team })}`,
+      { method: 'POST', body: JSON.stringify(input) });
+  },
+  createTestTemplateMetric(project: Project, team: string, input: TestTemplateMetricInput & { previousCode?: string }) {
+    return request<{ metric: TestTemplateMetric }>(`/api/data-import/test-template/metrics?${new URLSearchParams({ project, team })}`,
+      { method: 'POST', body: JSON.stringify(input) });
+  },
+  renameTestTemplateMetric(project: Project, team: string, code: string, label: string) {
+    return request<{ metric: TestTemplateMetric }>(`/api/data-import/test-template/metrics/${encodeURIComponent(code)}?${new URLSearchParams({ project, team })}`,
+      { method: 'PUT', body: JSON.stringify({ label }) });
+  },
+  saveTestTemplateConfig(project: Project, team: string, input: { action: 'project' | 'team'; codes: string[] } | { action: 'inherit' }) {
+    return request<Pick<TestTemplatePreview, 'source' | 'codes' | 'projectCodes'>>(
+      `/api/data-import/test-template/config?${new URLSearchParams({ project, team })}`,
+      { method: 'PUT', body: JSON.stringify(input) });
+  },
+  async downloadTestTemplate(project: Project, team: string) {
+    const blob = await request<Blob>(`/api/data-import/test-template/download?${new URLSearchParams({ project, team })}`,
+      { responseType: 'xlsx' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+    link.href = url;
+    link.download = `竞迹${team}测试成绩模板.xlsx`;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
+  },
+  async dataImportMetrics(project: Project) {
+    return request<{ metrics: Array<{ code: string; label: string; unit: string }> }>(
+      `/api/data-import/metrics?${new URLSearchParams({ project })}`
+    );
   },
   async dataManagementMetrics() {
-    return request<{ metrics: Array<{ code: string; label: string; domain: string; unit: string; direction: string; frequency: string; active: number }>; aliases: Array<{ alias: string; normalizedAlias: string; metricCode: string; canonicalLabel: string; unit: string; side: string }> }>('/api/data-management/metrics');
+    return request<{
+      metrics: Array<{
+        code: string;
+        label: string;
+        domain: string;
+        unit: string;
+        direction: string;
+        frequency: string;
+        active: number;
+      }>;
+      aliases: Array<{
+        alias: string;
+        normalizedAlias: string;
+        metricCode: string;
+        canonicalLabel: string;
+        unit: string;
+        side: string;
+      }>;
+    }>('/api/data-management/metrics');
   },
-  async updateDataManagementMetric(code: string, input: { label: string; unit: string; active: boolean }) {
-    return request<{ message: string }>(`/api/data-management/metrics/${encodeURIComponent(code)}`, { method: 'PUT', body: JSON.stringify(input) });
+  async updateDataManagementMetric(
+    code: string,
+    input: { label: string; unit: string; active: boolean }
+  ) {
+    return request<{ message: string }>(
+      `/api/data-management/metrics/${encodeURIComponent(code)}`,
+      { method: 'PUT', body: JSON.stringify(input) }
+    );
   },
   async saveMetricAlias(input: { alias: string; metricCode: string; side?: string }) {
-    return request<{ message: string }>('/api/data-management/metric-aliases', { method: 'PUT', body: JSON.stringify(input) });
+    return request<{ message: string }>('/api/data-management/metric-aliases', {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    });
   },
   async dataManagementStandards() {
-    return request<{ athlete: string[]; training: { types: string[]; structures: string[]; zoneSystems: string[] }; testing: string[]; sources: string[]; qualities: string[]; retiredTables: string[] }>('/api/data-management/standards');
+    return request<{
+      athlete: string[];
+      training: { types: string[]; structures: string[]; zoneSystems: string[] };
+      testing: string[];
+      sources: string[];
+      qualities: string[];
+      retiredTables: string[];
+    }>('/api/data-management/standards');
   },
-  async specialTrainingOverview(from: string, to: string, project: Project, teamId: number | null) {
+  async specialTrainingOverview(
+    from: string,
+    to: string,
+    project: Project,
+    teamId: number | null,
+    athleteId: number | null = null
+  ) {
     const params = new URLSearchParams({ from, to, project });
     if (teamId) params.set('teamId', String(teamId));
-    return request<{ training: SpecialTrainingAnalytics }>(`/api/special-training/overview?${params}`);
+    if (athleteId) params.set('athleteId', String(athleteId));
+    return request<{
+      training: SpecialTrainingAnalytics;
+      teamTraining: SpecialTrainingAnalytics;
+      athletes: SpecialTrainingAthlete[];
+      selectedAthlete: SpecialTrainingAthlete | null;
+      specialTestComparison: SpecialTestComparison | null;
+    }>(`/api/special-training/overview?${params}`);
   },
-  async specialTests(from: string, to: string, project: Project) {
+  async specialTests(
+    from: string,
+    to: string,
+    project: Project,
+    athleteId?: number,
+    teamId?: number | null
+  ) {
     const params = new URLSearchParams({ from, to, project });
+    if (athleteId) params.set('athleteId', String(athleteId));
+    if (teamId) params.set('teamId', String(teamId));
     return request<{ events: SpecialTestEvent[] }>(`/api/special-tests?${params}`);
   },
   async previewSpecialTests(file: File, project: Project) {
     const body = new FormData();
     body.append('file', file);
     body.append('project', project);
-    return request<SpecialTestImportPreview>('/api/special-tests/import/preview', { method: 'POST', body });
+    return request<SpecialTestImportPreview>('/api/special-tests/import/preview', {
+      method: 'POST',
+      body,
+    });
   },
   async commitSpecialTests(importId: string) {
-    return request<{ imported: number; events: number; skipped: number }>('/api/special-tests/import/commit', {
+    return request<{
+      imported: number;
+      events: number;
+      skipped: number;
+      conflicts?: Array<{ rowNumber: number; crewName: string }>;
+    }>('/api/special-tests/import/commit', {
       method: 'POST',
-      body: JSON.stringify({ importId })
+      body: JSON.stringify({ importId }),
     });
   },
   async downloadSpecialTestTemplate() {
     const response = await fetch('/api/special-tests/import/template', {
-      headers: { Authorization: `Bearer ${getToken()}` }
+      headers: { Authorization: `Bearer ${getToken()}` },
     });
     if (!response.ok) throw new Error('专项训练模板下载失败。');
     const blob = await response.blob();
@@ -468,26 +1151,54 @@ export const api = {
   async assignments() {
     return request<{
       athletes: Array<Athlete & { coachIds: string }>;
-      coaches: Array<{ id: number; displayName: string; category: CoachCategory }>;
+      coaches: Array<{ id: number; displayName: string; categories: CoachCategory[]; workStatus: CoachWorkStatusRecord | null }>;
     }>('/api/admin/assignments');
   },
-  async updateAssignment(athleteId: number, coachIds: number[], region: string, city: string, county: string) {
+  async updateAssignment(athleteId: number, region: string, city: string, county: string) {
     return request<{ updated: boolean }>(`/api/admin/assignments/${athleteId}`, {
       method: 'PUT',
-      body: JSON.stringify({ coachIds, region, city, county })
+      body: JSON.stringify({ region, city, county }),
     });
   },
   async registrations(status: 'pending' | 'approved' | 'rejected' = 'pending') {
-    return request<{ requests: RegistrationRequest[]; pending: number }>(`/api/admin/registrations?status=${status}`);
+    return request<{ requests: RegistrationRequest[]; pending: number }>(
+      `/api/admin/registrations?status=${status}`
+    );
+  },
+  async registrationApproval() {
+    return request<{ enabled: boolean }>('/api/admin/registrations/approval');
+  },
+  async setRegistrationApproval(enabled: boolean) {
+    return request<{ enabled: boolean }>('/api/admin/registrations/approval', {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    });
   },
   async reviewRegistration(id: number, action: 'approve' | 'reject') {
-    return request<{ message: string }>(`/api/admin/registrations/${id}/${action}`, { method: 'POST' });
+    return request<{ message: string }>(`/api/admin/registrations/${id}/${action}`, {
+      method: 'POST',
+    });
+  },
+  async verifyRegistrationTeam(id: number, approved: boolean) {
+    return request<{ message: string }>(`/api/admin/registrations/${id}/verify-team`, {
+      method: 'POST',
+      body: JSON.stringify({ approved }),
+    });
+  },
+  async updateRegistrationTeam(id: number, project: string, team: string) {
+    return request<{ message: string }>(`/api/admin/registrations/${id}/team`, {
+      method: 'PUT',
+      body: JSON.stringify({ project, team }),
+    });
   },
   async renameRegistration(id: number, name: string) {
-    return request<{ message: string; displayName: string }>(`/api/admin/registrations/${id}/name`, {
-      method: 'PUT',
-      body: JSON.stringify({ name })
-    });
+    return request<{ message: string; displayName: string }>(
+      `/api/admin/registrations/${id}/name`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ name }),
+      }
+    );
   },
   async accessAccounts() {
     return request<AccessPayload>('/api/access/accounts');
@@ -506,34 +1217,69 @@ export const api = {
   }) {
     return request<{ message: string; id: number }>('/api/access/accounts', {
       method: 'POST',
-      body: JSON.stringify(input)
+      body: JSON.stringify(input),
     });
   },
-  async updateAccessAccount(id: number, input: {
-    role: Role;
-    parentUserId: number;
-    areas: AreaPermission[];
-    projects: string[];
-    teams: TeamPermission[];
-  }) {
+  async updateAccessAccount(
+    id: number,
+    input: {
+      role: Role;
+      parentUserId: number;
+      areas: AreaPermission[];
+      projects: string[];
+      teams: TeamPermission[];
+    }
+  ) {
     return request<{ message: string }>(`/api/access/accounts/${id}`, {
       method: 'PUT',
-      body: JSON.stringify(input)
+      body: JSON.stringify(input),
     });
+  },
+  async resetAccessAccountPassword(id: number, newPassword: string) {
+    const body = resetAccountPasswordSchema.parse({ newPassword });
+    return resetAccountPasswordResponseSchema.parse(
+      await request<unknown>(`/api/access/accounts/${id}/reset-password`, {
+        method: 'POST',
+        body: JSON.stringify(body),
+      })
+    );
+  },
+  async deleteAccessAccount(id: number) {
+    return request<{ message: string }>(`/api/access/accounts/${id}`, { method: 'DELETE' });
   },
   async setAccessAccountStatus(id: number, active: boolean) {
     return request<{ message: string; active: boolean }>(`/api/access/accounts/${id}/status`, {
       method: 'PUT',
-      body: JSON.stringify({ active })
+      body: JSON.stringify({ active }),
     });
   },
-  async updateCoachCategory(id: number, category: CoachCategory) {
-    return request<{ message: string; category: CoachCategory }>(`/api/admin/coaches/${id}/category`, {
-      method: 'PUT',
-      body: JSON.stringify({ category })
-    });
+  async updateCoachWorkStatus(id: number, status: CoachWorkStatus) {
+    return request<{ message: string; workStatus: CoachWorkStatusRecord }>(
+      `/api/admin/coaches/${id}/work-status`,
+      { method: 'PUT', body: JSON.stringify({ status }) }
+    );
+  },
+  async updateCoachCategory(id: number, categories: CoachCategory[]) {
+    return request<{ message: string; categories: CoachCategory[] }>(
+      `/api/admin/coaches/${id}/category`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ categories }),
+      }
+    );
   },
   async auditLogs() {
     return request<{ logs: AuditLog[] }>('/api/access/audit-logs');
-  }
+  },
 };
+
+export function getAiManagement(filters: URLSearchParams, signal: AbortSignal) {
+  return request<AiManagementData>(`/api/ai-management?${filters}`, { signal });
+}
+
+export function saveAiSettings(settings: AiSettings) {
+  return request<AiSettings>('/api/ai-management/settings', {
+    method: 'PUT',
+    body: JSON.stringify(settings),
+  });
+}

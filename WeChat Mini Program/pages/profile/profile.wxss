@@ -1,0 +1,110 @@
+@import "../../templates/training-state.wxss";
+.profile-report-entry { box-sizing: border-box; width: 100% !important; max-width: 100%; min-width: 0; margin: 0 0 20rpx; padding: 20rpx 24rpx; line-height: 1.5; }
+.privacy-notice { margin: -4rpx 2rpx 18rpx; display: flex; align-items: center; gap: 9rpx; color: #6f858d; font-size: 20rpx; }
+.privacy-notice image { width: 32rpx; height: 32rpx; flex: none; }
+.more-grid { margin-top: 1rpx; }
+.profile-more { width: 100%; margin-top: 12rpx; }
+.benchmark-score { margin-bottom: 20rpx; display: grid; grid-template-columns: repeat(2, 1fr); gap: 14rpx; }
+.benchmark-score > view { padding: 22rpx; border-top: 6rpx solid #168f88; background: #f7faf9; }
+.benchmark-score text { display: block; color: #70858c; font-size: 20rpx; }
+.benchmark-value { display: block; margin-top: 10rpx; color: #0f5961; font-size: 40rpx; font-weight: 700; }
+.notice-line { display: block; margin-top: 6rpx; }
+.injury-note { display: block; margin-top: 14rpx; color: #617880; font-size: 20rpx; line-height: 1.6; }
+.profile-hero { position: relative; }
+.profile-hero-info { min-width: 0; flex: 1; }
+.profile-name-row { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; }
+.profile-name-row .profile-name { flex: 1; min-width: 0; overflow-wrap: anywhere; }
+.profile-hero .hero-edit-button { box-sizing: border-box; flex: 0 0 112rpx; width: 112rpx !important; min-width: 0; height: 64rpx; margin: 0; padding: 0 12rpx; display: flex; align-items: center; justify-content: center; gap: 8rpx; border: 0; border-radius: 18rpx; color: #176f7f; background: #eaf4f4; font-size: 23rpx; font-weight: 600; line-height: 1; white-space: nowrap; }
+.hero-edit-button::after { border: 0; }
+.hero-edit-button-pressed { opacity: .75; }
+.hero-edit-icon { font-size: 27rpx; font-weight: 400; }
+.injury-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
+.injury-head-copy { min-width: 0; flex: 1; }
+.injury-report-entry { flex: none; margin: 0; padding: 8rpx 0; white-space: nowrap; }
+.coach-fill-actions { display: flex; gap: 16rpx; }
+.coach-fill-actions .secondary-button { flex: 1; margin: 0; min-height: 76rpx; font-size: 23rpx; }
+/* 疼痛趋势卡：只读柱条，样式自包含（card-title/todo-note 在本页无全局定义，局部补齐） */
+.pain-trend .card-title { color: #164751; font-size: 28rpx; font-weight: 800; }
+.pain-trend .todo-note { margin-top: 6rpx; color: #819399; font-size: 20rpx; line-height: 1.5; }
+.pain-part { margin-top: 20rpx; padding-top: 20rpx; border-top: 1rpx solid #e3edef; }
+.pain-part-head { display: flex; align-items: center; gap: 14rpx; }
+.pain-part-name { min-width: 0; flex: 1; color: #12303b; font-size: 26rpx; font-weight: 700; }
+.pain-part-latest { flex: none; color: #7a4715; font-size: 22rpx; }
+.pain-bars-scroll { width: 100%; margin-top: 14rpx; white-space: nowrap; }
+.pain-bars { display: flex; align-items: flex-end; gap: 6rpx; height: 140rpx; padding: 4rpx 2rpx; }
+.pain-bar { width: 18rpx; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 8rpx 8rpx 2rpx 2rpx; background: #70b9b2; line-height: inherit; }
+.pain-bar::after { border: 0; }
+.pain-bar:focus { box-shadow: inset 0 0 0 4rpx #0b706b; }
+
+/* 数据图表通用注记：口径说明直接放在卡片头，避免误读归一柱高 */
+.chart-note { display: block; margin-top: 6rpx; color: #819399; font-size: 20rpx; line-height: 1.5; }
+
+/* 恢复指标趋势：柱高按指标自身波动范围归一，点击柱体看单点明细 */
+.trend-metric { margin-top: 18rpx; padding-top: 18rpx; border-top: 1rpx solid #e3edef; }
+.trend-metric-head { display: flex; align-items: baseline; gap: 12rpx; }
+.trend-metric-name { min-width: 0; flex: 1; color: #12303b; font-size: 25rpx; font-weight: 700; }
+.trend-metric-value { color: #0f5961; font-size: 30rpx; font-weight: 800; }
+.trend-metric-unit { margin-left: 4rpx; color: #70858c; font-size: 20rpx; font-weight: 400; }
+.trend-delta { flex: none; color: #70858c; font-size: 20rpx; }
+.trend-delta.up { color: #b26516; }
+.trend-delta.down { color: #168f88; }
+.trend-scroll { width: 100%; margin-top: 12rpx; white-space: nowrap; }
+.trend-bars { display: flex; align-items: flex-end; gap: 10rpx; height: 130rpx; padding: 4rpx 2rpx; }
+.trend-bar { width: 26rpx; min-height: 0; margin: 0; padding: 0; border: 0; border-radius: 8rpx 8rpx 2rpx 2rpx; background: #70b9b2; line-height: inherit; }
+.trend-bar::after { border: 0; }
+.trend-bar.is-missing { border: 1rpx dashed #b9cdd1; background: #eef4f5; }
+.trend-bar:focus { box-shadow: inset 0 0 0 4rpx #0b706b; }
+
+/* 恢复趋势：柱体占位 + 当日队均横杠标记 */
+.trend-slot { position: relative; width: 26rpx; height: 100%; display: flex; align-items: flex-end; }
+.trend-team-mark { position: absolute; left: -3rpx; right: -3rpx; height: 0; border-top: 3rpx solid #d79617; }
+
+/* 身体成分：核心三项对齐展示，其他指标按需展开。 */
+.body-summary-date { display: block; margin-bottom: 22rpx; color: #526b74; font-size: 22rpx; }
+.body-summary-row { padding: 20rpx 0; border-bottom: 1rpx solid #e3edef; }
+.body-change { display: flex; flex-direction: column; min-width: 0; gap: 4rpx; color: #12303b; text-align: right; font-size: 27rpx; overflow-wrap: anywhere; }
+.body-change-unit { color: #526b74; font-size: 20rpx; }
+.body-measurement-date { display: block; margin-top: 10rpx; color: #526b74; font-size: 20rpx; }
+.body-more-toggle { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; margin: 16rpx 0 0; padding: 16rpx 12rpx; color: #0f5961; background: #eef6f5; font-size: 24rpx; line-height: 1.6; white-space: normal; overflow-wrap: anywhere; }
+.body-more-toggle:focus { box-shadow: inset 0 0 0 4rpx #0b706b; }
+
+/* 恢复趋势沿用的比较说明。 */
+.compare-note { display: block; margin-top: 10rpx; color: #819399; font-size: 19rpx; }
+
+/* 三项训练参考：统一列对齐，只突出个人值与相对差异。 */
+.comparison-columns { display: grid; grid-template-columns: minmax(0, 1.2fr) repeat(2, minmax(0, 1fr)); align-items: center; gap: 14rpx; }
+.comparison-table-head { padding-bottom: 8rpx; color: #526b74; font-size: 21rpx; }
+.comparison-table-head text:not(:first-child) { text-align: right; }
+.comparison-summary-row { padding: 20rpx 0; border-bottom: 1rpx solid #e3edef; }
+.comparison-metric-label { display: flex; flex-direction: column; gap: 6rpx; color: #12303b; font-size: 24rpx; font-weight: 700; }
+.comparison-metric-unit { color: #526b74; font-size: 20rpx; font-weight: 400; }
+.comparison-personal, .comparison-team { min-width: 0; text-align: right; overflow-wrap: anywhere; }
+.comparison-personal { color: #0f5961; font-size: 34rpx; font-weight: 800; }
+.comparison-team { color: #526b74; font-size: 28rpx; }
+.comparison-reference { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 6rpx 16rpx; margin-top: 12rpx; color: #0f5961; font-size: 21rpx; line-height: 1.5; }
+.comparison-sample { color: #526b74; }
+.comparison-footnote { display: block; margin-top: 16rpx; color: #526b74; font-size: 20rpx; line-height: 1.6; }
+
+/* 雷达模型对照：canvas 2d 多边形 + 维度明细兜底 */
+.radar-legend { display: flex; flex-wrap: wrap; gap: 12rpx; margin-top: 12rpx; }
+.radar-legend-item { padding: 4rpx 14rpx; border-radius: 16rpx; font-size: 19rpx; }
+.radar-legend-item.personal { color: #0f5961; background: rgba(22, 143, 136, 0.12); }
+.radar-legend-item.reference { color: #7a4715; background: rgba(215, 150, 23, 0.14); }
+.radar-legend-item.scale { color: #70858c; background: #eef4f5; }
+.radar-canvas { width: 100%; height: 480rpx; margin-top: 12rpx; }
+.radar-dim { display: flex; align-items: center; gap: 10rpx; margin-top: 12rpx; padding-top: 12rpx; border-top: 1rpx solid #e3edef; }
+.radar-dim-values { display: flex; flex: 1; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12rpx; }
+.radar-dim-value { color: #0f5961; font-size: 23rpx; font-weight: 700; }
+.radar-dim-ref { color: #70858c; font-size: 19rpx; }
+.radar-dim-achieved { color: #168f88; font-size: 21rpx; font-weight: 700; }
+
+/* 空图沿用真实图高度，缺测切换不挤压相邻卡片。 */
+.profile-trend-stage { min-height: 130rpx; border-left: 1rpx solid #cbdadd; border-bottom: 1rpx solid #cbdadd; }
+.profile-trend-stage .state { min-height: 130rpx; padding: 16rpx; }
+.profile-radar-empty .training-chart-empty { min-height: 480rpx; }
+.profile-cell, .profile-hero-info, .trend-metric, .radar-card { min-width: 0; }
+.profile-cell-value, .radar-dim-values { overflow-wrap: anywhere; }
+
+.profile-radar-stage { position: relative; }
+.profile-radar-stage .profile-radar-empty { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; }
+.profile-radar-stage .profile-radar-empty .state { background: rgba(255,255,255,.85); padding: 18rpx; border-radius: 12rpx; }

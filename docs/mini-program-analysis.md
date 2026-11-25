@@ -1,0 +1,288 @@
+# 竞迹微信小程序：功能、框架与代码分析
+
+> 分析基准日期：2026-09-23。以 `WeChat Mini Program/` 当前源码为准；与主 README、`docs/architecture.md` 不一致时以代码为准并应回写文档。
+
+> 2026-09-27 修复回写：`/api/me/training-sessions` 已接入正式课次表并做本人权限校验；`api-check` 的页面模块映射已补齐，随后发现并修复每日待办的角色与项目授权回归。发布配置已改为 production/关闭网络调试。日期统一为北京时间；四个数据 Tab 短时重访复用数据、写入后刷新。照片选择已接微信隐私授权；登录页按原设计保留 50 项奥林匹克运动 GIF，未引用的奥运 PNG 排除打包。注册、角色和体能指标字典从 `shared/` 生成，`/api/teams` 已要求登录，注册改用公开的最小队伍列表。新增 `mini:typecheck` 对配置、日期和请求竞争工具做严格 TypeScript `checkJs`；页面仍是原生 JavaScript，完整迁移尚未实施。真机隐私弹窗与包体结果仍需微信开发者工具验收。
+
+> 2026-09-27 P0-1 教练现场闭环回写：新增 `pages/injury-report` 伤病与疼痛上报页（档案页入口），管理角色写入正式伤病记录、ATL 只能提交本人疼痛反馈并由服务端降级为 `feedback/observation`；首页待办增加“全部/未填报/负荷与伤病/时间待补”分组筛选与姓名、队伍搜索，纯视图计算由 `utils/daily-todos.js` 的 `filterDailyTodos` 承担。新增 `utils/injury-form.test.js`、`pages/injury-report/injury-report.test.js`，`api-check` 增加疼痛反馈降级与越权 403 断言。
+
+> 2026-09-27 阶段 0（P0-0 页面骨架去重）回写：`utils/page-scope.js` 新增 `loadPage` 统一加载骨架（createRequestGuard → loadContext → createInitialScope → prepare/setData → loadPageData → markPageCacheLoaded），`index`/`special`/`strength`/`profile` 四个 Tab 迁移并统一走 `isPageCacheFresh`（含 `dataVersion` 校验），首页自建的 `_lastLoadedAt`/`_loadedDate`/`_loadedProject` 已删除；`showTrendDetail`/`goToAthlete` 收敛到新的 `utils/page-actions.js`；`pages/injury-report`、`pages/wellness-entry` 改用 `request-guard` 的 `loadWithGuard` 护栏。新增 `utils/page-scope.test.js` 的 `loadPage` 用例与 `pages/tab-load-skeleton.test.js`（真实跑三个 Tab 的骨架与视图转换），`scripts/coach-daily-todos-mini-check.mjs` 改为加载真实 `page-scope`/`page-actions` 并校验缓存复用与 `dataVersion` 失效。
+
+## 1. 定位与边界
+
+竞迹小程序是训练监控平台的**原生微信客户端**，与 React 网页端共用同一套 Express API、账号权限和 SQLite，**不新建第二套数据库，也不复制训练/测试/档案业务事实**。
+
+```text
+React 网页端 ─┐
+              ├─ Express /api ─ SQLite
+微信小程序 ───┘
+```
+
+| 边界内（当前一期） | 边界外（刻意不做） |
+| --- | --- |
+| 账号密码登录、运动员注册申请 | 微信 OpenID / 手机号一键登录 |
+| 训练总览、专项、体能、档案只读视图 | 账号权限配置、区域授权 |
+| 本人档案编辑、身体成分、证件照 | 批量 Excel 导入/导出、字典维护 |
+| 运动员本人训练课次增删改 | AI 草案生成、原始数据删除 |
+| 改密、隐私说明、退出登录 | 复杂训练计划编辑（网页端） |
+
+生产约束：`config.js` 必须用**同一 HTTPS 域名**覆盖 request / uploadFile / downloadFile；开发环境才允许 `127.0.0.1:8787`。
+
+## 2. 技术栈与框架形态
+
+| 维度 | 现状 |
+| --- | --- |
+| 运行时 | 原生微信小程序，无小程序端 npm/Taro/uni-app；核心工具运行严格 TypeScript `checkJs`，页面尚未迁移 TS |
+| 模块 | CommonJS（`require` / `module.exports`） |
+| 视图 | WXML + WXSS；`app.json` `style: v2`，`lazyCodeLoading: requiredComponents` |
+| 组件 | 仅 1 个自定义组件 `scope-filter`；页面用 `Page()`，组件用 `Component()` |
+| 状态 | `App.globalData` + `wx.storage`（Token / 用户 / 当前项目） |
+| 网络 | 自研 `utils/request.js` 封装 `wx.request` / `wx.uploadFile` |
+| 样式 | 全局 `app.wxss` 色板与卡片；页面局部 WXSS |
+| 图表 | **无图表库**，用 `view` 柱状条 + 内联 `style` 百分比高度/宽度 |
+| 字典 | `data/register-data.js`、`data/format-data.js` 由 `shared/` 生成并校验，运行时不 import 仓库外文件 |
+| 测试 | 根仓库 Vitest 对小程序做**静态/单元**回归（17 个 `*.test.js`） |
+| 图标 | TabBar PNG、登录奥林匹克运动 GIF、SVG 若干；未引用奥运 PNG 不参与打包 |
+
+规模（不含测试）：约 **12 页面 + 1 组件 + 1 服务层 + 13 工具**；JS/WXML/WXSS 源码约 **5.7k 行**。仓库仍保留 50 张未引用奥运 PNG，但已在 `project.config.json` 排除上传包。
+
+## 3. 页面与导航
+
+### 3.1 路由（`app.json`）
+
+| 顺序 | 路径 | 入口 |
+| --- | --- | --- |
+| 1 | `pages/login/login` | 启动/未登录 `reLaunch` |
+| 2 | `pages/register/register` | 登录页「立即注册」`navigateTo` |
+| 3–7, 9 | TabBar：`index` / `special` / `strength` / `profile` / `mine` | 底部 5 Tab |
+| 8 | `pages/profile-edit/profile-edit` | 档案页「编辑」 |
+| 8 | `pages/training-entry/training-entry` | 首页「记录训练」（ATL） |
+| 10 | `pages/privacy/privacy` | 登录/我的「隐私说明」 |
+
+全局组件：`usingComponents.scope-filter` → `/components/scope-filter/index`（项目/运动员/日周月筛选）。
+
+### 3.2 功能一览
+
+#### 认证与准入
+
+| 页面 | 能力要点 |
+| --- | --- |
+| **登录** | 账号密码；记忆账号；隐私勾选必选；50 项奥林匹克运动图标与 hero（`assetUrl`）；忘记密码仅提示找管理员；注册回填账号 |
+| **注册** | 运动员申请：姓名、独立出生日期与性别、手机号、籍贯省市、项目、队伍（加载失败可重试）、账号密码；复用 `POST /api/auth/register`；成功只回填账号不回填密码 |
+| **隐私** | 静态说明页，`Page({})` 空逻辑，发布前需运营主体补全 |
+| **我的** | 角色文案、改密表单、隐私入口、确认后退出清会话 |
+
+#### 训练总览（Tab：训练总览）
+
+- `loadContext` 拉 `/api/me`（可选）、`current-project`、`athletes`。
+- 管理角色：日/周/月 + 项目；运动员：固定本人 `athleteId`，隐藏运动员选择器。
+- 指标卡：训练时长、负荷（SRPE）、疲劳指数、损伤人数。
+- 近 14 日双序列趋势（时长/负荷）柱状 + 点击 Modal 明细。
+- 强度区间占比进度条；伤病列表可 `switchTab` 进档案。
+- **每日待办**（SCC/REG/TD/DMD）：未填报/高负荷/伤病/开训时间缺失；`daily-todos.js` 在网络边界做形状校验；请求序号防串项目；`filterDailyTodos` 支持四组筛选与姓名/队伍搜索（纯视图，计数不随分组切换清零）。
+- ATL 可进入本人训练填报。
+- **今日状态**（ATL）：`loadToday` 与待办并行、独立 guard；`today-status.js` 校验 `GET /api/me/today-status` 后显示已填报/未填报、24 小时负荷与课次来源，`wellnessRecordView` 显示恢复日报状态，两个入口直达训练填报与恢复日报；失败清空过期数据，可单独重试。
+
+#### 专项训练（Tab：专项训练）
+
+- 冠军模型（最多 12 条）、专项汇总 4 卡、近 14 日时长/距离趋势。
+- 强度占比、训练课内容占比、队伍筛选（`/api/overview/teams`）、运动员列表前 30 人可点进档案。
+- 项目与时间范围切换会 `saveCurrentProject` 并重拉。
+
+#### 体能训练（Tab：体能训练）
+
+- 运动员选自己（`allow-all=false`）；管理角色可选项目内运动员。
+- 汇总 4 卡、最近测试指标条（目标达成率）、冠军模型对比前 4 项、最近计划摘要与练习行、近 14 日趋势、最近训练记录列表。
+- 数据：`/api/strength-tests`、`/api/training-plans`、`/api/strength-training/results`。
+
+#### 档案（Tab：档案）
+
+- 基础格子资料（主区 + 更多）、训练概览 4 卡、制胜要素摘要、力量测试条、伤病列表。
+- 手机号默认脱敏；ATL 显示「编辑」进 `profile-edit`。
+- 并行请求伤病、个人 overview、冠军模型（后者失败可降级）。
+- 伤病卡提供「新增伤病记录 / 提交疼痛反馈」入口，进入 `pages/injury-report`（SCC/REG/TD/DMD 与 ATL 可见，其余角色与未选中运动员不显示）。
+
+#### 伤病与疼痛上报 `injury-report`
+
+- `?athleteId=` 进入；`loadContext()` 后校验目标运动员属于当前项目权限范围，ATL 还必须是本人，否则直接显示错误且不发请求。
+- 字典与服务端一致：状态/侧别来自 `utils/injury-form.js`，`buildInjuryPayload` 统一裁剪、校验疼痛评分 0–10 整数与 `YYYY-MM-DD` 日期，ATL 模式剔除 `status/restrictions/rehabPlan`。
+- 成功后 `dataVersion += 1`、`homeNeedsRefresh = true`，toast 后 `navigateBack()` 回档案并刷新待办。
+
+#### 本人档案编辑 `profile-edit`
+
+- 仅 ATL 且已绑定 `athleteId`。
+- 个人字段经 `profile-payload.js` 规范化（姓名 2–20、日期补零与有效性）。
+- 身体成成分字段可选提交（改动才 PUT）；证件照 `chooseMedia` + `uploadFile`。
+- 保存顺序：档案 → 身体成分 → 照片 → 刷新上下文 → 提示「已同步到网页端」。
+
+#### 本人训练填报 `training-entry`
+
+- 仅 ATL；列表本人 `training_sessions`。
+- 新建/编辑/删除：类型、强度区、内容、时长、距离、RPE，可选心率/功率/桨频。
+- 服务端按登录账号绑定运动员，不接受客户端 athleteId。
+
+#### 恢复日报填写 `wellness-entry`
+
+- 仅 ATL；日期选择器限制在最近 7 天至今天（北京时间），切换日期即读取该日已保存记录。
+- 字段来自 `utils/wellness-form.js` 的 `METRICS`/`STATUS_OPTIONS`：睡眠、睡眠质量、晨脉、体重、疲劳、酸痛、心情 + 今日训练状态（正常训练/需要休息）。
+- 提交前用 `wellnessPayload` 校验量纲与“至少一项”，服务端仍以 `z.strictObject` 复校；保存后递增 `homeNeedsRefresh`/`dataVersion` 并展示该日期已保存的原始数值。
+- 不生成评分或诊断，只回显自评数值。
+
+## 4. 分层与代码结构
+
+```text
+WeChat Mini Program/
+├─ app.js / app.json / app.wxss     # 全局会话、路由、全局样式
+├─ config.js                        # 环境、API 基址、storage key
+├─ services/api.js                  # 唯一 API 门面（页面不直接拼 URL）
+├─ utils/
+│  ├─ request.js                    # 请求/上传、鉴权头、401 跳转、网络诊断
+│  ├─ request-guard.js              # 请求护栏：createRequestGuard / loadWithGuard 丢弃过期响应
+│  ├─ context.js                    # 用户+项目+运动员列表装配
+│  ├─ page-scope.js                 # 作用域初始化与切换、统一 loadPage 加载骨架与缓存判据
+│  ├─ page-actions.js               # 趋势明细弹窗与运动员下钻（各 Tab 共用）
+│  ├─ date.js / format.js           # 区间、脱敏、指标字典
+│  ├─ daily-todos.js                # 待办响应显式校验、文案与分组筛选/搜索
+│  ├─ today-status.js               # 今日状态响应校验与首页文案
+│  ├─ wellness-form.js              # 恢复日报字典、回填窗口与提交载荷校验
+│  ├─ injury-form.js                # 伤病上报字典与提交载荷校验
+│  ├─ profile-payload.js            # 档案提交规范化
+│  └─ network-error.js              # 用户可读网络错误
+├─ data/register-data.js            # 注册用项目/省份字典（CJS）
+├─ components/scope-filter/         # 共用筛选
+├─ pages/injury-report/             # 伤病与疼痛上报页四件套 + 测试
+├─ pages/wellness-entry/            # 恢复日报填写页四件套 + 测试
+├─ pages/*/                         # 页面四件套 + 部分 test
+└─ assets/                          # TabBar、SVG 等；奥运 PNG 排除打包
+```
+
+### 4.1 依赖方向（应保持）
+
+```text
+pages → services/api → utils/request → config
+pages → utils/{context,date,format,...} →（可）services/api
+pages 不直接 wx.request；utils 不 import pages
+```
+
+### 4.2 数据流惯例
+
+1. 首次 `onShow` / `onLoad` → `page-scope.js` 的 `loadPage`：`loadContext`（登录校验、项目、运动员）→ `createInitialScope` → `prepare` → `loadPageData` → `markPageCacheLoaded`；短时重访且项目、北京时间日期、`dataVersion`、所选运动员都没变时由 `isPageCacheFresh` 复用已有视图。表单页（`injury-report`、`wellness-entry`）直接用 `loadWithGuard` 走同一套护栏。
+2. 并行业务请求 → 页面内 `build*View` 纯函数映射为 WXML 友好结构。
+3. 筛选变更：本地 `setData` + 可选 `saveCurrentProject` + 重拉。
+4. 并发防护：`utils/request-guard.js` 的 `createRequestGuard()` 序号丢弃过期响应；首页待办与今日状态各自持有独立护栏。
+5. 跳转档案：`utils/page-actions.js` 的 `goToAthlete` 用候选列表校验后写 `globalData.selectedAthleteId` 再 `switchTab` 档案页。
+
+### 4.3 样式
+
+- 色板与主按钮、卡片、`.ratio-*`、`.state-*`、`.metric-*` 集中在 `app.wxss`。
+- 页面 WXSS 只放差异（如专项队伍选择器、体能计划头）。
+- 动态宽度/高度用内联 `style="width: {{...}}%"`；开发者工具可能对 Mustache 报 CSS 误报，**运行时合法**。
+
+## 5. 接口清单（小程序已用）
+
+| 方法 | 路径 | 使用方 |
+| --- | --- | --- |
+| POST | `/api/auth/login` | 登录 |
+| POST | `/api/auth/register` | 注册 |
+| POST | `/api/auth/change-password` | 我的 |
+| GET | `/api/me` | 上下文刷新 |
+| GET | `/api/registration/teams` | 注册队伍名称（`auth:false`，不含人数） |
+| GET | `/api/teams` | 登录后队伍统计 |
+| GET/PUT | `/api/preferences/current-project` | 上下文/切换项目 |
+| GET | `/api/athletes` | 运动员列表 |
+| GET | `/api/overview`、`/api/overview/teams` | 总览/专项队伍 |
+| GET | `/api/coach/daily-todos` | 首页待办（非 ATL） |
+| GET | `/api/special-training/overview`、`/api/special-champion-models` | 专项 |
+| GET | `/api/strength-tests`、`/api/training-plans`、`/api/strength-training/results` | 体能 |
+| GET | `/api/athletes/:id/overview`、`.../injuries`、`.../champion-model` | 档案 |
+| POST | `/api/athletes/:id/injuries` | 伤病记录 / 运动员疼痛反馈（服务端强制 `feedback`+`observation`） |
+| PUT | `/api/me/athlete-profile` | 档案编辑 |
+| PUT | `/api/athletes/:id/body-composition` | 身体成分 |
+| POST | `/api/athletes/:id/photo` | 证件照上传 |
+| GET/POST/PUT/DELETE | `/api/me/training-sessions[...]` | 训练填报 |
+| GET | `/api/me/today-status` | 首页今日状态（ATL 本人） |
+| GET/POST | `/api/me/wellness` | 恢复日报读写（ATL 本人，最近 7 天，同日 upsert） |
+
+**授权**：全部依赖服务端；页面隐藏控件**不是**授权手段。`request.js` 对 401 清会话并 `reLaunch` 登录。
+
+## 6. 配置与环境
+
+| 项 | 说明 |
+| --- | --- |
+| `API_ENVIRONMENT` | `development` → `http://127.0.0.1:8787`；`production` → 必须 HTTPS（`resolveApiBaseUrl` 校验） |
+| `NETWORK_DEBUG` | 网络追踪日志开关；脱敏 URL/字段，不打 Token/密码/正文；**发布前应 false** |
+| storage keys | `jingji-mini-token` / `user` / `project`；另：记住账号、注册回填账号 |
+| `project.config.json` | 测试 AppID、`urlCheck:false` 仅工具本地；真机靠公众平台合法域名 |
+| AppID | 仓库内为具体 AppID，发布前需与主体一致并完成备案 |
+
+**当前配置**：`config.js` 为 `API_ENVIRONMENT = 'production'`、`NETWORK_DEBUG = false`；本地联调时需临时切换，上传前检查配置与微信合法域名。
+
+## 7. 测试与质量
+
+| 类型 | 位置 | 覆盖点 |
+| --- | --- | --- |
+| 单元/静态 | `config.test.js` | 基址解析、生产强制 HTTPS |
+| 单元 | `utils/request.test.js`、`network-error.test.js`、`profile-payload.test.js`、`daily-todos.test.js`、`injury-form.test.js`、`today-status.test.js`、`wellness-form.test.js`、`page-scope.test.js` | 传输、错误文案、档案校验、待办形状与分组筛选、伤病字典与载荷（比对服务端取值）、今日状态形状与文案、恢复日报回填窗口与载荷、统一 `loadPage` 骨架与缓存判据 |
+| 静态 | `register.test.js`、`profile-edit.test.js`、`pages/injury-report/injury-report.test.js`、`pages/wellness-entry/wellness-entry.test.js`、`pages/tab-load-skeleton.test.js` | 字典与 shared 一致、接口/回填/队伍重试、编辑链路、路由/入口/角色分支与上报页面行为、今日状态与恢复日报入口、填写页保存/校验/角色分支、三个 Tab 走真实骨架与视图转换 |
+| 集成 | 根 `scripts/api-check.mjs` | 含注册/审批等服务端回归；`coach-daily-todos-mini-check.mjs` 跑真实 `page-scope`/`page-actions` 验证首页加载、缓存复用与 `dataVersion` 失效 |
+
+缺口：
+
+- 无微信开发者工具自动化/E2E；`scope-filter`、主 Tab 交互靠人工/真机。
+- 页面 `build*View` 只在 `pages/tab-load-skeleton.test.js` 以最小数据覆盖 profile/special/strength 的主路径，复杂分支仍靠 api-check + 手测。
+- 开发者工具对 WXML 内联 Mustache 的 CSS 误报需知悉，避免误改「修样式」。
+
+## 8. 代码质量观察
+
+**较好**
+
+- 单一 API 门面 + 单一请求层，环境集中在 `config.js`。
+- 网络失败分类、日志脱敏、401 防重入跳转较完整。
+- 待办、注册字典、档案 payload 有显式边界校验与 Vitest。
+- 页面视图多用纯函数组装，WXML 偏「薄」。
+- 敏感信息：列表不缓存明细档案；证件/手机脱敏；不存密码回填。
+
+**债务与风险**
+
+1. **发布验收**：生产域名、AppID、隐私保护指引及微信真机行为仍须按实际主体检查。
+2. **筛选/加载样板重复**：index/special/strength/profile 几乎同一套 `onProjectChange`/`onAthleteChange`/`onRangeChange`，易漂移（首页有序号防护，其他页较弱）。
+3. **字典产物**：注册、角色和体能指标字典从 `shared/*` 生成；共享字典变更后运行 `npm run mini:dictionary-sync` 和 `npm run mini:dictionary-check`。伤病状态文案仍在小程序本地维护。
+4. **无 TS/无组件化页面**：大页 JS 200+ 行，重构成本随功能上升。
+5. **图表表达力有限**：柱状条无法替代网页端 ECharts，复杂分析仍须网页。
+6. **隐私页与未成年人流程**仍为框架，正式上线要产品/法务补全。
+7. **开发者工具 CSS 误报**（`style` + `{{}}`）易被当成真实样式 bug。
+8. 资源体积：本地未引用奥运 PNG 已排除打包，登录页保留原有 50 张远程 GIF；实际上传包体需在微信开发者工具核对，当前未分包。
+
+## 9. 与网页端能力对照（摘要）
+
+| 能力 | 网页 | 小程序 |
+| --- | --- | --- |
+| 登录/注册/改密 | ✓ | ✓ |
+| 总览/专项/体能/档案查看 | ✓ | ✓（图表简化） |
+| 本人档案与照片 | ✓ | ✓ |
+| 本人训练填报 | ✓ | ✓（现场） |
+| 训练计划编辑、导入导出、AI、权限 | ✓ | ✗ |
+| 蓝牙等设备 | 试验入口 | ✗ |
+
+## 10. 建议演进方向（按优先级）
+
+1. **发布清单**：`API_ENVIRONMENT=production`、`NETWORK_DEBUG=false`、合法域名三件套、AppID/备案、演示密码与 `JWT_SECRET`。
+2. **抽取页面加载钩子**：统一 context + range/project/athlete 切换与过期请求丢弃，减少复制粘贴。
+3. **真机回归清单**：登录、总览、待办点选、训练填报、档案编辑、照片上传下载、TLS 1.2/1.3。
+4. **包体**：在微信开发者工具核对 `packOptions.ignore` 后的实际上传体积；TabBar 图标保持小图。
+5. **中期**：若功能继续加，再评估 TS 或构建链；在此之前维持原生 + Vitest 静态回归即可。
+6. **文档同步**：架构文档已有点状小程序章节；大改接口或权限时继续回写 `docs/architecture.md` 与小程序 README。
+
+## 11. 关键文件索引
+
+| 路径 | 作用 |
+| --- | --- |
+| `WeChat Mini Program/app.json` | 路由与 TabBar |
+| `WeChat Mini Program/config.js` | 环境与密钥名 |
+| `WeChat Mini Program/services/api.js` | API 门面 |
+| `WeChat Mini Program/utils/request.js` | 网络层 |
+| `WeChat Mini Program/utils/context.js` | 会话上下文 |
+| `WeChat Mini Program/pages/*/…` | 页面逻辑 |
+| `WeChat Mini Program/README.md` | 产品边界与部署说明 |
+| `docs/architecture.md` | 系统架构与待办等服务端约定 |
+| 根 `scripts/api-check.mjs` | 含注册/审批的服务端回归 |

@@ -1,81 +1,286 @@
-import { Activity, ArrowRight } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { CustomTrainingDetailsCard } from '../components/CustomTrainingDetailsCard';
+import { CustomTestTrendCard } from '../components/CustomTestTrendCard';
+import { specialWeeklyOption } from '../components/special-weekly-option';
+import './SpecialTrainingPage.css';
+import { Activity } from 'lucide-react';
+import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react';
 import { api } from '../api';
-import { SpecialChampionModel } from '../components/SpecialChampionModel';
-import { AppCard, ChartCard, ContentState, FilterBar, PageContainer, PageHeader, SectionHeader } from '../components/PageLayout';
+import { AthleteAnalysisSelector } from '../components/AthleteAnalysisSelector';
+import {
+  AppCard,
+  ChartCard,
+  ContentState,
+  PageContainer,
+  PageHeader,
+  SectionHeader,
+} from '../components/PageLayout';
 import { EChart } from '../components/EChart';
-import { contentOption, intensityOption, loadOption, volumeOption } from '../components/special-chart-options';
-import type { Project, ProjectTeam } from '../types';
+import { SpecialChampionModel } from '../components/SpecialChampionModel';
+import { projectCapability } from '../../shared/projects';
+import {
+  contentOption,
+  intensityOption,
+  loadOption,
+  volumeOption,
+} from '../components/special-chart-options';
+import type { Project } from '../types';
 import { formatNumber } from '../utils';
 
+const TeamTrainingStats = lazy(() => import('../components/TeamTrainingStats').then(
+  ({ TeamTrainingStats }) => ({ default: TeamTrainingStats })
+));
+
 type Props = {
-  project: Project; from: string; to: string;
-  onRecordsOpen: () => void;
+  filters?: ReactNode;
+  teamTraining?: { teamId: number | null; date?: string; focus: boolean; onImport?: () => void };
+  teamId?: number | null;
+  onPlanOpen: () => void;
+  showCustomTestTrend?: boolean;
+  project: Project;
+  from: string;
+  to: string;
 };
 type Payload = Awaited<ReturnType<typeof api.specialTrainingOverview>>;
-const value = (number: number | null, digits = 1) => number === null ? '—' : formatNumber(number, digits);
-const empty = (title: string) => <ContentState kind="empty" title={title} description="当前筛选范围内暂无有效数据。" />;
+const value = (number: number | null, digits = 1) =>
+  number === null ? '—' : formatNumber(number, digits);
+const empty = (title: string) => (
+  <ContentState kind="empty" title={title} description="当前筛选范围内暂无有效数据。" />
+);
 
-export function SpecialTrainingDashboard({ project, from, to, onRecordsOpen }: Props) {
-  const [teams, setTeams] = useState<{ project: Project; items: ProjectTeam[] } | null>(null);
-  const [selection, setSelection] = useState<{ project: Project; teamId: number | null }>({ project, teamId: null });
-  const [result, setResult] = useState<{ key: string; payload?: Payload; error?: string } | null>(null);
+export function SpecialTrainingDashboard({ project, from, to, teamId = null, filters, onPlanOpen, teamTraining: teamTrainingStats, showCustomTestTrend = false }: Props) {
+  const [result, setResult] = useState<{ key: string; payload?: Payload; error?: string } | null>(
+    null
+  );
   const [retry, setRetry] = useState(0);
-  const teamId = selection.project === project ? selection.teamId : null;
-  const currentTeams = teams?.project === project ? teams.items : [];
-  const selectedTeam = currentTeams.find((team) => team.id === teamId);
-  const requestKey = JSON.stringify([project, from, to, teamId, retry]);
+  const [athleteSelection, setAthleteSelection] = useState<{ project: Project; teamId: number | null; athleteId: number | null }>({ project, teamId, athleteId: null });
+  const selectedAthleteId = athleteSelection.project === project && athleteSelection.teamId === teamId ? athleteSelection.athleteId : null;
+  const setSelectedAthleteId = (athleteId: number | null) => setAthleteSelection({ project, teamId, athleteId });
+  const requestKey = JSON.stringify([project, from, to, teamId, selectedAthleteId, retry]);
+  useEffect(() => {
+    setAthleteSelection({ project, teamId, athleteId: null });
+  }, [project, teamId]);
   useEffect(() => {
     let active = true;
-    api.overviewTeams(project).then(({ teams: items }) => { if (active) setTeams({ project, items }); }).catch(() => { if (active) setTeams({ project, items: [] }); });
-    return () => { active = false; };
-  }, [project]);
-  useEffect(() => {
-    let active = true;
-    api.specialTrainingOverview(from, to, project, teamId)
-      .then((payload) => { if (active) setResult({ key: requestKey, payload }); })
-      .catch((error) => { if (active) setResult({ key: requestKey, error: error instanceof Error ? error.message : '专项数据加载失败' }); });
-    return () => { active = false; };
-  }, [project, from, to, teamId, requestKey]);
+    api
+      .specialTrainingOverview(from, to, project, teamId, selectedAthleteId)
+      .then((payload) => {
+        if (active) setResult({ key: requestKey, payload });
+      })
+      .catch((error) => {
+        if (active)
+          setResult({
+            key: requestKey,
+            error: error instanceof Error ? error.message : '专项数据加载失败',
+          });
+      });
+    return () => {
+      active = false;
+    };
+  }, [project, from, to, teamId, selectedAthleteId, requestKey]);
   const current = result?.key === requestKey ? result : null;
   const payload = current?.payload;
   const training = payload?.training;
-  const scope = selectedTeam?.name || '当前权限范围 · 全部运动员';
-  const metricItems = training ? [
-    { label: '专项训练时长', amount: training.summary.durationMin === null ? '—' : value(training.summary.durationMin / 60), unit: 'h' },
-    { label: '专项训练距离', amount: value(training.summary.distanceKm), unit: 'km' },
-    { label: '专项训练课次', amount: String(training.summary.sessionCount), unit: '课次' },
-    { label: '专项训练负荷', amount: value(training.summary.load), unit: 'AU' }
-  ] : [];
-  return <PageContainer className="professional-overview training-dashboard-page">
-    <PageHeader variant="dashboard" className="overview-page-heading" eyebrow="SPECIAL TRAINING" title="专项训练" />
-    <FilterBar label="专项训练页面筛选">
-      <label className="physical-athlete-filter">组织 / 队伍<select aria-label="专项训练队伍筛选" value={teamId ?? ''} onChange={(event) => { setSelection({ project, teamId: event.target.value ? Number(event.target.value) : null }); }}>
-        <option value="">当前权限范围全部队伍</option>{currentTeams.map((team) => <option key={team.id} value={team.id}>{team.name}</option>)}
-      </select></label>
-    </FilterBar>
-    <SpecialChampionModel project={project} />
-    {!current ? <ContentState kind="loading" title="正在同步专项训练数据" icon={<Activity className="spin" />} /> : current.error ? <ContentState kind="error" title="专项训练数据加载失败" description={current.error} action={<button className="secondary-button" onClick={() => setRetry((count) => count + 1)}>重试</button>} /> : training && <>
-      <SectionHeader title="专项数据概览" description={`${scope} · ${from} 至 ${to}`} />
-      <section className="training-dashboard-metrics" aria-label="专项重要数据">{metricItems.map((item) => <AppCard key={item.label} variant="compact" className="training-dashboard-metric"><span>{item.label}</span><strong>{item.amount}<small>{item.unit}</small></strong><em>同队共同课次去重</em></AppCard>)}</section>
-      <ChartCard title="专项训练量统计" description="柱状：训练时长 · 折线：训练距离">
-        {training.days.some((day) => day.durationMin !== null || day.distanceKm !== null) ? <EChart option={volumeOption(training, from, to)} label="专项训练时长与距离趋势" /> : empty('暂无专项训练量数据')}
-      </ChartCard>
-      <ChartCard title="专项训练强度占比" description="按原始强度分区的有效训练时长统计">
-        {training.intensity.some((row) => row.durationMin !== null && row.durationMin > 0) ? <>
-          <EChart option={intensityOption(training)} label="专项训练强度时长占比" />
-          <div className="table-scroll"><table className="data-table"><thead><tr><th>强度分区</th><th>时长（min）</th><th>占比</th></tr></thead><tbody>{training.intensity.map((row) => <tr key={row.name}><td>{row.name}</td><td>{value(row.durationMin)}</td><td>{value(row.percentage)}%</td></tr>)}</tbody></table></div>
-        </> : empty('暂无有效专项强度数据')}
-      </ChartCard>
-      <ChartCard title="专项训练课占比" description="按统一训练内容字典统计专项课次">
-        {training.content.length ? <><EChart option={contentOption(training)} label="专项训练内容课次分布" /><div className="table-scroll"><table className="data-table"><thead><tr><th>训练内容</th><th>课次数</th><th>占比</th></tr></thead><tbody>{training.content.map((row) => <tr key={row.name}><td>{row.name}</td><td>{row.count}</td><td>{value(row.percentage)}%</td></tr>)}</tbody></table></div></> : empty('暂无专项训练内容数据')}
-      </ChartCard>
-      <ChartCard title="专项训练负荷分析" description={`累计专项负荷 ${value(training.summary.load)} AU · 每日既有 SRPE`}>
-        {training.days.some((day) => day.load !== null) ? <EChart option={loadOption(training, from, to)} label="每日专项SRPE负荷趋势" /> : empty('暂无有效专项训练负荷')}
-      </ChartCard>
-      <ChartCard title="最近专项训练" description="当前筛选范围内最近10个专项课次" actions={<button className="dashboard-action-button" onClick={onRecordsOpen}>完整训练记录 <ArrowRight size={15} /></button>}>
-        {training.recent.length ? <div className="table-scroll"><table className="data-table"><thead><tr><th>日期</th><th>训练内容</th><th>时长（min）</th><th>距离（km）</th><th>强度</th><th>负荷（AU）</th></tr></thead><tbody>{training.recent.map((row) => <tr key={row.id}><td>{row.date}</td><td>{row.content}</td><td>{value(row.durationMin)}</td><td>{value(row.distanceKm)}</td><td>{row.intensityZone || '—'}</td><td>{value(row.load)}</td></tr>)}</tbody></table></div> : empty('暂无专项训练记录')}
-      </ChartCard>
-    </>}
-  </PageContainer>;
+  const teamTraining = payload?.teamTraining;
+  const athletes = payload?.athletes || [];
+  const selectedAthlete = payload?.selectedAthlete || null;
+  const mean = (key: 'durationMin' | 'distanceKm' | 'load') => {
+    const values = athletes.flatMap(athlete => athlete.summary[key] === null ? [] : [athlete.summary[key]]);
+    return values.length ? values.reduce((sum, n) => sum + n, 0) / values.length : null;
+  };
+  const scope = teamId === null ? '当前权限范围 · 全部运动员' : '当前队伍 · 全部运动员';
+  const displayedIntensity = training?.intensity ?? [];
+  const intensityAnalytics = training ? { ...training, intensity: displayedIntensity } : null;
+  const metricItems = training
+    ? [
+        {
+          label: '专项训练时长',
+          amount:
+            training.summary.durationMin === null ? '—' : value(training.summary.durationMin / 60),
+          unit: 'h',
+        },
+        { label: '专项训练距离', amount: value(training.summary.distanceKm), unit: 'km' },
+        { label: '专项训练课次', amount: String(training.summary.sessionCount), unit: '课次' },
+        { label: '专项训练负荷', amount: value(training.summary.load), unit: 'AU' },
+      ]
+    : [];
+  return (
+    <PageContainer className="professional-overview training-dashboard-page special-dashboard-page">
+      <PageHeader
+        variant="dashboard"
+        className="overview-page-heading"
+        title="专项训练"
+        filters={filters}
+        filterActions={
+          <>
+            <button type="button" className="primary-button" onClick={onPlanOpen}>
+              训练计划
+            </button>
+            {selectedAthlete && (
+              <button type="button" className="secondary-button" onClick={() => setSelectedAthleteId(null)}>
+                当前运动员：{selectedAthlete.name} · 清除
+              </button>
+            )}
+          </>
+        }
+      />
+      {!current ? (
+        <ContentState
+          kind="loading"
+          title="正在同步专项训练数据"
+          icon={<Activity className="spin" />}
+        />
+      ) : current.error ? (
+        <ContentState
+          kind="error"
+          title="专项训练数据加载失败"
+          description={current.error}
+          action={
+            <button className="secondary-button" onClick={() => setRetry((count) => count + 1)}>
+              重试
+            </button>
+          }
+        />
+      ) : (
+        training && (
+          <>
+            <SectionHeader title="专项数据概览" description={`${scope} · ${from} 至 ${to}`} />
+            <section className="training-dashboard-metrics" aria-label="专项重要数据">
+              {metricItems.map((item) => (
+                <AppCard key={item.label} variant="compact" className="training-dashboard-metric">
+                  <span>{item.label}</span>
+                  <strong>
+                    {item.amount}
+                    <small>{item.unit}</small>
+                  </strong>
+                  {selectedAthlete && teamTraining && (
+                    <em>{`团队口径 ${item.label === '专项训练时长' ? value(teamTraining.summary.durationMin === null ? null : teamTraining.summary.durationMin / 60) : item.label === '专项训练距离' ? value(teamTraining.summary.distanceKm) : item.label === '专项训练课次' ? teamTraining.summary.sessionCount : value(teamTraining.summary.load)}${item.unit ? ` ${item.unit}` : ''}`}</em>
+                  )}
+                </AppCard>
+              ))}
+            </section>
+            <section className="special-analysis-grid" aria-label="专项训练量与强度分析">
+            <ChartCard className="special-wide-card" title="专项训练量统计" description="柱状：训练时长 · 折线：训练距离">
+              <EChart option={volumeOption(training, from, to, !training.days.some((day) => day.durationMin !== null || day.distanceKm !== null))} label="专项训练时长与距离趋势" isPlaceholder={!training.days.some((day) => day.durationMin !== null || day.distanceKm !== null)} />
+            </ChartCard>
+            <ChartCard title="专项训练强度占比" description="按原始强度分区统计有效时长，不要求额外选择体系">
+              <>
+                  <EChart option={intensityOption(intensityAnalytics ?? training, !displayedIntensity.some((row) => (row.durationMin ?? 0) > 0))} label="专项训练强度时长占比" isPlaceholder={!displayedIntensity.some((row) => (row.durationMin ?? 0) > 0)} />
+                  {training.summary.sessionCount > 0 && (
+                  <div className="table-scroll">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>强度分区</th>
+                          <th>时长（min）</th>
+                          <th>占比</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {displayedIntensity.map((row) => (
+                          <tr key={row.name}>
+                            <td>{row.name}</td>
+                            <td>{value(row.durationMin)}</td>
+                            <td>{value(row.percentage)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  )}
+              </>
+            </ChartCard>
+            <ChartCard title="专项训练课占比" description="按统一训练内容字典统计专项课次">
+              <>
+                  <EChart option={contentOption(training, !training.content.length)} label="专项训练内容课次分布" isPlaceholder={!training.content.length} />
+                  {!!training.content.length && (
+                  <div className="table-scroll">
+                    <table className="data-table">
+                      <thead>
+                        <tr>
+                          <th>训练内容</th>
+                          <th>课次数</th>
+                          <th>占比</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {training.content.map((row) => (
+                          <tr key={row.name}>
+                            <td>{row.name}</td>
+                            <td>{row.count}</td>
+                            <td>{value(row.percentage)}%</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  )}
+              </>
+            </ChartCard>
+            <ChartCard
+              title="专项训练负荷分析"
+              description={`累计专项负荷 ${value(training.summary.load)} AU · 有效时长与 RPE 覆盖 ${training.summary.loadSampleCount}/${training.summary.sessionCount} 课次`}
+            >
+              <EChart option={loadOption(training, from, to, !training.days.some((day) => day.load !== null))} label="每日专项SRPE负荷趋势" isPlaceholder={!training.days.some((day) => day.load !== null)} />
+            </ChartCard>
+            <ChartCard title="周训练量变化" description="自然周按周一归组；边界周仅含所选周期，缺失不补零，部分缺失按已记录值合计">
+              <EChart option={specialWeeklyOption(training.days, from, to)} label="每周专项时长与距离" isPlaceholder={!training.days.some(day => day.durationMin !== null || day.distanceKm !== null)} />
+            </ChartCard>
+            {selectedAthlete && teamTraining && <ChartCard title="个人与队伍平均对照" description="同周期内各运动员有效累计值的均值；缺失者不计入分母">
+              <div className="table-scroll"><table className="data-table"><thead><tr><th>指标</th><th>个人</th><th>队伍均值</th></tr></thead><tbody>
+                <tr><th>时长（h）</th><td>{value(training.summary.durationMin === null ? null : training.summary.durationMin / 60)}</td><td>{value(mean('durationMin') === null ? null : mean('durationMin')! / 60)}</td></tr>
+                <tr><th>距离（km）</th><td>{value(training.summary.distanceKm)}</td><td>{value(mean('distanceKm'))}</td></tr>
+                <tr><th>SRPE负荷（AU）</th><td>{value(training.summary.load)}</td><td>{value(mean('load'))}</td></tr>
+              </tbody></table></div>
+            </ChartCard>}
+            </section>
+
+            {selectedAthlete && (
+              <ChartCard title="专项测试表现" description="当前周期最新专项测试与团队均值对照">
+                {payload?.specialTestComparison?.athlete ? (
+                  <p>
+                    {payload.specialTestComparison.athlete.testDate} · {payload.specialTestComparison.athlete.distanceM}m · {payload.specialTestComparison.athlete.boatClass} · 成绩 {value(payload.specialTestComparison.athlete.bestMs / 1000, 2)}s · 团队均值 {value(payload.specialTestComparison.teamAverage === null ? null : payload.specialTestComparison.teamAverage / 1000, 2)}s · 差异 {value(payload.specialTestComparison.deltaMs === null ? null : payload.specialTestComparison.deltaMs / 1000, 2)}s
+                  </p>
+                ) : (
+                  empty('当前周期暂无可对照的专项测试成绩')
+                )}
+              </ChartCard>
+            )}
+            <ChartCard title="运动员" description={`当前范围共 ${athletes.length} 名运动员 · 默认显示约5条`}>
+              <AthleteAnalysisSelector
+                athletes={athletes.map((athlete) => ({ ...athlete, specialties: '' }))}
+                selectedAthleteId={selectedAthleteId}
+                onSelect={setSelectedAthleteId}
+                onClear={() => setSelectedAthleteId(null)}
+                renderSummary={(athlete) => <span className="athlete-analysis-selector-meta">课次 {athlete.summary?.sessionCount ?? '—'} · 时长 {athlete.summary?.durationMin == null ? '—' : `${value(athlete.summary.durationMin / 60)} h`} · 距离 {athlete.summary?.distanceKm == null ? '—' : `${value(athlete.summary.distanceKm)} km`} · 负荷 {value(athlete.summary?.load ?? null)} AU</span>}
+              />
+            </ChartCard>
+          </>
+        )
+      )}
+      {showCustomTestTrend && (
+        teamId !== null && selectedAthleteId !== null
+          ? <CustomTestTrendCard key={`${project}:${teamId}:${selectedAthleteId}`} project={project} teamId={teamId} athleteId={selectedAthleteId} from={from} to={to} />
+          : <ChartCard title="自定义指标趋势">
+              <ContentState kind="empty" title={teamId === null ? '先在上方选择队伍' : '先在上方选择运动员'} />
+            </ChartCard>
+      )}
+      {showCustomTestTrend && teamId !== null && selectedAthleteId !== null && (
+        <CustomTrainingDetailsCard key={`${project}:${teamId}:${selectedAthleteId}`} project={project}
+          teamId={teamId} athleteId={selectedAthleteId} from={from} to={to} />
+      )}
+      {teamTrainingStats && (
+        <Suspense fallback={<ContentState kind="loading" title="正在打开队伍训练统计" />}>
+          <TeamTrainingStats
+            key={`${project}:${teamTrainingStats.teamId}:${teamTrainingStats.date ?? ''}`}
+            project={project}
+            teamId={teamTrainingStats.teamId}
+            initialDate={teamTrainingStats.date}
+            focusOnOpen={teamTrainingStats.focus && Boolean(current)}
+            onImport={teamTrainingStats.onImport}
+          />
+        </Suspense>
+      )}
+      {projectCapability(project) && <SpecialChampionModel key={project} project={project} />}
+    </PageContainer>
+  );
 }

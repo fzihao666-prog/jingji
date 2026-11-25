@@ -1,0 +1,93 @@
+.physical-champion {
+  min-width: 0;
+}
+
+.physical-champion-toolbar,
+.physical-champion-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-block: 0.75rem;
+}
+
+.physical-champion-toolbar select,
+.physical-champion-table input {
+  max-width: 100%;
+  padding: 0.5rem;
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+  background: var(--paper);
+  color: var(--ink);
+}
+
+.physical-champion-note {
+  color: var(--muted);
+  font-size: 0.8rem;
+  line-height: 1.6;
+}
+
+.physical-champion-chart {
+  height: 20rem;
+  width: 100%;
+  min-width: 0;
+}
+
+.physical-champion-table-wrap {
+  overflow-x: auto;
+  max-width: 100%;
+}
+
+.physical-champion-table {
+  width: 100%;
+  border-collapse: collapse;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.physical-champion-table th,
+.physical-champion-table td {
+  text-align: center;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--line);
+}
+
+.physical-champion-table th:first-child {
+  position: sticky;
+  left: 0;
+  background: var(--paper);
+  text-align: left;
+}
+
+.physical-champion-table th small {
+  display: block;
+  margin-top: 0.25rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+  font-weight: 400;
+}
+
+.physical-champion-table tbody tr:first-child td {
+  color: var(--river);
+  font-weight: 700;
+}
+
+.physical-champion-table input {
+  width: 6rem;
+}
+
+.physical-champion :focus-visible {
+  outline: 2px solid var(--river);
+  outline-offset: 3px;
+}
+
+@media (width <= 520px) {
+  .physical-champion-toolbar select {
+    width: 100%;
+  }
+
+  .physical-champion-chart {
+    height: 18rem;
+  }
+}

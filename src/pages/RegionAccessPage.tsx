@@ -1,4 +1,19 @@
 import {
+  accountCredentialsSchema,
+  ACCOUNT_USERNAME_HINT,
+  INITIAL_ACCOUNT_PASSWORD_HINT,
+} from '../../shared/account-credentials';
+import {
+  getAccountCities,
+  getAccountCounties,
+  validateAccountAreas,
+} from '../../shared/account-regions';
+import {
+  athleteAccountAreaComplete,
+  athleteAccountAreaForEdit,
+} from '../../shared/athlete-account-area';
+import { ACCOUNT_PASSWORD_HINT, accountPasswordSchema } from '../../shared/account-password';
+import {
   Activity,
   Check,
   ChevronRight,
@@ -6,76 +21,119 @@ import {
   FileClock,
   Fingerprint,
   GitBranch,
+  KeyRound,
   MapPinned,
   Plus,
   Save,
   ShieldCheck,
+  Trash2,
   UserRoundPlus,
   UsersRound,
-  X
+  X,
 } from 'lucide-react';
-import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { EditableName } from '../components/EditableName';
+import { ObserverTeamSelector } from '../components/ObserverTeamSelector';
 import { PageContainer, PageHeader } from '../components/PageLayout';
 import type {
   AccessAccount,
   AccessPayload,
-  AreaLevel,
   AreaPermission,
   AuditLog,
   Role,
+  ProjectTeam,
   TeamPermission,
-  User
+  User,
 } from '../types';
-import { AREA_LEVEL_META, ROLE_META, ROLES, canManageRole } from '../../shared/access';
+import { ROLE_META, ROLES, canManageRole } from '../../shared/access';
+import { DEFAULT_PROJECT, normalizeProject, projectLabel } from '../../shared/projects';
 
 const blankArea = (): AreaPermission => ({
-  areaLevel: 'province',
-  province: '四川',
+  areaLevel: 'county',
+  province: '',
   city: '',
-  county: ''
+  county: '',
 });
 
-const blankTeam = (): TeamPermission => ({ project: '赛艇', team: '' });
-
-function areaLabel(area: AreaPermission) {
-  if (area.areaLevel === 'national') return '全国';
-  return [area.province, area.city, area.county].filter(Boolean).join(' / ');
-}
+const blankTeam = (): TeamPermission => ({ project: DEFAULT_PROJECT, team: '' });
 
 function compactScope(account: AccessAccount) {
-  const areas = account.areas.map(areaLabel).join('、');
-  const projects = account.projects.includes('*') ? '全部项目' : account.projects.join('、');
-  return `${areas} · ${projects}`;
+  const projects = account.projects.includes('*')
+    ? '全部项目'
+    : account.projects.map((project) => projectLabel(project)).join('、');
+  return projects;
 }
 
 const auditLabels: Record<string, string> = {
   CREATE_ACCOUNT: '创建账号',
+  RESET_ACCOUNT_PASSWORD: '重置账号密码',
   UPDATE_ACCOUNT_ACCESS: '调整账号权限',
+  COMPLETE_ATHLETE_AREA: '完善运动员行政归属',
   ENABLE_ACCOUNT: '启用账号',
   DISABLE_ACCOUNT: '停用账号',
+  DELETE_ACCOUNT: '删除账号',
   UPDATE_NAME: '修改姓名',
   UPDATE_ATHLETE_NAME: '修改运动员姓名',
   UPDATE_REGIONAL_ACCESS: '调整区域权限',
-  CREATE_REGIONAL_MANAGER: '创建区域负责人',
+  CREATE_REGIONAL_MANAGER: '创建业务负责人',
   UPDATE_ASSIGNMENT: '调整人员关系',
+  UPDATE_ATHLETE_PARENT: '调整运动员上级',
+  UPDATE_REGISTRATION_TEAM: '更正注册队伍',
+  VERIFY_REGISTRATION_TEAM: '核实注册入队',
+  REJECT_REGISTRATION_TEAM: '拒绝注册入队',
   APPROVE_REGISTRATION: '通过注册申请',
+  AUTO_APPROVE_REGISTRATION: '注册自动开通',
   REJECT_REGISTRATION: '拒绝注册申请',
-  IMPORT_RECORDS: '导入训练数据'
+  UPDATE_REGISTRATION_APPROVAL: '调整注册审核开关',
+  IMPORT_RECORDS: '导入训练数据',
 };
 
-export function RegionAccessPage({ user }: { user: User }) {
+export function RegionAccessPage({ user, preferredAccountId, onAccountDeleted }: {
+  user: User;
+  preferredAccountId?: number;
+  onAccountDeleted?: () => void;
+}) {
   const [payload, setPayload] = useState<AccessPayload | null>(null);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [accountSearch, setAccountSearch] = useState('');
   const [role, setRole] = useState<Role>('ATL');
   const [parentUserId, setParentUserId] = useState<number>(user.id);
   const [areas, setAreas] = useState<AreaPermission[]>([blankArea()]);
-  const [projects, setProjects] = useState<string[]>(['赛艇']);
   const [teams, setTeams] = useState<TeamPermission[]>([blankTeam()]);
+  const [areaValidationError, setAreaValidationError] = useState<{
+    index: number;
+    field: 'province' | 'city' | 'county';
+  } | null>(null);
+  const areaSelectRefs = useRef<
+    Array<Partial<Record<keyof AreaPermission, HTMLSelectElement | null>>>
+  >([]);
+  const teamSelectRefs = useRef<Array<HTMLSelectElement | null>>([]);
+  const [teamOptions, setTeamOptions] = useState<ProjectTeam[]>([]);
+  const [createObserverTeams, setCreateObserverTeams] = useState<TeamPermission[]>([]);
   const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [auditPage, setAuditPage] = useState(0);
   const [createOpen, setCreateOpen] = useState(false);
+  const [createError, setCreateError] = useState('');
+  const [createInvalid, setCreateInvalid] = useState<'username' | 'password' | 'confirm' | null>(
+    null
+  );
+  const restoreCreateFocusRef = useRef(false);
+  const [createConfirm, setCreateConfirm] = useState('');
+  const createNameRef = useRef<HTMLInputElement>(null);
+  const createUsernameRef = useRef<HTMLInputElement>(null);
+  const createPasswordRef = useRef<HTMLInputElement>(null);
+  const createConfirmRef = useRef<HTMLInputElement>(null);
+  const createTriggerRef = useRef<HTMLButtonElement>(null);
   const [loading, setLoading] = useState(true);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetPassword, setResetPassword] = useState('');
+  const [resetConfirm, setResetConfirm] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetBusy, setResetBusy] = useState(false);
+  const resetTriggerRef = useRef<HTMLButtonElement>(null);
+  const resetInputRef = useRef<HTMLInputElement>(null);
+  const resetConfirmRef = useRef<HTMLInputElement>(null);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -85,39 +143,55 @@ export function RegionAccessPage({ user }: { user: User }) {
     password: '',
     role: 'ATL' as Role,
     parentUserId: user.id,
-    areaLevel: 'county' as AreaLevel,
-    province: '四川',
-    city: '成都市',
-    county: '武侯区',
-    project: '赛艇',
+    province: '',
+    city: '',
+    county: '',
+    project: DEFAULT_PROJECT as string,
     team: '',
-    gender: '男'
+    gender: '男',
   });
+
+  useEffect(() => {
+    if (!createOpen && !saving && !loading && restoreCreateFocusRef.current) {
+      restoreCreateFocusRef.current = false;
+      createTriggerRef.current?.focus();
+    }
+  }, [createOpen, saving, loading]);
 
   const selected = payload?.accounts.find((account) => account.id === selectedId) || null;
   const manageableRoles = ROLES.filter((item) => canManageRole(user.role, item));
+  const accountQuery = accountSearch.trim().toLowerCase();
   const accountGroups = useMemo(() => {
     if (!payload) return [];
+    const accounts = accountQuery
+      ? payload.accounts.filter((account) =>
+          [account.displayName, account.username, account.accountCode].some((value) =>
+            value.toLowerCase().includes(accountQuery)
+          )
+        )
+      : payload.accounts;
     return payload.meta.hierarchy
       .map((group) => ({
         roles: group,
         label: group.map((item) => payload.meta.roles[item].label).join(' / '),
-        accounts: payload.accounts.filter((account) => group.includes(account.role))
+        accounts: accounts.filter((account) => group.includes(account.role)),
       }))
       .filter((group) => group.accounts.length);
-  }, [payload]);
+  }, [payload, accountQuery]);
 
   const load = async (preferredId?: number) => {
     setLoading(true);
     setError('');
     try {
-      const result = await api.accessAccounts();
+      const [result, directory] = await Promise.all([api.accessAccounts(), api.teams()]);
+      setTeamOptions(directory.teams);
       setPayload(result);
-      const nextId = preferredId && result.accounts.some((account) => account.id === preferredId)
-        ? preferredId
-        : selectedId && result.accounts.some((account) => account.id === selectedId)
-          ? selectedId
-          : result.accounts[0]?.id || null;
+      const nextId =
+        preferredId && result.accounts.some((account) => account.id === preferredId)
+          ? preferredId
+          : selectedId && result.accounts.some((account) => account.id === selectedId)
+            ? selectedId
+            : result.accounts[0]?.id || null;
       setSelectedId(nextId);
       const next = result.accounts.find((account) => account.id === nextId);
       if (next) applyAccount(next);
@@ -132,53 +206,110 @@ export function RegionAccessPage({ user }: { user: User }) {
     }
   };
 
-  useEffect(() => { void load(); }, []);
+  useEffect(() => {
+    void load(preferredAccountId);
+  }, [preferredAccountId]);
 
   const applyAccount = (account: AccessAccount) => {
+    setAreaValidationError(null);
+    setResetOpen(false);
+    setResetPassword('');
+    setResetConfirm('');
+    setResetError('');
     setRole(account.role);
     setParentUserId(account.parentUserId || user.id);
-    setAreas(account.areas.map((area) => ({ ...area })));
-    setProjects([...account.projects]);
+    setAreas(
+      account.role === 'ATL'
+        ? [athleteAccountAreaForEdit(account.areas)]
+        : account.areas.map((area) => ({ ...area }))
+    );
     setTeams(account.teams.map((team) => ({ ...team })));
     setMessage('');
     setError('');
   };
 
   const chooseAccount = (account: AccessAccount) => {
+    if (resetBusy) return;
     setSelectedId(account.id);
     applyAccount(account);
   };
 
   const updateArea = (index: number, key: keyof AreaPermission, value: string) => {
-    setAreas((current) => current.map((area, itemIndex) => {
-      if (itemIndex !== index) return area;
-      const next = { ...area, [key]: value } as AreaPermission;
-      if (key === 'areaLevel' && value === 'national') return { areaLevel: 'national', province: '', city: '', county: '' };
-      if (key === 'areaLevel' && value === 'province') return { ...next, city: '', county: '' };
-      if (key === 'areaLevel' && value === 'city') return { ...next, county: '' };
-      return next;
-    }));
+    if (areaValidationError) setError('');
+    setAreaValidationError(null);
+    setAreas((current) =>
+      current.map((area, itemIndex) => {
+        if (itemIndex !== index) return area;
+        const next = { ...area, [key]: value } as AreaPermission;
+        if (key === 'province') return { ...next, city: '', county: '' };
+        if (key === 'city') return { ...next, county: '' };
+        return next;
+      })
+    );
   };
 
-  const toggleProject = (project: string) => {
-    setProjects((current) => {
-      if (project === '*') return current.includes('*') ? ['赛艇'] : ['*'];
-      const withoutAll = current.filter((item) => item !== '*');
-      return withoutAll.includes(project)
-        ? withoutAll.filter((item) => item !== project)
-        : [...withoutAll, project];
-    });
-  };
+  const availableTeamNames = (project: string) => [
+    ...new Set(
+      teamOptions
+        .filter((team) => project === '*' || team.project === normalizeProject(project))
+        .map((team) => team.name)
+    ),
+  ];
+
+  const allowsAllTeams = (project: string) =>
+    Boolean(
+      (payload?.current.projects.includes('*') ||
+        payload?.current.projects.some(
+          (allowed) => normalizeProject(allowed) === normalizeProject(project)
+        )) &&
+      payload?.current.teams.some(
+        (scope) =>
+          (scope.project === '*' ||
+            normalizeProject(scope.project) === normalizeProject(project)) &&
+          scope.team === '*'
+      )
+    );
 
   const save = async () => {
     if (!selected) return;
+    const athleteAreas =
+      selected.role === 'ATL' &&
+      JSON.stringify(areas[0]) !== JSON.stringify(athleteAccountAreaForEdit(selected.areas))
+        ? areas.filter((area) => area.province)
+        : [];
+    const areaError = validateAccountAreas(athleteAreas, selected.areas);
+    if (areaError) {
+      setError(areaError);
+      const index = areas.findIndex((area) => validateAccountAreas([area], selected.areas));
+      const area = areas[index];
+      const field = !payload?.meta.provinces.includes(area.province)
+        ? 'province'
+        : !getAccountCities(area.province).includes(area.city)
+          ? 'city'
+          : 'county';
+      setAreaValidationError({ index, field });
+      areaSelectRefs.current[index]?.[field]?.focus();
+      return;
+    }
+    const emptyTeamIndex = teams.findIndex((team) => !team.team);
+    if (emptyTeamIndex !== -1) {
+      setError('请为每条队伍范围选择队伍。');
+      teamSelectRefs.current[emptyTeamIndex]?.focus();
+      return;
+    }
     setSaving(true);
     setMessage('');
     setError('');
     try {
-      const result = await api.updateAccessAccount(selected.id, { role, parentUserId, areas, projects, teams });
-      setMessage(result.message);
+      const result = await api.updateAccessAccount(selected.id, {
+        role,
+        parentUserId,
+        areas: athleteAreas,
+        projects: [...new Set(teams.map((team) => team.project))],
+        teams,
+      });
       await load(selected.id);
+      setMessage(result.message);
     } catch (saveError) {
       setError(saveError instanceof Error ? saveError.message : '权限保存失败。');
     } finally {
@@ -186,44 +317,147 @@ export function RegionAccessPage({ user }: { user: User }) {
     }
   };
 
+  const closeCreate = () => {
+    if (saving) return;
+    setCreateOpen(false);
+    setCreateObserverTeams([]);
+    setCreateConfirm('');
+    setCreateError('');
+    setCreateInvalid(null);
+    setCreateForm((current) => ({ ...current, displayName: '', username: '', password: '' }));
+    restoreCreateFocusRef.current = true;
+  };
+
   const createAccount = async (event: FormEvent) => {
     event.preventDefault();
+    if (saving || resetBusy) return;
+    setCreateError('');
+    setCreateInvalid(null);
+    const credentials = accountCredentialsSchema.safeParse({
+      username: createForm.username,
+      password: createForm.password,
+    });
+    if (!credentials.success) {
+      const usernameInvalid = credentials.error.issues.some(
+        (issue) => issue.path[0] === 'username'
+      );
+      setCreateInvalid(usernameInvalid ? 'username' : 'password');
+      setCreateError(usernameInvalid ? ACCOUNT_USERNAME_HINT : INITIAL_ACCOUNT_PASSWORD_HINT);
+      (usernameInvalid ? createUsernameRef : createPasswordRef).current?.focus();
+      return;
+    }
+    if (createForm.password !== createConfirm) {
+      setCreateInvalid('confirm');
+      setCreateError('两次输入的初始密码不一致。');
+      createConfirmRef.current?.focus();
+      return;
+    }
     setSaving(true);
     setMessage('');
     setError('');
     const createArea: AreaPermission = {
-      areaLevel: createForm.role === 'ATL' ? 'county' : createForm.areaLevel,
-      province: createForm.areaLevel === 'national' && createForm.role !== 'ATL' ? '' : createForm.province,
-      city: ['city', 'county'].includes(createForm.areaLevel) || createForm.role === 'ATL' ? createForm.city : '',
-      county: createForm.areaLevel === 'county' || createForm.role === 'ATL' ? createForm.county : ''
+      areaLevel: 'county',
+      province: createForm.province,
+      city: createForm.city,
+      county: createForm.county,
     };
+    const createAreas = createForm.role === 'ATL' && createArea.province ? [createArea] : [];
+    const areaError = validateAccountAreas(createAreas);
+    if (areaError) {
+      setCreateError(areaError);
+      setSaving(false);
+      return;
+    }
     try {
       const result = await api.createAccessAccount({
-        username: createForm.username,
-        password: createForm.password,
+        username: credentials.data.username,
+        password: credentials.data.password,
         displayName: createForm.displayName,
         role: createForm.role,
         parentUserId: createForm.parentUserId,
         gender: createForm.role === 'ATL' ? createForm.gender : undefined,
-        areas: [createArea],
-        projects: [createForm.project],
-        teams: [{ project: createForm.project, team: createForm.team }]
+        areas: createAreas,
+        projects:
+          createForm.role === 'OBS'
+            ? [...new Set(createObserverTeams.map((team) => team.project))]
+            : [createForm.project],
+        teams:
+          createForm.role === 'OBS'
+            ? createObserverTeams
+            : [{ project: createForm.project, team: createForm.team }],
       });
       setMessage(result.message);
       setCreateOpen(false);
-      setCreateForm((current) => ({ ...current, displayName: '', username: '', password: '', team: '' }));
+    setCreateObserverTeams([]);
+      setCreateConfirm('');
+      setCreateError('');
+      restoreCreateFocusRef.current = true;
+      setCreateForm((current) => ({
+        ...current,
+        displayName: '',
+        username: '',
+        password: '',
+        team: '',
+      }));
       await load(result.id);
     } catch (createError) {
-      setError(createError instanceof Error ? createError.message : '账号创建失败。');
+      setCreateError(createError instanceof Error ? createError.message : '账号创建失败。');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const closeReset = () => {
+    setResetOpen(false);
+    setResetPassword('');
+    setResetConfirm('');
+    setResetError('');
+    requestAnimationFrame(() => resetTriggerRef.current?.focus());
+  };
+
+  const resetSelectedPassword = async (event: FormEvent) => {
+    event.preventDefault();
+    if (!selected || resetBusy) return;
+    setResetError('');
+    if (!accountPasswordSchema.safeParse(resetPassword).success) {
+      setResetError(ACCOUNT_PASSWORD_HINT);
+      resetInputRef.current?.focus();
+      return;
+    }
+    if (resetPassword !== resetConfirm) {
+      setResetError('两次输入的新密码不一致。');
+      resetConfirmRef.current?.focus();
+      return;
+    }
+    setResetBusy(true);
+    setError('');
+    setMessage('');
+    try {
+      const result = await api.resetAccessAccountPassword(selected.id, resetPassword);
+      setResetBusy(false);
+      closeReset();
+      setMessage(result.message);
+      if (user.role === 'DMD') {
+        try {
+          setLogs((await api.auditLogs()).logs);
+        } catch {
+          setError('密码已重置，但日志列表刷新失败，请刷新页面查看。');
+        }
+      }
+    } catch (resetFailure) {
+      setResetError(
+        resetFailure instanceof Error ? resetFailure.message : '密码重置失败，请重试。'
+      );
+    } finally {
+      setResetBusy(false);
     }
   };
 
   const setStatus = async () => {
     if (!selected) return;
     const nextActive = !selected.active;
-    if (!nextActive && !window.confirm(`确认停用 ${selected.displayName}？该账号会立即退出登录。`)) return;
+    if (!nextActive && !window.confirm(`确认停用 ${selected.displayName}？该账号会立即退出登录。`))
+      return;
     setSaving(true);
     try {
       const result = await api.setAccessAccountStatus(selected.id, nextActive);
@@ -231,6 +465,24 @@ export function RegionAccessPage({ user }: { user: User }) {
       await load(selected.id);
     } catch (statusError) {
       setError(statusError instanceof Error ? statusError.message : '账号状态更新失败。');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const deleteAccount = async () => {
+    if (!selected || !canManageRole(user.role, selected.role) || saving || resetBusy) return;
+    if (!window.confirm(`确认永久删除 ${selected.displayName} 的账号？账号和关联人员将从管理名册移除，历史业务记录会保留。`)) return;
+    setSaving(true);
+    setMessage('');
+    setError('');
+    try {
+      const result = await api.deleteAccessAccount(selected.id);
+      onAccountDeleted?.();
+      await load();
+      setMessage(result.message);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : '账号删除失败，请重试。');
     } finally {
       setSaving(false);
     }
@@ -245,73 +497,444 @@ export function RegionAccessPage({ user }: { user: User }) {
   const visibleParentOptions = (targetRole: Role) =>
     payload?.possibleParents.filter((parent) => canManageRole(parent.role, targetRole)) || [];
 
+  const auditPageSize = 6;
+  const auditPageCount = Math.max(1, Math.ceil(logs.length / auditPageSize));
+  const currentAuditPage = Math.min(auditPage, auditPageCount - 1);
+  const visibleLogs = logs.slice(
+    currentAuditPage * auditPageSize,
+    (currentAuditPage + 1) * auditPageSize
+  );
+
   const canEditAccess = user.role !== 'SCC';
+  const feedbackInFooter = canEditAccess && Boolean(selected);
   const activeCount = payload?.accounts.filter((account) => account.active).length || 0;
-  const areaCount = new Set(payload?.accounts.flatMap((account) => account.areas.map(areaLabel))).size;
 
   return (
     <PageContainer className="access-center-page">
-      <PageHeader variant="compact" className="access-heading" eyebrow="ACCOUNT AUTHORITY" title="账号权限" actions={<div className="authority-formula"><Fingerprint size={18} /><span>角色</span><i>×</i><span>行政区域</span><i>×</i><span>项目 / 队伍</span></div>}/>
+      <PageHeader
+        variant="compact"
+        className="access-heading"
+        title="账号权限"
+        actions={
+          <div className="authority-formula">
+            <Fingerprint size={18} />
+            <span>角色</span>
+            <i>×</i>
+            <span>项目 / 队伍</span>
+          </div>
+        }
+      />
 
       <section className="access-summary">
-        <div><UsersRound /><span>可管理账号<strong>{payload?.accounts.length || 0}</strong></span></div>
-        <div><CirclePower /><span>正常启用<strong>{activeCount}</strong></span></div>
-        <div><MapPinned /><span>授权区域<strong>{areaCount}</strong></span></div>
-        <div><ShieldCheck /><span>本级身份<strong>{payload?.current.roleLabel || ROLE_META[user.role].label}</strong></span></div>
+        <div>
+          <UsersRound />
+          <span>
+            可管理账号<strong>{payload?.accounts.length || 0}</strong>
+          </span>
+        </div>
+        <div>
+          <CirclePower />
+          <span>
+            正常启用<strong>{activeCount}</strong>
+          </span>
+        </div>
+        <div>
+          <ShieldCheck />
+          <span>
+            本级身份<strong>{payload?.current.roleLabel || ROLE_META[user.role].label}</strong>
+          </span>
+        </div>
       </section>
 
-      {message && <div className="message-banner success"><Check size={18} />{message}</div>}
-      {error && <div className="message-banner error"><X size={18} />{error}</div>}
+      {!feedbackInFooter && (
+        <>
+          <div role="status" aria-live="polite">
+            {message && (
+              <div className="message-banner success">
+                <Check size={18} aria-hidden="true" />
+                {message}
+              </div>
+            )}
+          </div>
+          {error && (
+            <div className="message-banner error" id="access-error" role="alert">
+              <X size={18} />
+              {error}
+            </div>
+          )}
+        </>
+      )}
 
       <div className="access-workspace">
         <aside className="account-tree">
           <div className="account-tree-head">
-            <div><span>组织账号</span><strong>本级及下级</strong></div>
-            <button onClick={() => setCreateOpen((current) => !current)}><Plus size={16} />新增</button>
+            <div>
+              <span>组织账号</span>
+              <strong>本级及下级</strong>
+            </div>
+            <button
+              ref={createTriggerRef}
+              type="button"
+              disabled={loading || saving || resetBusy || !manageableRoles.length}
+              aria-expanded={createOpen}
+              aria-controls="account-create-form"
+              onClick={() => {
+                if (createOpen) {
+                  closeCreate();
+                  return;
+                }
+                setCreateForm((current) => ({
+                  ...current,
+                  displayName: '',
+                  username: '',
+                  password: '',
+                }));
+                setCreateConfirm('');
+                setCreateError('');
+                setCreateInvalid(null);
+                setCreateOpen(true);
+                requestAnimationFrame(() => createNameRef.current?.focus());
+              }}
+            >
+              <Plus size={16} />
+              新增
+            </button>
           </div>
 
           {createOpen && (
-            <form className="account-create-card" onSubmit={createAccount}>
-              <div className="create-card-title"><UserRoundPlus size={18} /><strong>创建下级账号</strong><button type="button" onClick={() => setCreateOpen(false)}><X size={15} /></button></div>
-              <div className="create-grid">
-                <label><span>姓名</span><input value={createForm.displayName} onChange={(event) => setCreateForm({ ...createForm, displayName: event.target.value })} required /></label>
-                <label><span>角色</span><select value={createForm.role} onChange={(event) => {
-                  const nextRole = event.target.value as Role;
-                  const parents = visibleParentOptions(nextRole);
-                  setCreateForm({ ...createForm, role: nextRole, areaLevel: nextRole === 'ATL' ? 'county' : createForm.areaLevel, parentUserId: parents[0]?.id || user.id });
-                }}>{manageableRoles.map((item) => <option key={item} value={item}>{ROLE_META[item].label} · {item}</option>)}</select></label>
-                <label><span>登录账号</span><input value={createForm.username} onChange={(event) => setCreateForm({ ...createForm, username: event.target.value.toLowerCase() })} required /></label>
-                <label><span>初始密码</span><input type="password" value={createForm.password} onChange={(event) => setCreateForm({ ...createForm, password: event.target.value })} required /></label>
-                <label className="wide"><span>上级账号</span><select value={createForm.parentUserId} onChange={(event) => setCreateForm({ ...createForm, parentUserId: Number(event.target.value) })}>{visibleParentOptions(createForm.role).map((parent) => <option key={parent.id} value={parent.id}>{parent.displayName} · {parent.roleLabel}</option>)}</select></label>
-                {createForm.role !== 'ATL' && <label><span>区域级别</span><select value={createForm.areaLevel} onChange={(event) => setCreateForm({ ...createForm, areaLevel: event.target.value as AreaLevel })}>{Object.entries(AREA_LEVEL_META).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}</select></label>}
-                {(createForm.areaLevel !== 'national' || createForm.role === 'ATL') && <label><span>省份</span><select value={createForm.province} onChange={(event) => setCreateForm({ ...createForm, province: event.target.value })}>{payload?.meta.provinces.map((province) => <option key={province}>{province}</option>)}</select></label>}
-                {(['city', 'county'].includes(createForm.areaLevel) || createForm.role === 'ATL') && <label><span>城市</span><input value={createForm.city} onChange={(event) => setCreateForm({ ...createForm, city: event.target.value })} required /></label>}
-                {(createForm.areaLevel === 'county' || createForm.role === 'ATL') && <label><span>区县</span><input value={createForm.county} onChange={(event) => setCreateForm({ ...createForm, county: event.target.value })} required /></label>}
-                <label><span>项目</span><select value={createForm.project} onChange={(event) => setCreateForm({ ...createForm, project: event.target.value })}>{payload?.meta.projects.map((project) => <option key={project}>{project}</option>)}</select></label>
-                <label><span>队伍</span><input value={createForm.team} onChange={(event) => setCreateForm({ ...createForm, team: event.target.value })} required /></label>
-                {createForm.role === 'ATL' && <label><span>性别</span><select value={createForm.gender} onChange={(event) => setCreateForm({ ...createForm, gender: event.target.value })}><option>男</option><option>女</option></select></label>}
+            <form
+              id="account-create-form"
+              className="account-create-card"
+              autoComplete="off"
+              aria-label="创建下级账号"
+              onSubmit={createAccount}
+            >
+              <div className="create-card-title">
+                <UserRoundPlus size={18} />
+                <strong>创建下级账号</strong>
+                <button
+                  type="button"
+                  onClick={closeCreate}
+                  disabled={saving}
+                  aria-label="关闭新增账号"
+                >
+                  <X size={15} />
+                </button>
               </div>
-              <button className="primary-button" disabled={saving}>{saving ? '创建中…' : '创建并绑定权限'}</button>
+              {createError && (
+                <p id="account-create-error" className="message-banner error" role="alert">
+                  {createError}
+                </p>
+              )}
+              <fieldset className="create-grid" disabled={saving}>
+                <legend className="visually-hidden">账号信息与授权范围</legend>
+                <label>
+                  <span>姓名</span>
+                  <input
+                    ref={createNameRef}
+                    autoComplete="off"
+                    maxLength={80}
+                    value={createForm.displayName}
+                    onChange={(event) =>
+                      setCreateForm({ ...createForm, displayName: event.target.value })
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  <span>角色</span>
+                  <select
+                    value={createForm.role}
+                    onChange={(event) => {
+                      const nextRole = event.target.value as Role;
+                      const parents = visibleParentOptions(nextRole);
+                      setCreateForm({
+                        ...createForm,
+                        role: nextRole,
+                        team: nextRole === 'ATL' && createForm.team === '*' ? '' : createForm.team,
+                        parentUserId: parents[0]?.id || user.id,
+                      });
+                    }}
+                  >
+                    {manageableRoles.map((item) => (
+                      <option key={item} value={item}>
+                        {ROLE_META[item].label} · {item}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="wide">
+                  <span>登录账号</span>
+                  <input
+                    ref={createUsernameRef}
+                    name="new-account-username"
+                    autoComplete="off"
+                    autoCapitalize="none"
+                    spellCheck={false}
+                    minLength={4}
+                    maxLength={24}
+                    pattern="[a-zA-Z0-9_]{4,24}"
+                    placeholder="请设置新的登录账号"
+                    aria-invalid={createInvalid === 'username' || undefined}
+                    aria-describedby={`account-username-hint${createInvalid === 'username' ? ' account-create-error' : ''}`}
+                    value={createForm.username}
+                    onChange={(event) =>
+                      setCreateForm({ ...createForm, username: event.target.value.toLowerCase() })
+                    }
+                    required
+                  />
+                </label>
+                <p id="account-username-hint" className="wide create-field-hint">
+                  {ACCOUNT_USERNAME_HINT}
+                </p>
+                <label>
+                  <span>初始密码</span>
+                  <input
+                    type="password"
+                    ref={createPasswordRef}
+                    name="new-account-password"
+                    autoComplete="new-password"
+                    minLength={8}
+                    maxLength={72}
+                    placeholder="请设置初始密码"
+                    aria-invalid={createInvalid === 'password' || undefined}
+                    aria-describedby={`account-initial-password-hint${createInvalid === 'password' ? ' account-create-error' : ''}`}
+                    value={createForm.password}
+                    onChange={(event) =>
+                      setCreateForm({ ...createForm, password: event.target.value })
+                    }
+                    required
+                  />
+                </label>
+                <label>
+                  <span>确认初始密码</span>
+                  <input
+                    type="password"
+                    ref={createConfirmRef}
+                    aria-invalid={createInvalid === 'confirm' || undefined}
+                    aria-describedby={
+                      createInvalid === 'confirm' ? 'account-create-error' : undefined
+                    }
+                    name="new-account-password-confirm"
+                    autoComplete="new-password"
+                    value={createConfirm}
+                    onChange={(event) => setCreateConfirm(event.target.value)}
+                    minLength={8}
+                    maxLength={72}
+                    placeholder="再次输入初始密码"
+                    required
+                  />
+                </label>
+                <p id="account-initial-password-hint" className="wide create-field-hint">
+                  {INITIAL_ACCOUNT_PASSWORD_HINT}
+                </p>
+                <label className="wide">
+                  <span>上级账号</span>
+                  <select
+                    value={createForm.parentUserId}
+                    onChange={(event) =>
+                      setCreateForm({ ...createForm, parentUserId: Number(event.target.value) })
+                    }
+                  >
+                    {visibleParentOptions(createForm.role).map((parent) => (
+                      <option key={parent.id} value={parent.id}>
+                        {parent.displayName} · {parent.roleLabel}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {createForm.role === 'ATL' && (
+                  <label>
+                    <span>省份</span>
+                    <select
+                      aria-label="创建账号省份"
+                      value={createForm.province}
+                      onChange={(event) =>
+                        setCreateForm({
+                          ...createForm,
+                          province: event.target.value,
+                          city: '',
+                          county: '',
+                        })
+                      }
+                    >
+                      <option value="">请选择省份</option>
+                      {payload?.meta.provinces.map((province) => (
+                        <option key={province}>{province}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {createForm.role === 'ATL' && (
+                  <label>
+                    <span>城市</span>
+                    <select
+                      aria-label="创建账号城市"
+                      value={createForm.city}
+                      onChange={(event) =>
+                        setCreateForm({ ...createForm, city: event.target.value, county: '' })
+                      }
+                      required={Boolean(createForm.province)}
+                      disabled={!createForm.province}
+                    >
+                      <option value="">请选择城市</option>
+                      {getAccountCities(createForm.province).map((city) => (
+                        <option key={city}>{city}</option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+                {createForm.role === 'ATL' && (
+                  <label>
+                    <span>区县</span>
+                    <select
+                      aria-label="创建账号区县"
+                      value={createForm.county}
+                      onChange={(event) =>
+                        setCreateForm({ ...createForm, county: event.target.value })
+                      }
+                      required={Boolean(createForm.province)}
+                      disabled={!createForm.city}
+                    >
+                      <option value="">请选择区县</option>
+                      {getAccountCounties(createForm.province, createForm.city).map((county) => (
+                        <option key={county.name} value={county.name}>
+                          {county.wholeCity ? '全市（不设区县）' : county.name}
+                          {county.code ? ` · ${county.code}` : ''}
+                        </option>
+                      ))}
+                      {createForm.city &&
+                        !getAccountCounties(createForm.province, createForm.city).length && (
+                          <option disabled>暂无可选区县</option>
+                        )}
+                    </select>
+                  </label>
+                )}
+                {createForm.role === 'OBS' ? (
+                  <ObserverTeamSelector
+                    options={teamOptions}
+                    selected={createObserverTeams}
+                    onChange={setCreateObserverTeams}
+                    disabled={loading || saving}
+                  />
+                ) : (
+                  <>
+                <label>
+                  <span>项目</span>
+                  <select
+                    value={createForm.project}
+                    onChange={(event) =>
+                      setCreateForm({ ...createForm, project: event.target.value, team: '' })
+                    }
+                  >
+                    {payload?.meta.projects.map((project) => (
+                      <option key={project} value={project}>
+                        {projectLabel(project)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label>
+                  <span>队伍</span>
+                  <select
+                    value={createForm.team}
+                        onChange={(event) =>
+                          setCreateForm({ ...createForm, team: event.target.value })
+                        }
+                    required
+                    disabled={loading || saving}
+                  >
+                    <option value="">请选择队伍</option>
+                    {createForm.role !== 'ATL' && allowsAllTeams(createForm.project) && (
+                      <option value="*">全部队伍</option>
+                    )}
+                    {availableTeamNames(createForm.project).map((name) => (
+                      <option key={name} value={name}>
+                        {name}
+                      </option>
+                    ))}
+                    {!availableTeamNames(createForm.project).length && (
+                      <option disabled value="__empty">
+                        该项目暂无可选队伍
+                      </option>
+                    )}
+                  </select>
+                </label>
+                  </>
+                )}
+                {createForm.role === 'ATL' && (
+                  <label>
+                    <span>性别</span>
+                    <select
+                      value={createForm.gender}
+                      onChange={(event) =>
+                        setCreateForm({ ...createForm, gender: event.target.value })
+                      }
+                    >
+                      <option>男</option>
+                      <option>女</option>
+                    </select>
+                  </label>
+                )}
+              </fieldset>
+              <button className="primary-button" disabled={loading || saving || resetBusy}>
+                {saving ? '创建中…' : '创建并绑定权限'}
+              </button>
             </form>
           )}
 
+          <label className="account-tree-search">
+            <span className="visually-hidden">按姓名、登录账号或账号编号搜索</span>
+            <input
+              type="search"
+              placeholder="搜索姓名、登录账号或账号编号"
+              value={accountSearch}
+              onChange={(event) => setAccountSearch(event.target.value)}
+            />
+          </label>
+          <div className="visually-hidden" role="status">
+            {!loading &&
+              accountQuery &&
+              `找到 ${accountGroups.reduce((count, group) => count + group.accounts.length, 0)} 个账号`}
+          </div>
           <div className="account-tree-scroll">
-            {loading ? <div className="access-empty">正在加载账号…</div> : accountGroups.length ? accountGroups.map((group) => (
-              <section className="account-level-group" key={group.roles.join('-')}>
-                <div className="level-label"><span>{group.label}</span><i>{group.accounts.length}</i></div>
-                {group.accounts.map((account) => (
-                  <button key={account.id} className={selectedId === account.id ? 'active' : ''} onClick={() => chooseAccount(account)}>
-                    <span className={`account-avatar role-${account.role.toLowerCase()}`}>{account.displayName.slice(0, 1)}</span>
-                    <span className="account-list-copy">
-                      <strong>{account.displayName}<i>{account.role}</i></strong>
-                      <small>{compactScope(account)}</small>
-                    </span>
-                    {!account.active && <em>停用</em>}
-                    <ChevronRight size={16} />
-                  </button>
-                ))}
-              </section>
-            )) : <div className="access-empty">暂无可管理的下级账号</div>}
+            {loading ? (
+              <div className="access-empty">正在加载账号…</div>
+            ) : accountGroups.length ? (
+              accountGroups.map((group) => (
+                <section className="account-level-group" key={group.roles.join('-')}>
+                  <div className="level-label">
+                    <span>{group.label}</span>
+                    <i>{group.accounts.length}</i>
+                  </div>
+                  {group.accounts.map((account) => (
+                    <button
+                      key={account.id}
+                      className={selectedId === account.id ? 'active' : ''}
+                      disabled={resetBusy}
+                      onClick={() => chooseAccount(account)}
+                    >
+                      <span className={`account-avatar role-${account.role.toLowerCase()}`}>
+                        {account.displayName.slice(0, 1)}
+                      </span>
+                      <span className="account-list-copy">
+                        <strong>
+                          {account.displayName}
+                          <i>{account.role}</i>
+                        </strong>
+                        <small>{compactScope(account)}</small>
+                      </span>
+                      {!account.active && <em>停用</em>}
+                      <ChevronRight size={16} />
+                    </button>
+                  ))}
+                </section>
+              ))
+            ) : (
+              <div className="access-empty">
+                {accountQuery ? '未找到匹配的账号' : '暂无可管理的下级账号'}
+              </div>
+            )}
           </div>
         </aside>
 
@@ -319,86 +942,544 @@ export function RegionAccessPage({ user }: { user: User }) {
           {selected ? (
             <>
               <header className="access-profile">
-                <div className={`access-profile-avatar role-${selected.role.toLowerCase()}`}>{selected.displayName.slice(0, 1)}</div>
+                <div className={`access-profile-avatar role-${selected.role.toLowerCase()}`}>
+                  {selected.displayName.slice(0, 1)}
+                </div>
                 <div>
-                  <span>{selected.roleLabel} · {selected.role}</span>
-                  <h2><EditableName value={selected.displayName} canEdit onSave={(name) => renameAccount(selected.id, name)} label="账号姓名" /></h2>
+                  <span>
+                    {selected.roleLabel} · {selected.role}
+                  </span>
+                  <h2>
+                    <EditableName
+                      value={selected.displayName}
+                      canEdit
+                      onSave={(name) => renameAccount(selected.id, name)}
+                      label="账号姓名"
+                    />
+                  </h2>
                   <p>@{selected.username}</p>
                 </div>
-                <button className={selected.active ? 'status-button active' : 'status-button'} onClick={setStatus} disabled={!canEditAccess || saving}><CirclePower size={16} />{selected.active ? '正常启用' : '已停用'}</button>
+                <button
+                  className={selected.active ? 'status-button active' : 'status-button'}
+                  onClick={setStatus}
+                  disabled={!canEditAccess || saving || resetBusy}
+                >
+                  <CirclePower size={16} />
+                  {selected.active ? '正常启用' : '已停用'}
+                </button>
               </header>
+
+              {canManageRole(user.role, selected.role) && (
+                <section
+                  className="coordinate-section account-password-section"
+                  aria-label="账号密码管理"
+                >
+                  <div className="account-password-toolbar">
+                    <p className="account-password-username">用户名：{selected.username}</p>
+                    <button
+                      type="button"
+                      className="secondary-button"
+                      ref={resetTriggerRef}
+                      aria-expanded={resetOpen}
+                      aria-controls="account-password-reset"
+                      disabled={saving || resetBusy || loading}
+                      onClick={() => {
+                        if (resetOpen) {
+                          closeReset();
+                          return;
+                        }
+                        setResetOpen(true);
+                        setResetError('');
+                        requestAnimationFrame(() => resetInputRef.current?.focus());
+                      }}
+                    >
+                      <KeyRound size={16} aria-hidden="true" /> 重置密码
+                    </button>
+                  </div>
+                  {resetOpen && (
+                    <form
+                      id="account-password-reset"
+                      onSubmit={resetSelectedPassword}
+                      className="account-password-form"
+                    >
+                      <p>
+                        为 {selected.displayName}（@{selected.username}
+                        ）设置新密码。确认后，该账号当前登录会话将失效，请将新密码告知本人。
+                      </p>
+                      <p id="reset-password-hint">{ACCOUNT_PASSWORD_HINT}</p>
+                      <div className="coordinate-grid">
+                        <label htmlFor="reset-new-password">
+                          <span>新密码</span>
+                        </label>
+                        <input
+                          id="reset-new-password"
+                          ref={resetInputRef}
+                          type="password"
+                          autoComplete="new-password"
+                          value={resetPassword}
+                          disabled={resetBusy}
+                          required
+                          minLength={8}
+                          maxLength={72}
+                          aria-describedby="reset-password-hint reset-password-error"
+                          aria-invalid={Boolean(resetError)}
+                          onChange={(event) => setResetPassword(event.target.value)}
+                        />
+                        <label htmlFor="reset-confirm-password">
+                          <span>确认新密码</span>
+                        </label>
+                        <input
+                          id="reset-confirm-password"
+                          ref={resetConfirmRef}
+                          type="password"
+                          autoComplete="new-password"
+                          value={resetConfirm}
+                          disabled={resetBusy}
+                          required
+                          minLength={8}
+                          maxLength={72}
+                          aria-describedby="reset-password-error"
+                          aria-invalid={Boolean(resetError)}
+                          onChange={(event) => setResetConfirm(event.target.value)}
+                        />
+                      </div>
+                      <p id="reset-password-error" role="alert">
+                        {resetError}
+                      </p>
+                      <div className="account-password-actions">
+                        <button
+                          type="button"
+                          className="secondary-button"
+                          disabled={resetBusy}
+                          onClick={closeReset}
+                        >
+                          取消
+                        </button>
+                        <button type="submit" className="primary-button" disabled={resetBusy}>
+                          {resetBusy ? '重置中…' : '确认重置密码'}
+                        </button>
+                      </div>
+                    </form>
+                  )}
+                </section>
+              )}
 
               <div className="account-signature">
                 <Fingerprint size={18} />
-                <div><span>统一账号标识</span><strong>{selected.accountCode}</strong><small>{selected.standardName}</small></div>
+                <div>
+                  <span>统一账号标识</span>
+                  <strong>{selected.accountCode}</strong>
+                  <small>{selected.standardName}</small>
+                </div>
               </div>
 
               <section className="coordinate-section">
-                <div className="coordinate-title"><GitBranch size={18} /><div><h3>岗位与归属</h3><p>上级只能配置权限范围内的下级账号</p></div></div>
+                <div className="coordinate-title">
+                  <GitBranch size={18} />
+                  <div>
+                    <h3>岗位与归属</h3>
+                    <p>上级只能配置权限范围内的下级账号</p>
+                  </div>
+                </div>
                 <div className="coordinate-grid">
-                  <label><span>账号角色</span><select disabled={!canEditAccess} value={role} onChange={(event) => {
-                    const nextRole = event.target.value as Role;
-                    setRole(nextRole);
-                    const nextParents = visibleParentOptions(nextRole);
-                    if (!nextParents.some((parent) => parent.id === parentUserId)) setParentUserId(nextParents[0]?.id || user.id);
-                  }}>{manageableRoles.filter((item) => selected.role === 'ATL' ? item === 'ATL' : item !== 'ATL').map((item) => <option key={item} value={item}>{ROLE_META[item].label} · {item}</option>)}</select></label>
-                  <label><span>上级管理账号</span><select disabled={!canEditAccess} value={parentUserId} onChange={(event) => setParentUserId(Number(event.target.value))}>{visibleParentOptions(role).filter((parent) => parent.id !== selected.id).map((parent) => <option key={parent.id} value={parent.id}>{parent.displayName} · {parent.roleLabel}</option>)}</select></label>
+                  <label>
+                    <span>账号角色</span>
+                    <select
+                      disabled={!canEditAccess}
+                      value={role}
+                      onChange={(event) => {
+                        const nextRole = event.target.value as Role;
+                        setRole(nextRole);
+                        if (nextRole === 'OBS') setTeams((current) => current.filter((team) => team.project !== '*' && team.team !== '*'));
+                        const nextParents = visibleParentOptions(nextRole);
+                        if (!nextParents.some((parent) => parent.id === parentUserId))
+                          setParentUserId(nextParents[0]?.id || user.id);
+                      }}
+                    >
+                      {manageableRoles
+                        .filter((item) =>
+                          selected.role === 'ATL' ? item === 'ATL' : item !== 'ATL'
+                        )
+                        .map((item) => (
+                          <option key={item} value={item}>
+                            {ROLE_META[item].label} · {item}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
+                  <label>
+                    <span>上级管理账号</span>
+                    <select
+                      disabled={!canEditAccess}
+                      value={parentUserId}
+                      onChange={(event) => setParentUserId(Number(event.target.value))}
+                    >
+                      {visibleParentOptions(role)
+                        .filter((parent) => parent.id !== selected.id)
+                        .map((parent) => (
+                          <option key={parent.id} value={parent.id}>
+                            {parent.displayName} · {parent.roleLabel}
+                          </option>
+                        ))}
+                    </select>
+                  </label>
                 </div>
               </section>
 
-              <section className="coordinate-section">
-                <div className="coordinate-title"><MapPinned size={18} /><div><h3>行政区域范围</h3><p>同级区域相互隔离，可为负责人增加多个授权区域</p></div>{canEditAccess && selected.role !== 'ATL' && <button onClick={() => setAreas([...areas, blankArea()])}><Plus size={15} />增加区域</button>}</div>
+              {selected.role === 'ATL' && (
+                <section className="coordinate-section" aria-label="运动员生源地">
+                <div className="coordinate-title">
+                  <MapPinned size={18} />
+                  <div>
+                    <h3>运动员生源地</h3>
+                    <p>填写后同步到运动员档案</p>
+                  </div>
+                </div>
+                {selected.role === 'ATL' && !athleteAccountAreaComplete(selected.areas) && (
+                  <p className="message-banner" role="status">
+                    行政归属待完善。请有管理权限的上级选择本人实际所属的省、市、区县；历史范围在保存前保持不变。
+                  </p>
+                )}
                 <div className="area-scope-list">
                   {areas.map((area, index) => (
-                    <div className="area-scope-row" key={`${index}-${area.areaLevel}`}>
-                      <select disabled={!canEditAccess || selected.role === 'ATL'} value={area.areaLevel} onChange={(event) => updateArea(index, 'areaLevel', event.target.value)}>
-                        {Object.entries(AREA_LEVEL_META).map(([key, meta]) => <option key={key} value={key}>{meta.label}</option>)}
-                      </select>
-                      {area.areaLevel !== 'national' && <select disabled={!canEditAccess} value={area.province} onChange={(event) => updateArea(index, 'province', event.target.value)}>{payload?.meta.provinces.map((province) => <option key={province}>{province}</option>)}</select>}
-                      {['city', 'county'].includes(area.areaLevel) && <input disabled={!canEditAccess} value={area.city} onChange={(event) => updateArea(index, 'city', event.target.value)} placeholder="城市" />}
-                      {area.areaLevel === 'county' && <input disabled={!canEditAccess} value={area.county} onChange={(event) => updateArea(index, 'county', event.target.value)} placeholder="区县" />}
-                      {canEditAccess && areas.length > 1 && <button onClick={() => setAreas(areas.filter((_, itemIndex) => itemIndex !== index))} aria-label="移除区域"><X size={16} /></button>}
+                    <div className="area-scope-row" key={index}>
+                      {area.areaLevel !== 'national' && (
+                        <select
+                          disabled={!canEditAccess}
+                          aria-label={`运动员生源地省份`}
+                          aria-invalid={
+                            (areaValidationError?.index === index &&
+                              areaValidationError.field === 'province') ||
+                            undefined
+                          }
+                          aria-describedby={
+                            areaValidationError?.index === index &&
+                            areaValidationError.field === 'province'
+                              ? 'access-error'
+                              : undefined
+                          }
+                          ref={(element) => {
+                            areaSelectRefs.current[index] ||= {};
+                            areaSelectRefs.current[index].province = element;
+                          }}
+                          value={area.province}
+                          onChange={(event) => updateArea(index, 'province', event.target.value)}
+                        >
+                          <option value="">请选择省份</option>
+                          {payload?.meta.provinces.map((province) => (
+                            <option key={province}>{province}</option>
+                          ))}
+                        </select>
+                      )}
+                      {['city', 'county'].includes(area.areaLevel) && (
+                        <select
+                          disabled={!canEditAccess || !area.province}
+                          aria-label={`运动员生源地城市`}
+                          aria-invalid={
+                            (areaValidationError?.index === index &&
+                              areaValidationError.field === 'city') ||
+                            undefined
+                          }
+                          aria-describedby={
+                            areaValidationError?.index === index &&
+                            areaValidationError.field === 'city'
+                              ? 'access-error'
+                              : undefined
+                          }
+                          ref={(element) => {
+                            areaSelectRefs.current[index] ||= {};
+                            areaSelectRefs.current[index].city = element;
+                          }}
+                          value={area.city}
+                          onChange={(event) => updateArea(index, 'city', event.target.value)}
+                        >
+                          <option value="">请选择城市</option>
+                          {getAccountCities(area.province).map((city) => (
+                            <option key={city}>{city}</option>
+                          ))}
+                          {area.city && !getAccountCities(area.province).includes(area.city) && (
+                            <option value={area.city} disabled>
+                              {area.city}（已有授权，待核对）
+                            </option>
+                          )}
+                        </select>
+                      )}
+                      {area.areaLevel === 'county' && (
+                        <select
+                          disabled={!canEditAccess || !area.city}
+                          aria-label={`运动员生源地区县`}
+                          aria-invalid={
+                            (areaValidationError?.index === index &&
+                              areaValidationError.field === 'county') ||
+                            undefined
+                          }
+                          aria-describedby={
+                            areaValidationError?.index === index &&
+                            areaValidationError.field === 'county'
+                              ? 'access-error'
+                              : undefined
+                          }
+                          ref={(element) => {
+                            areaSelectRefs.current[index] ||= {};
+                            areaSelectRefs.current[index].county = element;
+                          }}
+                          value={area.county}
+                          onChange={(event) => updateArea(index, 'county', event.target.value)}
+                        >
+                          <option value="">请选择区县</option>
+                          {getAccountCounties(area.province, area.city).map((county) => (
+                            <option key={county.name} value={county.name}>
+                              {county.wholeCity ? '全市（不设区县）' : county.name}
+                              {county.code ? ` · ${county.code}` : ''}
+                            </option>
+                          ))}
+                          {area.county &&
+                            !getAccountCounties(area.province, area.city).some(
+                              (county) => county.name === area.county
+                            ) && (
+                              <option value={area.county} disabled>
+                                {area.county}（已有授权，待核对）
+                              </option>
+                            )}
+                          {area.city && !getAccountCounties(area.province, area.city).length && (
+                            <option disabled>暂无可选区县</option>
+                          )}
+                        </select>
+                      )}
                     </div>
                   ))}
                 </div>
-              </section>
+                </section>
+              )}
 
               <section className="coordinate-section">
-                <div className="coordinate-title"><Activity size={18} /><div><h3>项目与队伍范围</h3><p>查询时行政区域、项目和队伍三个条件必须同时满足</p></div></div>
-                <div className="project-options">
-                  {selected.role !== 'ATL' && <button disabled={!canEditAccess} className={projects.includes('*') ? 'selected' : ''} onClick={() => toggleProject('*')}>全部项目</button>}
-                  {payload?.meta.projects.map((project) => <button disabled={!canEditAccess} key={project} className={projects.includes(project) ? 'selected' : ''} onClick={() => toggleProject(project)}>{project}</button>)}
-                </div>
+                {role !== 'OBS' && (
+                  <div className="coordinate-title">
+                    <Activity size={18} />
+                    <div>
+                      <h3>项目与队伍范围</h3>
+                      <p>选择项目和队伍后自动赋予对应权限</p>
+                    </div>
+                  </div>
+                )}
+                {role === 'OBS' ? (
+                  <ObserverTeamSelector
+                    key={selected.id}
+                    options={teamOptions}
+                    selected={teams}
+                    onChange={setTeams}
+                    disabled={!canEditAccess || saving}
+                  />
+                ) : (
+                  <>
                 <div className="team-scope-list">
                   {teams.map((team, index) => (
-                    <div className="team-scope-row" key={`${index}-${team.project}`}>
-                      <select disabled={!canEditAccess || selected.role === 'ATL'} value={team.project} onChange={(event) => setTeams(teams.map((item, itemIndex) => itemIndex === index ? { ...item, project: event.target.value } : item))}>
-                        {selected.role !== 'ATL' && <option value="*">全部项目</option>}
-                        {payload?.meta.projects.map((project) => <option key={project}>{project}</option>)}
+                    <div className="team-scope-row" key={index}>
+                      <select
+                        disabled={!canEditAccess || selected.role === 'ATL'}
+                        aria-label={`队伍范围 ${index + 1} 的项目`}
+                        value={team.project}
+                        onChange={(event) =>
+                          setTeams(
+                            teams.map((item, itemIndex) =>
+                              itemIndex === index
+                                ? { ...item, project: event.target.value, team: '' }
+                                : item
+                            )
+                          )
+                        }
+                      >
+                        {!['ATL', 'SCC'].includes(role) && <option value="*">全部项目</option>}
+                        {payload?.meta.projects.map((project) => (
+                          <option key={project} value={project}>
+                            {projectLabel(project)}
+                          </option>
+                        ))}
                       </select>
-                      <input disabled={!canEditAccess} value={team.team} onChange={(event) => setTeams(teams.map((item, itemIndex) => itemIndex === index ? { ...item, team: event.target.value } : item))} placeholder="队伍名称；填写 * 代表全部队伍" />
-                      {canEditAccess && selected.role !== 'ATL' && teams.length > 1 && <button onClick={() => setTeams(teams.filter((_, itemIndex) => itemIndex !== index))}><X size={16} /></button>}
+                      <select
+                        aria-label={`队伍范围 ${index + 1} 的队伍`}
+                        ref={(element) => {
+                          teamSelectRefs.current[index] = element;
+                        }}
+                        aria-invalid={!team.team || undefined}
+                        aria-describedby={!team.team && error ? 'access-error' : undefined}
+                        disabled={!canEditAccess || loading || saving}
+                        value={team.team}
+                        onChange={(event) =>
+                          setTeams(
+                            teams.map((item, itemIndex) =>
+                              itemIndex === index ? { ...item, team: event.target.value } : item
+                            )
+                          )
+                        }
+                      >
+                        <option value="">请选择队伍</option>
+                        {!['ATL', 'SCC'].includes(role) && allowsAllTeams(team.project) && (
+                          <option value="*">全部队伍</option>
+                        )}
+                        {availableTeamNames(team.project).map((name) => (
+                          <option key={name} value={name}>
+                            {name}
+                          </option>
+                        ))}
+                        {team.team &&
+                          !availableTeamNames(team.project).includes(team.team) &&
+                          !(
+                            team.team === '*' &&
+                            role !== 'ATL' &&
+                            allowsAllTeams(team.project)
+                          ) && (
+                            <option value={team.team} disabled>
+                                  {team.team === '*' ? '全部队伍' : team.team}
+                                  （已有授权，当前不可选）
+                            </option>
+                          )}
+                        {!availableTeamNames(team.project).length && (
+                          <option disabled value="__empty">
+                            该项目暂无可选队伍
+                          </option>
+                        )}
+                      </select>
+                      {canEditAccess && selected.role !== 'ATL' && teams.length > 1 && (
+                        <button
+                          aria-label={`删除队伍范围 ${index + 1}`}
+                          onClick={() => {
+                            setTeams(teams.filter((_, itemIndex) => itemIndex !== index));
+                            requestAnimationFrame(() => {
+                                  teamSelectRefs.current[
+                                    Math.min(index, teams.length - 2)
+                                  ]?.focus();
+                            });
+                          }}
+                        >
+                          <X size={16} />
+                        </button>
+                      )}
                     </div>
                   ))}
-                  {canEditAccess && selected.role !== 'ATL' && <button className="add-team-scope" onClick={() => setTeams([...teams, blankTeam()])}><Plus size={15} />增加队伍范围</button>}
+                  {canEditAccess && selected.role !== 'ATL' && (
+                    <button
+                      className="add-team-scope"
+                      onClick={() => setTeams([...teams, blankTeam()])}
+                    >
+                      <Plus size={15} />
+                      增加队伍范围
+                    </button>
+                  )}
                 </div>
+                  </>
+                )}
               </section>
 
-              {canEditAccess && <footer className="access-editor-footer"><span>保存后，服务端查询会立即应用新的权限条件。</span><button className="primary-button" disabled={saving} onClick={save}><Save size={16} />{saving ? '保存中…' : '保存账号权限'}</button></footer>}
+              {canEditAccess && (
+                <footer className="access-editor-footer">
+                  <div className="access-editor-footer-feedback">
+                    <div role="status" aria-live="polite">
+                      {message && (
+                        <div className="message-banner success">
+                          <Check size={18} aria-hidden="true" />
+                          {message}
+                        </div>
+                      )}
+                    </div>
+                    {error && (
+                      <div className="message-banner error" id="access-error" role="alert">
+                        <X size={18} />
+                        {error}
+                      </div>
+                    )}
+                    {!message && !error && <span>保存后，服务端查询会立即应用新的权限条件。</span>}
+                  </div>
+                  {canManageRole(user.role, selected.role) && (
+                    <button
+                      type="button"
+                      className="secondary-button access-delete-account"
+                      disabled={saving || resetBusy}
+                      onClick={() => void deleteAccount()}
+                    >
+                      <Trash2 size={16} aria-hidden="true" />
+                      删除账号
+                    </button>
+                  )}
+                  <button className="primary-button" disabled={saving || resetBusy} onClick={save}>
+                    <Save size={16} />
+                    {saving ? '保存中…' : '保存账号权限'}
+                  </button>
+                </footer>
+              )}
             </>
-          ) : <div className="access-editor-empty"><ShieldCheck size={42} /><strong>选择一个下级账号</strong><p>查看并设置角色、上级、区域和项目队伍范围。</p></div>}
+          ) : (
+            <div className="access-editor-empty">
+              <ShieldCheck size={42} />
+              <strong>选择一个下级账号</strong>
+              <p>查看并设置角色、上级、项目和队伍范围。</p>
+            </div>
+          )}
         </section>
       </div>
 
       {user.role === 'DMD' && (
         <section className="audit-panel">
-          <div className="audit-head"><div><FileClock size={19} /><span><strong>权限与操作日志</strong><small>最近200条</small></span></div><span>原始记录不可在此删除</span></div>
+          <div className="audit-head">
+            <div>
+              <FileClock size={19} />
+              <span>
+                <strong>权限与操作日志</strong>
+                <small>最近200条</small>
+              </span>
+            </div>
+            <span>原始记录不可在此删除</span>
+          </div>
           <div className="audit-table-wrap">
             <table>
-              <thead><tr><th>时间</th><th>操作账号</th><th>动作</th><th>对象</th></tr></thead>
-              <tbody>{logs.slice(0, 20).map((log) => <tr key={log.id}><td>{new Date(log.createdAt.replace(' ', 'T') + 'Z').toLocaleString('zh-CN')}</td><td>{log.actorName}<small>@{log.actorUsername}</small></td><td>{auditLabels[log.action] || log.action}</td><td>{log.entityType} #{log.entityId || '—'}</td></tr>)}</tbody>
+              <thead>
+                <tr>
+                  <th>时间</th>
+                  <th>操作账号</th>
+                  <th>动作</th>
+                  <th>对象</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visibleLogs.map((log) => (
+                  <tr key={log.id}>
+                    <td>
+                      {new Date(log.createdAt.replace(' ', 'T') + 'Z').toLocaleString('zh-CN')}
+                    </td>
+                    <td>
+                      {log.actorName}
+                      <small>@{log.actorUsername}</small>
+                    </td>
+                    <td>{auditLabels[log.action] || log.action}</td>
+                    <td>
+                      {log.entityType} #{log.entityId || '—'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
             </table>
           </div>
+          <nav className="roster-pagination" aria-label="权限与操作日志分页">
+            <span className="roster-pagination-summary" aria-live="polite">
+              共 {logs.length} 条 · 每页 6 条 · 第 {currentAuditPage + 1} / {auditPageCount} 页
+            </span>
+            <div className="roster-pagination-pages">
+              <button
+                type="button"
+                disabled={currentAuditPage === 0}
+                onClick={() => setAuditPage(currentAuditPage - 1)}
+              >
+                上一页
+              </button>
+              <button
+                type="button"
+                disabled={currentAuditPage >= auditPageCount - 1}
+                onClick={() => setAuditPage(currentAuditPage + 1)}
+              >
+                下一页
+              </button>
+            </div>
+          </nav>
         </section>
       )}
     </PageContainer>

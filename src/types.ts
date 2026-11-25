@@ -1,27 +1,29 @@
+import type { ImportStatistics } from '../shared/import-statistics';
+import type { ProfilePhysiologyRecord } from '../shared/profile-physiology';
 import type { AreaLevel, Role } from '../shared/access';
-import type { StrengthMetricValues } from '../shared/strength-model';
-import type { StrengthBodyPosition, StrengthIntensityZone, StrengthTrainingCategory, StrengthTrainingEnvironment } from '../shared/strength-training';
-import type { Project } from '../shared/projects';
+import type { RadarDirection } from '../shared/athlete-radar-model';
 import type { ChampionModelStandardType } from '../shared/champion-model';
+import type { Project } from '../shared/projects';
+import type { StrengthMetricValues } from '../shared/strength-model';
+import type {
+  StrengthBodyPosition,
+  StrengthIntensityZone,
+  StrengthTrainingCategory,
+  StrengthTrainingEnvironment,
+} from '../shared/strength-training';
 
-export type { AreaLevel, Role };
-export type { Project };
-export type { ChampionModelStandardType };
+export type { AreaLevel, ChampionModelStandardType, Project, Role };
 export type TrainingStatus = 'normal' | 'attention' | 'alert' | 'rest' | 'missing';
+
+import type { CoachCategory } from '../shared/coach-categories';
 
 export type User = {
   id: number;
   username: string;
   displayName: string;
   role: Role;
+  coachCategories?: CoachCategory[];
   athleteId: number | null;
-};
-
-export type OverviewLayoutState = {
-  version: number;
-  order: string[];
-  hidden: string[];
-  pinned: string[];
 };
 
 export type ProjectTeam = {
@@ -29,6 +31,7 @@ export type ProjectTeam = {
   project: Project;
   name: string;
   athleteCount: number;
+  canRename?: boolean;
   canDelete?: boolean;
 };
 
@@ -51,6 +54,9 @@ export type TrainingBreakdown = {
 
 export type Athlete = {
   id: number;
+  athleteNumber?: string;
+  teamId?: number | null;
+  affiliatedTeams?: Array<{ id: number; name: string }>;
   name: string;
   project: string;
   team: string;
@@ -60,6 +66,7 @@ export type Athlete = {
   city: string;
   county: string;
   coaches: string;
+  headCoaches?: string;
   photoUrl: string;
   birthDate: string | null;
   profileStatus: 'incomplete' | 'complete';
@@ -91,7 +98,6 @@ export type Athlete = {
   rightLegLeanKg: number | null;
   bodyMeasurementDate: string | null;
   bodyMeasurementNote: string;
-  identityNumber: string;
   ethnicity: string;
   phone: string;
   bloodType: string;
@@ -102,6 +108,11 @@ export type Athlete = {
   athletePosition: string;
   healthStatus: string;
   bestResult: string;
+  eventItem?: string;
+  representativeUnit?: string;
+  trainingYears?: number | null;
+  bestResultEvent?: string;
+  bestResultDate?: string;
   nativePlace: string;
   homeAddress: string;
   athleteStatus: string;
@@ -209,7 +220,7 @@ export type StrengthTrainingSession = {
   trainingType: string;
   structureType: string;
   intensityZone: StrengthIntensityZone;
-  srpe: number;
+  srpe: number | null;
   source: string;
   sourceFilename: string;
   modelUsed: string;
@@ -260,7 +271,34 @@ export type StrengthImportPreview = {
 };
 
 export type DataImportQuality = 'valid' | 'warning' | 'error' | 'skipped';
-export type DataImportItemType = 'athlete_profile' | 'wellness' | 'training_session' | 'training_set' | 'test_measurement' | 'body_measurement' | 'injury_record' | 'competitive_state' | 'scoring_rule';
+export type DataImportResolution = '' | 'skip' | 'update';
+export type DataImportItemType =
+  | 'athlete_profile'
+  | 'wellness'
+  | 'training_session'
+  | 'training_set'
+  | 'test_measurement'
+  | 'body_measurement'
+  | 'injury_record'
+  | 'competitive_state'
+  | 'scoring_rule'
+  | 'invalid_row';
+
+export type DataImportConflictField = {
+  field: string;
+  label: string;
+  oldValue: string;
+  newValue: string;
+  overwrites: boolean;
+};
+
+export type DataImportConflict = {
+  exists: boolean;
+  entityType: string;
+  entityId: number | null;
+  identical: boolean;
+  fields: DataImportConflictField[];
+};
 
 export type DataImportItem = {
   id: number;
@@ -292,8 +330,18 @@ export type DataImportItem = {
   quality: DataImportQuality;
   messages: string[];
   businessKey: string;
+  resolution: DataImportResolution;
+  conflict: DataImportConflict | null;
   committedEntityType: string;
   committedEntityId: number | null;
+};
+
+export type DataImportPersonSuggestion = {
+  id: number;
+  name: string;
+  team: string;
+  gender: string;
+  birthDate: string;
 };
 
 export type DataImportAthleteCandidate = {
@@ -310,12 +358,16 @@ export type DataImportAthleteCandidate = {
   status: 'pending' | 'matched' | 'created';
   matchedAthleteId: number | null;
   createdAthleteId: number | null;
+  suggested: DataImportPersonSuggestion[];
+  confirmed: boolean;
+  excluded: boolean;
   sourceSheet: string;
   messages: string[];
 };
 
 export type DataImportBatch = {
   id: string;
+  revision: number;
   filename: string;
   project: string;
   status: 'reviewing' | 'committed' | 'failed' | 'rolled_back';
@@ -332,13 +384,28 @@ export type DataImportBatch = {
   summary: {
     recognizedSheets: Array<{ name: string; type: string; items: number; note: string }>;
     ignoredSheets: Array<{ name: string; reason: string }>;
+    unfilledRows?: number;
+    receipt?: ImportStatistics;
     duplicateFile?: boolean;
+    team?: string;
+  };
+  counts: {
+    newCount: number;
+    duplicateCount: number;
+    overwriteCount: number;
+    invalidCount: number;
+    personMatched: number;
+    personPending: number;
+    personAmbiguous: number;
   };
   athleteCandidates: DataImportAthleteCandidate[];
   items: DataImportItem[];
 };
 
-export type DataImportBatchSummary = Omit<DataImportBatch, 'sheetCount' | 'summary' | 'items'>;
+export type DataImportBatchSummary = Omit<
+  DataImportBatch,
+  'revision' | 'sheetCount' | 'summary' | 'items' | 'counts' | 'athleteCandidates'
+>;
 
 export type InjuryStatus = 'healthy' | 'observation' | 'restricted' | 'rehab' | 'suspended';
 
@@ -350,7 +417,7 @@ export type InjuryRecord = {
   bodyPart: string;
   side: 'left' | 'right' | 'bilateral' | 'center' | 'unspecified';
   status: InjuryStatus;
-  painScore: number;
+  painScore: number | null;
   onsetDate: string;
   restrictions: string;
   rehabPlan: string;
@@ -386,6 +453,8 @@ export type SpecialTestEvent = {
   windConditions: string;
   location: string;
   note: string;
+  dataSource?: string;
+  dataQuality?: 'valid' | 'unverified';
   results: SpecialTestResult[];
 };
 
@@ -421,6 +490,12 @@ export type SpecialTestImportPreview = {
 };
 
 export type TrainingRecord = {
+  projectCode?: string | null;
+  projectStatus?: string;
+  activityCode?: string | null;
+  trainingCategory?: string | null;
+  intensitySystem?: string | null;
+  cadenceRpm?: number | null;
   id: number;
   athleteId: number;
   athleteName: string;
@@ -440,7 +515,7 @@ export type TrainingRecord = {
   durationReported: boolean;
   distanceReported: boolean;
   rpe: number | null;
-  srpe: number;
+  srpe: number | null;
   smvl: number;
   morningPulse: number | null;
   weightKg: number | null;
@@ -462,14 +537,17 @@ export type RegistrationRequest = {
   username: string;
   displayName: string;
   requestedRole: 'ATL' | 'SCC';
+  coachCategory: CoachCategory | null;
   project: string | null;
   team: string | null;
   gender: string | null;
-  identityNumber: string | null;
+  birthDate: string | null;
   nativePlace: string | null;
+  phone: string | null;
   status: 'pending' | 'approved' | 'rejected';
   createdAt: string;
   reviewedAt: string | null;
+  teamVerification?: 'pending' | 'verified' | null;
 };
 
 export type AreaPermission = {
@@ -497,6 +575,7 @@ export type AccessAccount = {
   parentName: string | null;
   accountCode: string;
   standardName: string;
+  areaPending?: boolean;
   areas: AreaPermission[];
   projects: string[];
   teams: TeamPermission[];
@@ -528,6 +607,10 @@ export type AuditLog = {
 };
 
 export type StrengthTest = {
+  protocol?: string;
+  protocolVersion?: string;
+  contextKey?: string;
+  attemptOrder?: number;
   id: number;
   athleteId: number;
   testDate: string;
@@ -551,6 +634,48 @@ export type OverviewMeasurement = {
   source: string;
   sampleCount: number;
   isDemo: boolean;
+};
+
+export type AthleteRadarReferenceSource = {
+  name: string;
+  url: string;
+  year: number;
+  protocol: string;
+};
+
+export type AthleteRadarDimension = {
+  key: string;
+  label: string;
+  unit: string;
+  direction: RadarDirection;
+  currentValue: number | null;
+  referenceValue: number | null;
+  achievedPercent: number | null;
+  signedDifference: number | null;
+  status: 'ready' | 'measurement_pending' | 'reference_pending';
+};
+
+export type AthleteTestSeries = {
+  key: string;
+  label: string;
+  unit: string;
+  testType: string;
+  protocol: string;
+  protocolVersion: string | null;
+  testContext: string;
+  side: string;
+  points: Array<{ date: string; value: number }>;
+};
+
+export type AthleteRadarModel = {
+  kind: 'special' | 'physical';
+  dimensions: AthleteRadarDimension[];
+  series?: AthleteTestSeries[];
+};
+
+export type AthleteRadarModelsPayload = {
+  special: AthleteRadarModel;
+  physical: AthleteRadarModel;
 };
 
 export type ChampionBenchmarkRow = {
@@ -608,20 +733,72 @@ export type ChampionBenchmarkPayload = {
 };
 
 export type SpecialChampionModelEvent = {
-  standardType: ChampionModelStandardType;
   eventCode: string;
   eventName: string;
-  eventGroup: string;
   country: string | null;
   bestPerformance: string | null;
+  pace: string | null;
   competition: string | null;
   location: string | null;
-  competitionDate: string | null;
 };
+//冠军模型
+
+export const ERGOMETER_LEVELS = [
+  'BASIC',
+  'YOUTH_3',
+  'YOUTH_2',
+  'YOUTH_1',
+  'PROVINCIAL',
+  'PROVINCIAL_EXCELLENT',
+  'NATIONAL_EXCELLENT',
+  'U23_INTERNATIONAL',
+  'INTERNATIONAL_EXCELLENT',
+] as const;
+
+export const ERGOMETER_LEVEL_LABELS = {
+  BASIC: '基础入门',
+  YOUTH_3: '青少年三级',
+  YOUTH_2: '青少年二级',
+  YOUTH_1: '青少年一级',
+  PROVINCIAL: '省市标准',
+  PROVINCIAL_EXCELLENT: '省市优秀',
+  NATIONAL_EXCELLENT: '全国优秀',
+  U23_INTERNATIONAL: 'U23国际',
+  INTERNATIONAL_EXCELLENT: '国际优秀',
+} as const;
+
+export const ERGOMETER_GENDERS = ['MALE', 'FEMALE'] as const;
+
+export const ERGOMETER_TEST_TYPES = ['2000M', '5000M', '30MIN_20SPM'] as const;
+
+export const ERGOMETER_GENDER_LABELS = {
+  MALE: '男子',
+  FEMALE: '女子',
+} as const;
+
+export const ERGOMETER_TEST_TYPE_LABELS = {
+  '2000M': '2000m',
+  '5000M': '5000m',
+  '30MIN_20SPM': '30分钟（20桨）',
+} as const;
 
 export type SpecialChampionModelPayload = {
   project: Project;
   events: SpecialChampionModelEvent[];
+};
+
+export type ErgometerChampionModelRow = {
+  bodyWeightKg: number;
+  levelCode: string;
+  standardValue: string;
+  sortOrder: number;
+};
+
+export type ErgometerChampionModelPayload = {
+  project: Project;
+  gender: 'MALE' | 'FEMALE';
+  testType: '2000M' | '5000M' | '30MIN_20SPM';
+  rows: ErgometerChampionModelRow[];
 };
 
 export type CompetitiveStateLevel = 'peak' | 'good' | 'build' | 'adjust';
@@ -655,6 +832,110 @@ export type BodyCompositionRecord = {
   note: string;
 };
 
+export type WellnessTrendPoint = {
+  date: string;
+  personalValue: number | null;
+  teamMean: number | null;
+  teamSampleCount: number | null;
+  hasPersonalValue: boolean;
+};
+
+export type WellnessTrend = {
+  key: 'rpe' | 'sleepHours' | 'morningPulse' | 'weightKg' | 'fatigue';
+  label: string;
+  unit: string;
+  points: WellnessTrendPoint[];
+};
+export type WellnessTrendsPayload = { trends: WellnessTrend[] };
+
+export type AerobicEnduranceMetric = {
+  code: string;
+  label: string;
+  unit: string;
+  personalValue: number;
+  teamMean: number | null;
+  difference: number | null;
+  teamSampleCount: number | null;
+  measurementDate: string;
+  unavailableReason: string | null;
+};
+
+export type AerobicEndurancePayload = {
+  metrics: AerobicEnduranceMetric[];
+  trend: {
+    code: string;
+    label: string;
+    unit: string;
+    points: Array<{ date: string; value: number }>;
+  } | null;
+  latestTest: {
+    testType: string;
+    testDate: string;
+    label: string;
+    value: number;
+    unit: string;
+  } | null;
+};
+
+export type ProfileComparisonItem = {
+  key: string;
+  label: string;
+  unit: string;
+  personalValue: number | null;
+  teamMean: number | null;
+  difference: number | null;
+  teamSampleCount: number | null;
+  dateLabel: string | null;
+  unavailableReason: string | null;
+};
+
+export type ProfileComparisonPayload = {
+  scope: {
+    athleteId: number;
+    teamId: number | null;
+    project: string;
+    from: string;
+    to: string;
+    athleteCount: number;
+  };
+  items: ProfileComparisonItem[];
+  teamSessionCount: number;
+};
+
+export type TrainingStatusMetric = {
+  key: 'duration' | 'load' | 'sessionCount' | 'distance' | 'intensity';
+  label: string;
+  unit: string;
+  personalValue: number | null;
+  teamMean: number | null;
+  difference: number | null;
+  differencePercent: number | null;
+  teamSampleCount: number | null;
+};
+
+export type TrainingStatusTrendPoint = {
+  date: string;
+  personalValue: number | null;
+  teamMean: number | null;
+  teamSampleCount: number | null;
+};
+
+export type TrainingStatusCard = {
+  kind: 'physical' | 'special';
+  title: string;
+  metrics: TrainingStatusMetric[];
+  trend: {
+    label: string;
+    unit: string;
+    points: TrainingStatusTrendPoint[];
+  };
+};
+
+export type ProfileTrainingStatusPayload = {
+  scope: ProfileComparisonPayload['scope'];
+  cards: TrainingStatusCard[];
+};
+
 export type OverviewAthleteProfile = {
   athleteId: number;
   athleteName: string;
@@ -677,6 +958,7 @@ export type OverviewAthleteProfile = {
   bodyMeasurementDate: string | null;
   heightCm: number | null;
   weightKg: number | null;
+  heightMeasurementDate?: string | null;
   previousWeightKg: number | null;
   bodyFatPct: number | null;
   skeletalMuscleKg: number | null;
@@ -725,6 +1007,9 @@ export type OverviewPayload = {
       code: string;
       label: string;
       unit: string;
+      direction: 'higher' | 'lower';
+      thresholds: [number, number, number];
+      baseline: number;
       days: Array<{
         date: string;
         status: 'NORMAL' | 'FLUCTUATION' | 'ATTENTION' | 'ABNORMAL' | 'MISSING';
@@ -737,6 +1022,15 @@ export type OverviewPayload = {
         abnormalRateChange: number | null;
         isEstimated: boolean;
       }>;
+      trend: Array<{ date: string; value: number; status: string }>;
+      summary: {
+        latest: { date: string; value: number; status: string } | null;
+        trendDirection: 'up' | 'down' | 'stable';
+        minValue: number | null;
+        maxValue: number | null;
+        avgValue: number | null;
+        dataDays: number;
+      };
     }>;
   };
   trainingVolume: {
@@ -760,8 +1054,11 @@ export type OverviewPayload = {
       recoveryDurationMin: number | null;
       specialDurationMin: number | null;
       specialDistanceKm: number | null;
+      specialLoad: number | null;
+      specialSessionCount: number;
       physicalDurationMin: number | null;
       physicalLoad: number | null;
+      physicalSessionCount: number;
       rpeAverage: number | null;
       rpeHighest: number | null;
       rpeLowest: number | null;
@@ -783,7 +1080,7 @@ export type OverviewPayload = {
     }>;
   };
   intensityDistribution: Array<{
-    zone: StrengthIntensityZone;
+    zone: string;
     durationMin: number;
     sessionCount: number;
     percentage: number;
@@ -799,6 +1096,7 @@ export type OverviewPayload = {
   };
   strengthTests: StrengthTest[];
   measurements: OverviewMeasurement[];
+  physiologyRecords?: ProfilePhysiologyRecord[];
   profiles: OverviewAthleteProfile[];
   injuries: Array<{
     athleteId: number;
@@ -807,7 +1105,7 @@ export type OverviewPayload = {
     bodyPart: string;
     side: 'left' | 'right' | 'bilateral' | 'center' | 'unspecified';
     status: 'healthy' | 'observation' | 'restricted' | 'rehab' | 'suspended';
-    painScore: number;
+    painScore: number | null;
     onsetDate: string;
     reviewDate: string;
     isDemo: boolean;

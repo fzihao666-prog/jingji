@@ -1,0 +1,14 @@
+.athlete-analysis-selector { display: grid; gap: 12px; }
+.athlete-analysis-selector > header { display: flex; align-items: start; justify-content: space-between; gap: 16px; }
+.athlete-analysis-selector h2 { margin: 0; color: #234b55; font-size: 16px; }
+.athlete-analysis-selector p { margin: 4px 0 0; color: #71878e; font-size: 12px; }
+.athlete-analysis-selector-clear { border: 1px solid #bfdfdc; border-radius: 8px; padding: 8px 12px; color: #117d76; background: #f3faf9; font: inherit; font-weight: 700; cursor: pointer; }
+.athlete-analysis-selector-search { display: grid; gap: 6px; color: #395a63; font-size: 12px; font-weight: 700; }
+.athlete-analysis-selector-search input { min-height: 36px; border: 1px solid #cfe0e1; border-radius: 8px; padding: 0 10px; color: #234b55; background: #fff; font: inherit; }
+.athlete-analysis-selector-list { display: grid; max-height: 420px; overflow-y: auto; border-top: 1px solid #e3ebec; }
+.athlete-analysis-selector-card { display: grid; gap: 4px; min-height: 76px; padding: 12px 4px; border: 0; border-bottom: 1px solid #e7eeee; color: inherit; background: transparent; text-align: left; cursor: pointer; }
+.athlete-analysis-selector-card[aria-pressed='true'] { background: #edf8f7; }
+.athlete-analysis-selector-name { color: #234b55; font-size: 13px; font-weight: 800; }
+.athlete-analysis-selector-meta { color: #71878e; font-size: 11px; }
+.athlete-analysis-selector-card:focus-visible, .athlete-analysis-selector-clear:focus-visible, .athlete-analysis-selector-search input:focus-visible { outline: 3px solid #117d76; outline-offset: 2px; }
+.athlete-analysis-selector-empty { padding: 18px 0; }

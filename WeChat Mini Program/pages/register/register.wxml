@@ -1,0 +1,161 @@
+<view class="register-page">
+  <view class="register-topbar">
+    <view class="back-link" aria-role="button" aria-label="返回登录" hover-class="back-link-active" bindtap="goBack">
+      <text>‹ 返回登录</text>
+    </view>
+    <view class="register-brand">
+      <image class="register-logo" src="/assets/gfc-logo.png" mode="widthFix" />
+    </view>
+  </view>
+
+  <scroll-view class="register-scroll" scroll-y scroll-into-view="{{errorTarget}}">
+    <view class="register-box">
+      <view class="register-heading">
+        <text class="register-kicker">运动员 / 教练账号准入</text>
+        <text class="register-title">注册账号</text>
+        <text class="register-description">选择身份并提交资料，按审核设置开通账号</text>
+      </view>
+
+      <view class="register-form">
+        <view class="section-title">
+          <b>00</b>
+          <strong>注册身份</strong>
+        </view>
+
+        <view class="field">
+          <text class="field-label">身份</text>
+          <picker mode="selector" range="{{roleOptions}}" value="{{roleIndex}}" bindchange="onRoleChange">
+            <view class="picker-value">
+              {{roleOptions[roleIndex]}}
+            </view>
+          </picker>
+        </view>
+
+        <view class="section-title">
+          <b>01</b>
+          <strong>个人信息</strong>
+        </view>
+
+        <view class="field">
+          <text class="field-label">姓名</text>
+          <input class="input" value="{{displayName}}" placeholder="请输入真实姓名" bindinput="onDisplayNameInput" />
+        </view>
+
+        <view id="birth-date-field" class="field">
+          <text class="field-label">出生日期（必填）</text>
+          <picker mode="date" value="{{birthDate}}" end="{{today}}" bindchange="onBirthDateChange" aria-label="出生日期，必填，{{birthDate || '请选择出生日期'}}，{{fieldErrors.birthDate || ''}}">
+            <view class="picker-value {{birthDate ? '' : 'placeholder'}}">{{birthDate || '请选择出生日期'}}</view>
+          </picker>
+          <text wx:if="{{fieldErrors.birthDate}}" class="field-error">{{fieldErrors.birthDate}}</text>
+        </view>
+        <view id="gender-field" class="field">
+          <text class="field-label">性别（必填）</text>
+          <picker mode="selector" range="{{genderOptions}}" value="{{gender === '女' ? 1 : 0}}" bindchange="onGenderChange" aria-label="性别，必填，{{gender || '请选择性别'}}，{{fieldErrors.gender || ''}}">
+            <view class="picker-value {{gender ? '' : 'placeholder'}}">{{gender || '请选择性别'}}</view>
+          </picker>
+          <text wx:if="{{fieldErrors.gender}}" class="field-error">{{fieldErrors.gender}}</text>
+        </view>
+
+        <block wx:if="{{role === 'ATL'}}">
+          <view class="field-column">
+            <view class="field">
+              <text class="field-label">籍贯省份</text>
+              <picker mode="selector" range="{{provinceOptions}}" value="0" bindchange="onProvinceChange" disabled="{{!provinceOptions.length}}">
+                <view class="picker-value {{nativePlaceProvince ? '' : 'placeholder'}}">
+                  {{nativePlaceProvince || '请选择省份'}}
+                </view>
+              </picker>
+            </view>
+            <view class="field">
+              <text class="field-label">籍贯城市</text>
+              <picker mode="selector" range="{{cityOptions}}" bindchange="onCityChange" disabled="{{!cityOptions.length}}">
+                <view class="picker-value {{nativePlaceCity ? '' : 'placeholder'}}">
+                  {{nativePlaceCity || (nativePlaceProvince ? '请选择城市' : '请先选择省份')}}
+                </view>
+              </picker>
+            </view>
+          </view>
+        </block>
+
+        <view class="field">
+          <text class="field-label">手机号</text>
+          <input class="input" type="number" maxlength="11" value="{{phone}}" placeholder="11位手机号" bindinput="onPhoneInput" />
+        </view>
+
+        <view class="section-title">
+          <b>02</b>
+          <strong>组织 / 项目信息</strong>
+        </view>
+
+        <view class="field">
+          <text class="field-label">项目</text>
+          <picker mode="selector" range="{{projectOptions}}" bindchange="onProjectChange">
+            <view class="picker-value {{project ? '' : 'placeholder'}}">
+              {{projectLabel || '请选择项目'}}
+            </view>
+          </picker>
+        </view>
+
+        <view class="field">
+          <text class="field-label">队伍</text>
+          <view class="team-select-row">
+            <view wx:if="{{teamsLoading}}" class="picker-value placeholder">队伍加载中…</view>
+            <view wx:elif="{{teamsError}}" class="picker-value teams-retry" bindtap="retryTeams">
+              {{teamsError}}，点按重试
+            </view>
+            <picker wx:elif="{{project && teamOptions.length}}" mode="selector" range="{{teamOptions}}" value="{{teamIndex}}" bindchange="onTeamChange">
+              <view class="picker-value {{team ? '' : 'placeholder'}}">
+                {{team || '请选择队伍'}}
+              </view>
+            </picker>
+            <view wx:else class="picker-value teams-retry" bindtap="retryTeams">
+              {{!project ? '请先选择项目' : '该项目暂无队伍，点按刷新'}}
+            </view>
+            <button wx:if="{{role === 'SCC' && !addingTeam}}" class="secondary-button team-add-button" disabled="{{!project || submitting}}" bindtap="startAddTeam">新增队伍</button>
+          </view>
+          <block wx:if="{{role === 'SCC' && addingTeam}}">
+            <text class="field-label">新队伍名称（示例：江西（女子）赛艇）</text>
+            <input value="{{teamName}}" maxlength="30" placeholder="请输入2—30个字符" focus="{{addingTeam}}" disabled="{{submitting}}" bindinput="onTeamNameInput" bindconfirm="confirmTeam" />
+            <view class="team-create-actions">
+              <button class="primary-button" disabled="{{submitting}}" bindtap="confirmTeam">确认队伍</button>
+              <button class="secondary-button" disabled="{{submitting}}" bindtap="cancelAddTeam">取消</button>
+            </view>
+            <text class="field-label">队伍随注册提交，账号开通时正式创建。</text>
+          </block>
+        </view>
+
+        <view class="section-title">
+          <b>03</b>
+          <strong>账号设置</strong>
+        </view>
+
+        <view class="field">
+          <text class="field-label">账号</text>
+          <input class="input" value="{{username}}" placeholder="4-24位字母、数字或下划线" bindinput="onUsernameInput" />
+        </view>
+
+        <view class="field">
+          <text class="field-label">密码</text>
+          <input class="input" password value="{{password}}" placeholder="至少8位，含字母和数字" bindinput="onPasswordInput" />
+        </view>
+
+        <view class="field">
+          <text class="field-label">确认密码</text>
+          <input class="input" password value="{{confirmPassword}}" placeholder="请再次输入密码" bindinput="onConfirmPasswordInput" confirm-type="done" bindconfirm="submit" />
+        </view>
+
+        <view id="register-error" wx:if="{{error}}" class="register-error">{{error}}</view>
+        <view wx:if="{{success}}" class="register-success">{{success}}</view>
+
+        <button class="primary-button register-button" loading="{{submitting}}" disabled="{{submitting || !!success}}" bindtap="submit">
+          {{submitting ? '提交中…' : '提交申请'}}
+        </button>
+
+        <view class="register-footer">
+          <text class="footer-link" bindtap="goBack">返回登录</text>
+        </view>
+      </view>
+      <icp-filing />
+    </view>
+  </scroll-view>
+</view>

@@ -1,20 +1,51 @@
+import { isActivityCode, projectRules } from './sport-rules.js';
 export const TRAINING_CONTENT_CATEGORIES = [
-  '水上', '测功仪', '功能', '拉伸再生', '力量耐力',
-  '最大力量', '速度力量', '跑步', '其它'
+  '水上',
+  '测功仪',
+  '力量训练',
+  '功能',
+  '拉伸再生',
+  '力量耐力',
+  '最大力量',
+  '速度力量',
+  '跑步',
+  '骑行',
+  '排球技术',
+  '专项',
+  '其它',
+  '未分类',
 ] as const;
 
-export type TrainingContentCategory = typeof TRAINING_CONTENT_CATEGORIES[number];
+export type TrainingContentCategory = (typeof TRAINING_CONTENT_CATEGORIES)[number];
 export type TrainingLoadCategory = 'special' | 'physical' | 'recovery';
 
 export type TrainingContentSource = {
+  activityCode?: string | null;
+  trainingCategory?: string | null;
   trainingType?: string | null;
   structureType?: string | null;
   content?: string | null;
+  intensitySystem?: string | null;
+  projectStatus?: string | null;
 };
 
 // 这是统计展示口径：每个训练课次只归入一个固定类别，不改写原始训练字段。
 export function trainingContentCategory(input: TrainingContentSource): TrainingContentCategory {
-  const text = `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
+  const activities: Record<string, TrainingContentCategory> = {
+    on_water: '水上', ergometer: '测功仪', cycling: '骑行', volleyball_technique: '排球技术',
+    running: '跑步', recovery: '拉伸再生',
+  };
+  if (input.activityCode && Object.hasOwn(activities, input.activityCode)) return activities[input.activityCode];
+  if (input.activityCode === 'strength') {
+    const detail=`${input.structureType || ''} ${input.content || ''}`;
+    if (/最大力量|大重量|深蹲|硬拉|卧推|卧拉/.test(detail)) return '最大力量';
+    if (/速度力量|爆发力|高拉|抓举|挺举|快速力量/.test(detail)) return '速度力量';
+    if (/力量耐力|循环力量|肌耐力|重复力量/.test(detail)) return '力量耐力';
+    if (/功能训练|功能性|核心稳定|协调|灵敏|平衡/.test(detail)) return '功能';
+    return '力量训练';
+  }
+  const text =
+    `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
   if (!text) return '其它';
   if (/测功仪|划船机|ergometer|\berg\b/i.test(text)) return '测功仪';
   if (/跑步|慢跑|冲刺跑|折返跑|越野跑/.test(text)) return '跑步';
@@ -23,15 +54,68 @@ export function trainingContentCategory(input: TrainingContentSource): TrainingC
   if (/速度力量|爆发力|高拉|抓举|挺举|快速力量/.test(text)) return '速度力量';
   if (/力量耐力|循环力量|肌耐力|重复力量/.test(text)) return '力量耐力';
   if (/功能训练|功能性|核心稳定|协调|灵敏|平衡/.test(text)) return '功能';
-  if (/水上|艇上|划行|划桨|竞速|门区|回旋|专项训练|静水/.test(text)) return '水上';
+  if (/骑行|自行车|踏频/.test(text)) return '骑行';
+  if (/排球|发球|扣球|拦网|垫球/.test(text)) return '排球技术';
+  if (/水上|艇上|划行|划桨|门区|回旋|静水/.test(text)) return '水上';
+  if (/专项/.test(text)) return '专项';
   return '其它';
 }
 
 // 专项、体能与恢复训练模块共用这一口径。优先识别明确恢复内容，无法识别的记录不强行推断。
 export function trainingLoadCategory(input: TrainingContentSource): TrainingLoadCategory | null {
-  const text = `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
+  if (input.trainingCategory === 'special' || input.trainingCategory === 'physical' || input.trainingCategory === 'recovery') return input.trainingCategory;
+  const purpose = `${input.trainingType || ''} ${input.structureType || ''}`;
+  if (/恢复|再生/.test(purpose)) return 'recovery';
+  if (/体能|力量训练/.test(purpose)) return 'physical';
+  if (/专项|技术训练|水上训练/.test(purpose)) return 'special';
+  if (input.activityCode) return null;
+  const text =
+    `${input.trainingType || ''} ${input.structureType || ''} ${input.content || ''}`.trim();
   if (/拉伸|再生|恢复|放松|泡沫轴|理疗/.test(text)) return 'recovery';
-  if (/专项|水上|划行|艇上|门区|竞速/.test(text) && !/力量训练/.test(input.trainingType || '')) return 'special';
+  if (/专项|水上|划行|艇上|门区|竞速/.test(text) && !/力量训练/.test(input.trainingType || ''))
+    return 'special';
   if (/力量|体能|跑步|功能|核心|陆上|测功仪/.test(text)) return 'physical';
+  return null;
+}
+
+/** 全平台词汇表不能直接作为某项目的图例。 */
+export function trainingContentCategories(project: unknown): readonly TrainingContentCategory[] {
+  return (
+    projectRules(project)?.contentCategories || [
+      '力量训练',
+      '功能',
+      '拉伸再生',
+      '力量耐力',
+      '最大力量',
+      '速度力量',
+      '跑步',
+      '专项',
+      '其它',
+      '未分类',
+    ]
+  );
+}
+export function projectTrainingContentCategory(
+  project: unknown,
+  input: TrainingContentSource
+): TrainingContentCategory {
+  const category = trainingContentCategory(input);
+  // 仅作展示分类，复用原始字段和明确描述；不要求人工确认，不改写事实。
+  return category !== '其它' && trainingContentCategories(project).includes(category)
+    ? category : '未分类';
+}
+
+/** 只标注展示分类，不用文字猜测补写历史事实。 */
+export function trainingClassificationReason(
+  project: unknown,
+  input: TrainingContentSource
+): string | null {
+  const rules = projectRules(project);
+  if (!rules || (input.projectStatus && input.projectStatus !== 'confirmed'))
+    return '发生时项目待核实';
+  if (!input.activityCode || input.activityCode === 'unknown') return '训练活动未分类';
+  if (!isActivityCode(input.activityCode) || !rules.activities.includes(input.activityCode))
+    return '训练活动不适用于该项目';
+  if (!trainingLoadCategory(input)) return '训练目的待核实';
   return null;
 }

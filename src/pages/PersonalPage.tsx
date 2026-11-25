@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 import { BrainCircuit, CalendarRange, CheckCircle2, Gauge, Route, Save, Search, Trophy } from 'lucide-react';
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { analyzeRowingPeriod } from '../../shared/rowing-model';
@@ -9,11 +10,121 @@ import { StrengthProfileModule } from '../components/StrengthProfileModule';
 import { BodyCompositionModelOverview, type BodyCompositionProfile } from '../components/AthleteProfileCharts';
 import { ChampionModelBenchmark } from '../components/ChampionModelBenchmark';
 import { FmsPersonalChart } from '../components/TrainingAnalysisCharts';
+=======
+import { formatAthleteNumber, matchesAthleteNumber } from '../../shared/athlete-number';
+import type { EChartsOption } from 'echarts';
+import { CalendarRange, Save, Search } from 'lucide-react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  type FormEvent,
+  type ReactNode,
+} from 'react';
+import type { ProfilePhysiologyRecord } from '../../shared/profile-physiology';
+import { projectLabel } from '../../shared/projects';
+import { trainingPeriodSummary } from '../../shared/training-period-summary';
+>>>>>>> dev
 import { api } from '../api';
-import type { Athlete, BodyCompositionRecord, ChampionBenchmarkPayload, OverviewMeasurement, Project, TrainingRecord, User } from '../types';
-import { addDays, formatNumber } from '../utils';
+import { EnodeTrends } from '../components/EnodeTrends';
+import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
+import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
+import type {
+  Athlete,
+  AthleteRadarModelsPayload,
+  BodyCompositionRecord,
+  OverviewMeasurement,
+  ProfileTrainingStatusPayload,
+  Project,
+  SpecialTestEvent,
+  StrengthTest,
+  TrainingRecord,
+  User,
+  WellnessTrend,
+} from '../types';
+import { formatNumber } from '../utils';
+import './ProfilePhysiology.css';
+
+const RecentTestPerformance = lazy(() =>
+  import('../components/RecentTestPerformance').then((module) => ({
+    default: module.RecentTestPerformance,
+  }))
+);
+const ProjectFactVerification = lazy(() =>
+  import('../components/ProjectFactVerification').then((module) => ({
+    default: module.ProjectFactVerification,
+  }))
+);
+const TrainingSessionEntry = lazy(() =>
+  import('../components/TrainingSessionEntry').then((module) => ({
+    default: module.TrainingSessionEntry,
+  }))
+);
+const ProjectSpecialTraining = lazy(() =>
+  import('../components/ProjectSpecialTraining').then((module) => ({
+    default: module.ProjectSpecialTraining,
+  }))
+);
+const BodyCompositionModelOverview = lazy(() =>
+  import('../components/AthleteProfileCharts').then((module) => ({
+    default: module.BodyCompositionModelOverview,
+  }))
+);
+const AthleteRadarComparison = lazy(() =>
+  import('../components/AthleteRadarComparison').then((module) => ({
+    default: module.AthleteRadarComparison,
+  }))
+);
+const EChart = lazy(() =>
+  import('../components/EChart').then((module) => ({ default: module.EChart }))
+);
+const InjuryRecoveryModule = lazy(() =>
+  import('../components/InjuryRecoveryModule').then((module) => ({
+    default: module.InjuryRecoveryModule,
+  }))
+);
+const ProfileTrainingStatus = lazy(() =>
+  import('../components/ProfileTrainingStatus').then((module) => ({
+    default: module.ProfileTrainingStatus,
+  }))
+);
+const TrainingReport = lazy(() =>
+  import('../components/TrainingReport').then((module) => ({ default: module.TrainingReport }))
+);
+const StrengthProfileModule = lazy(() =>
+  import('../components/StrengthProfileModule').then((module) => ({
+    default: module.StrengthProfileModule,
+  }))
+);
+const FmsPersonalChart = lazy(() =>
+  import('../components/TrainingAnalysisCharts').then((module) => ({
+    default: module.FmsPersonalChart,
+  }))
+);
+
+function daysBetweenInclusive(from: string, to: string) {
+  const [fy, fm, fd] = from.split('-').map(Number);
+  const [ty, tm, td] = to.split('-').map(Number);
+  const start = Date.UTC(fy, fm - 1, fd);
+  const end = Date.UTC(ty, tm - 1, td);
+  return Math.round((end - start) / 86400000) + 1;
+}
+
+function getLoadPeriodLabel(from: string, to: string) {
+  const days = daysBetweenInclusive(from, to);
+  if (days <= 1) return '日负荷';
+  if (days <= 7) return '周负荷';
+  if (days >= 28 && days <= 31) return '月负荷';
+  return '周期负荷';
+}
 
 type Props = {
+  filters?: ReactNode;
   user: User;
   records: TrainingRecord[];
   athletes: Athlete[];
@@ -29,133 +140,344 @@ type Props = {
   onChanged: () => void;
 };
 
+type ProfileDetail = {
+  label: string;
+  value: string | number | null | undefined;
+};
+
+function profileValue(value: ProfileDetail['value']) {
+  return value === null || value === undefined || String(value).trim() === ''
+    ? '未填写'
+    : String(value);
+}
+
+function athletePositionValue(value: string | null | undefined) {
+  const seat = value?.trim() || '';
+  return seat;
+}
+
 function ageAtDate(birthDate: string | null, date: string) {
   if (!birthDate) return null;
   const birth = new Date(`${birthDate}T12:00:00`);
   const target = new Date(`${date}T12:00:00`);
   if (!Number.isFinite(birth.getTime()) || !Number.isFinite(target.getTime())) return null;
   let age = target.getFullYear() - birth.getFullYear();
-  if (target.getMonth() < birth.getMonth() || (target.getMonth() === birth.getMonth() && target.getDate() < birth.getDate())) age -= 1;
+  if (
+    target.getMonth() < birth.getMonth() ||
+    (target.getMonth() === birth.getMonth() && target.getDate() < birth.getDate())
+  )
+    age -= 1;
   return age >= 0 ? age : null;
 }
 
+function trainingExperience(startDate: string, date: string) {
+  const start = new Date(`${startDate}T12:00:00`);
+  const target = new Date(`${date}T12:00:00`);
+  if (
+    !startDate ||
+    !Number.isFinite(start.getTime()) ||
+    !Number.isFinite(target.getTime()) ||
+    start > target
+  )
+    return null;
+  let months =
+    (target.getFullYear() - start.getFullYear()) * 12 + target.getMonth() - start.getMonth();
+  if (target.getDate() < start.getDate()) months -= 1;
+  const years = Math.floor(Math.max(months, 0) / 12);
+  const remainingMonths = Math.max(months, 0) % 12;
+  return remainingMonths ? `${years}年${remainingMonths}个月` : `${years}年`;
+}
+
 export function PersonalPage(props: Props) {
+  const [reportAthleteId, setReportAthleteId] = useState<number | null>(null);
+  const [selectedTeam, setSelectedTeam] = useState<string | null>(null);
   const [athleteQuery, setAthleteQuery] = useState('');
   const canSwitchAthlete = props.user.role !== 'ATL';
-  const selectedAthlete = useMemo(
-    () => props.athletes.find((athlete) => athlete.id === (props.athleteId ?? props.user.athleteId)) || null,
-    [props.athletes, props.athleteId, props.user.athleteId]
+  const teams = useMemo(
+    () =>
+      [...new Set(props.athletes.map((athlete) => athlete.team).filter(Boolean))].sort(
+        (left, right) => left.localeCompare(right, 'zh-CN')
+      ),
+    [props.athletes]
+  );
+  const visibleAthletes = useMemo(
+    () =>
+      selectedTeam
+        ? props.athletes.filter((athlete) => athlete.team === selectedTeam)
+        : props.athletes,
+    [props.athletes, selectedTeam]
   );
   const filteredAthletes = useMemo(() => {
-    const query = athleteQuery.trim().toLowerCase();
-    if (!query) return props.athletes;
-    return props.athletes.filter((athlete) => [
-      athlete.name,
-      athlete.team,
-      athlete.project,
-      athlete.province,
-      athlete.city,
-      athlete.county,
-      athlete.athletePosition,
-      athlete.coaches
-    ].some((value) => String(value || '').toLowerCase().includes(query)));
-  }, [props.athletes, athleteQuery]);
+    const query = athleteQuery.trim().toLocaleLowerCase();
+    return visibleAthletes.filter((athlete) =>
+      !query || matchesAthleteNumber(athlete.id, query) || athlete.name.toLocaleLowerCase().includes(query)
+    ).sort((left, right) => left.id - right.id);
+  }, [athleteQuery, visibleAthletes]);
+  const selectedAthlete = useMemo(
+    () =>
+      props.athletes.find(
+        (athlete) => athlete.id === (canSwitchAthlete ? props.athleteId : props.user.athleteId)
+      ) || null,
+    [canSwitchAthlete, props.athletes, props.athleteId, props.user.athleteId]
+  );
 
   useEffect(() => {
-    if (!canSwitchAthlete || selectedAthlete || !props.athletes.length) return;
-    const randomIndex = Math.floor(Math.random() * props.athletes.length);
-    props.onAthleteChange(props.athletes[randomIndex].id);
-  }, [canSwitchAthlete, selectedAthlete, props.athletes, props.onAthleteChange]);
+    setSelectedTeam(null);
+    setAthleteQuery('');
+  }, [props.project]);
+
+  useEffect(() => {
+    if (canSwitchAthlete && !props.athleteId && props.athletes.length)
+      props.onAthleteChange(props.athletes[0].id);
+  }, [canSwitchAthlete, props.athleteId, props.athletes]);
 
   const switchAthlete = (athleteId: number) => {
     props.onAthleteChange(athleteId);
-    setAthleteQuery('');
+  };
+  const submitAthleteSearch = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const query = athleteQuery.trim().toLocaleLowerCase();
+    const athlete =
+      filteredAthletes.find((item) => matchesAthleteNumber(item.id, query)) ||
+      filteredAthletes.find((item) => item.name.toLocaleLowerCase() === query) ||
+      filteredAthletes[0];
+    if (athlete) switchAthlete(athlete.id);
   };
   const selectedRecords = useMemo(
-    () => selectedAthlete ? props.records.filter((record) => record.athleteId === selectedAthlete.id) : [],
+    () =>
+      selectedAthlete
+        ? props.records.filter((record) => record.athleteId === selectedAthlete.id)
+        : [],
     [props.records, selectedAthlete]
   );
   const [positionDraft, setPositionDraft] = useState('');
   const [positionSaving, setPositionSaving] = useState(false);
   const [positionMessage, setPositionMessage] = useState('');
-  const canEditOwnPosition = props.user.role === 'ATL' && selectedAthlete?.id === props.user.athleteId;
-  const [bodyHistory, setBodyHistory] = useState<BodyCompositionRecord[]>([]);
-  const [bodyHistoryLoading, setBodyHistoryLoading] = useState(false);
+  const canEditOwnPosition =
+    props.user.role === 'ATL' && selectedAthlete?.id === props.user.athleteId;
   const [profileMeasurements, setProfileMeasurements] = useState<OverviewMeasurement[]>([]);
+  const [physiologyRecords, setPhysiologyRecords] = useState<ProfilePhysiologyRecord[]>([]);
+  const [physiologyError, setPhysiologyError] = useState(false);
   const [profileAnalysisLoading, setProfileAnalysisLoading] = useState(false);
-  const [championBenchmark, setChampionBenchmark] = useState<ChampionBenchmarkPayload | null>(null);
-  const [championLoading, setChampionLoading] = useState(false);
+  const [recentStrength, setRecentStrength] = useState<{
+    key: string;
+    tests: StrengthTest[];
+    loading: boolean;
+    error: boolean;
+  }>({ key: '', tests: [], loading: false, error: false });
+  const testScope = `${selectedAthlete?.id}:${selectedAthlete?.project}:${props.from}:${props.to}`;
+  const [dossierDataError, setDossierDataError] = useState(false);
+  const [wellnessTrends, setWellnessTrends] = useState<WellnessTrend[]>([]);
+  const [specialTestScope, setSpecialTestScope] = useState('');
+  const [specialTestError, setSpecialTestError] = useState(false);
+  const [specialTests, setSpecialTests] = useState<SpecialTestEvent[]>([]);
+  const [bodyCompositionHistory, setBodyCompositionHistory] = useState<BodyCompositionRecord[]>([]);
+  const [bodyCompositionLoading, setBodyCompositionLoading] = useState(false);
+  const [bodyCompositionError, setBodyCompositionError] = useState(false);
+  const [dossierDataLoading, setDossierDataLoading] = useState(false);
+  const [radarModels, setRadarModels] = useState<AthleteRadarModelsPayload | null>(null);
+  const [radarModelsLoading, setRadarModelsLoading] = useState(false);
+  const [trainingStatus, setTrainingStatus] = useState<ProfileTrainingStatusPayload | null>(null);
+  const [trainingStatusLoading, setTrainingStatusLoading] = useState(false);
+
+  useEffect(() => {
+    let ignored = false;
+    setPhysiologyRecords([]);
+    setPhysiologyError(false);
+    if (!selectedAthlete) {
+      setProfileMeasurements([]);
+      return;
+    }
+    setProfileAnalysisLoading(true);
+    api
+      .personalOverview(
+        selectedAthlete.id,
+        props.from,
+        props.to,
+        selectedAthlete.project as Project
+      )
+      .then((result) => {
+        if (!ignored) {
+          setProfileMeasurements(result.overview.measurements);
+          setPhysiologyRecords(result.overview.physiologyRecords ?? []);
+        }
+      })
+      .catch(() => {
+        if (!ignored) {
+          setProfileMeasurements([]);
+          setPhysiologyError(true);
+        }
+      })
+      .finally(() => {
+        if (!ignored) setProfileAnalysisLoading(false);
+      });
+    return () => {
+      ignored = true;
+    };
+  }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
+
+  useEffect(() => {
+    let ignored = false;
+    setRecentStrength({
+      key: testScope,
+      tests: [],
+      loading: Boolean(selectedAthlete),
+      error: false,
+    });
+    if (selectedAthlete)
+      api
+        .strengthTests(selectedAthlete.id)
+        .then((result) => {
+          if (!ignored)
+            setRecentStrength({
+              key: testScope,
+              tests: result.tests,
+              loading: false,
+              error: false,
+            });
+        })
+        .catch(() => {
+          if (!ignored)
+            setRecentStrength({ key: testScope, tests: [], loading: false, error: true });
+        });
+    return () => {
+      ignored = true;
+    };
+  }, [testScope]);
 
   useEffect(() => {
     let ignored = false;
     if (!selectedAthlete) {
-      setBodyHistory([]);
+      setTrainingStatus(null);
+      setTrainingStatusLoading(false);
       return;
     }
-    setBodyHistoryLoading(true);
-    api.getBodyCompositionHistory(selectedAthlete.id)
-      .then((result) => { if (!ignored) setBodyHistory(result.history); })
-      .catch(() => { if (!ignored) setBodyHistory([]); })
-      .finally(() => { if (!ignored) setBodyHistoryLoading(false); });
-    return () => { ignored = true; };
+    setTrainingStatus(null);
+    setTrainingStatusLoading(true);
+    api
+      .profileComparison(
+        selectedAthlete.id,
+        props.from,
+        props.to,
+        selectedAthlete.project as Project
+      )
+      .then((result) => {
+        if (!ignored) setTrainingStatus(result.trainingStatus);
+      })
+      .catch(() => {
+        if (!ignored) setTrainingStatus(null);
+      })
+      .finally(() => {
+        if (!ignored) setTrainingStatusLoading(false);
+      });
+    return () => {
+      ignored = true;
+    };
+  }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
+
+  useEffect(() => {
+    let ignored = false;
+    if (!selectedAthlete) {
+      setBodyCompositionHistory([]);
+      setBodyCompositionLoading(false);
+      setBodyCompositionError(false);
+      return;
+    }
+
+    setBodyCompositionHistory([]);
+    setBodyCompositionLoading(true);
+    setBodyCompositionError(false);
+    api
+      .getBodyCompositionHistory(selectedAthlete.id)
+      .then((result) => {
+        if (!ignored) {
+          setBodyCompositionHistory(result.history);
+          setBodyCompositionError(false);
+        }
+      })
+      .catch(() => {
+        if (!ignored) {
+          setBodyCompositionHistory([]);
+          setBodyCompositionError(true);
+        }
+      })
+      .finally(() => {
+        if (!ignored) setBodyCompositionLoading(false);
+      });
+
+    return () => {
+      ignored = true;
+    };
   }, [selectedAthlete?.id]);
 
   useEffect(() => {
     let ignored = false;
+    setRadarModels(null);
+
     if (!selectedAthlete) {
-      setProfileMeasurements([]);
-      setChampionBenchmark(null);
+      setRadarModelsLoading(false);
       return;
     }
-    setProfileAnalysisLoading(true);
-    api.personalOverview(selectedAthlete.id, props.from, props.to, selectedAthlete.project as Project)
-      .then((result) => { if (!ignored) setProfileMeasurements(result.overview.measurements); })
-      .catch(() => { if (!ignored) setProfileMeasurements([]); })
-      .finally(() => { if (!ignored) setProfileAnalysisLoading(false); });
-    setChampionLoading(true);
-    api.championBenchmark(selectedAthlete.id)
-      .then((result) => { if (!ignored) setChampionBenchmark(result.benchmark); })
-      .catch(() => { if (!ignored) setChampionBenchmark(null); })
-      .finally(() => { if (!ignored) setChampionLoading(false); });
-    return () => { ignored = true; };
+
+    setRadarModelsLoading(true);
+    api
+      .radarModels(selectedAthlete.id, props.from, props.to)
+      .then((result) => {
+        if (!ignored) setRadarModels(result);
+      })
+      .catch(() => {
+        if (!ignored) setRadarModels(null);
+      })
+      .finally(() => {
+        if (!ignored) setRadarModelsLoading(false);
+      });
+
+    return () => {
+      ignored = true;
+    };
   }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
 
-  const bodyCompositionProfile = useMemo<BodyCompositionProfile | null>(() => {
-    if (!selectedAthlete) return null;
-    const latest = bodyHistory[0];
-    return {
-      athleteId: selectedAthlete.id,
-      athleteName: selectedAthlete.name,
-      project: selectedAthlete.project,
-      team: selectedAthlete.team,
-      gender: selectedAthlete.gender,
-      age: ageAtDate(selectedAthlete.birthDate, props.to),
-      bodyMeasurementDate: latest?.measurementDate || selectedAthlete.bodyMeasurementDate,
-      heightCm: latest?.heightCm ?? selectedAthlete.heightCm,
-      weightKg: latest?.weightKg ?? selectedAthlete.weightKg,
-      bodyFatPct: latest?.bodyFatPct ?? selectedAthlete.bodyFatPct,
-      skeletalMuscleKg: latest?.skeletalMuscleKg ?? selectedAthlete.skeletalMuscleKg,
-      upperLimbMuscleKg: latest?.upperLimbMuscleKg ?? selectedAthlete.upperLimbMuscleKg,
-      lowerLimbMuscleKg: latest?.lowerLimbMuscleKg ?? selectedAthlete.lowerLimbMuscleKg,
-      trunkMuscleKg: latest?.trunkMuscleKg ?? selectedAthlete.trunkMuscleKg,
-      tricepsSkinfoldMm: latest?.tricepsSkinfoldMm ?? selectedAthlete.tricepsSkinfoldMm,
-      abdominalSkinfoldMm: latest?.abdominalSkinfoldMm ?? selectedAthlete.abdominalSkinfoldMm,
-      thighSkinfoldMm: latest?.thighSkinfoldMm ?? selectedAthlete.thighSkinfoldMm,
-      calfSkinfoldMm: latest?.calfSkinfoldMm ?? selectedAthlete.calfSkinfoldMm,
-      visceralFatLevel: latest?.visceralFatLevel ?? selectedAthlete.visceralFatLevel,
-      basalMetabolismKcal: latest?.basalMetabolismKcal ?? selectedAthlete.basalMetabolismKcal,
-      totalBodyWaterKg: latest?.totalBodyWaterKg ?? selectedAthlete.totalBodyWaterKg,
-      ecwTbwRatio: latest?.ecwTbwRatio ?? selectedAthlete.ecwTbwRatio,
-      phaseAngleDeg: latest?.phaseAngleDeg ?? selectedAthlete.phaseAngleDeg,
-      visceralFatAreaCm2: latest?.visceralFatAreaCm2 ?? selectedAthlete.visceralFatAreaCm2,
-      leftArmLeanKg: latest?.leftArmLeanKg ?? selectedAthlete.leftArmLeanKg,
-      rightArmLeanKg: latest?.rightArmLeanKg ?? selectedAthlete.rightArmLeanKg,
-      trunkLeanKg: latest?.trunkLeanKg ?? selectedAthlete.trunkLeanKg,
-      leftLegLeanKg: latest?.leftLegLeanKg ?? selectedAthlete.leftLegLeanKg,
-      rightLegLeanKg: latest?.rightLegLeanKg ?? selectedAthlete.rightLegLeanKg,
-      bodyCompositionHistory: bodyHistory
+  useEffect(() => {
+    let ignored = false;
+    if (!selectedAthlete) {
+      setWellnessTrends([]);
+      setSpecialTests([]);
+      return;
+    }
+    setSpecialTestScope(testScope);
+    setSpecialTestError(false);
+    setWellnessTrends([]);
+    setSpecialTests([]);
+    setDossierDataLoading(true);
+    setDossierDataError(false);
+    Promise.allSettled([
+      api.wellnessTrends(
+        selectedAthlete.id,
+        props.from,
+        props.to,
+        selectedAthlete.project as Project
+      ),
+      api.specialTests(
+        props.from,
+        props.to,
+        selectedAthlete.project as Project,
+        selectedAthlete.id
+      ),
+    ])
+      .then(([wellness, tests]) => {
+        if (ignored) return;
+        setDossierDataError(wellness.status === 'rejected');
+        setWellnessTrends(wellness.status === 'fulfilled' ? wellness.value.trends : []);
+        setSpecialTestError(tests.status === 'rejected');
+        setSpecialTests(tests.status === 'fulfilled' ? tests.value.events : []);
+      })
+      .finally(() => {
+        if (!ignored) setDossierDataLoading(false);
+      });
+    return () => {
+      ignored = true;
     };
-  }, [selectedAthlete, bodyHistory, props.to]);
+  }, [selectedAthlete?.id, selectedAthlete?.project, props.from, props.to]);
 
   // 身体成分专业报告的旧组件会为缺失字段生成展示值；档案页只在资料完整时复用，避免把模拟值带入正式档案。
   const hasCompleteBodyComposition = useMemo(() => {
@@ -174,7 +496,7 @@ export function PersonalPage(props: Props) {
   }, [bodyCompositionProfile]);
 
   useEffect(() => {
-    setPositionDraft(selectedAthlete?.athletePosition || '');
+    setPositionDraft(athletePositionValue(selectedAthlete?.athletePosition));
     setPositionMessage('');
   }, [selectedAthlete?.id, selectedAthlete?.athletePosition]);
 
@@ -194,6 +516,7 @@ export function PersonalPage(props: Props) {
     }
   };
 
+<<<<<<< HEAD
   const analyzePeriod = analyzerForProject(selectedAthlete?.project || props.project);
   const rangeAnalysis = useMemo(() => analyzePeriod(selectedRecords), [selectedRecords, analyzePeriod]);
   const rangeMode = useMemo(() => {
@@ -207,40 +530,201 @@ export function PersonalPage(props: Props) {
   return (
     <PageContainer className="personal-page">
       <PageHeader eyebrow="ATHLETE PROFILE" title="运动员档案"/>
+=======
+  const rangeAnalysis = useMemo(() => trainingPeriodSummary(selectedRecords), [selectedRecords]);
+  const athleteLocation = selectedAthlete
+    ? [selectedAthlete.province, selectedAthlete.city, selectedAthlete.county]
+        .filter(Boolean)
+        .join('')
+    : '';
+  const dossierGroups = selectedAthlete
+    ? [
+        {
+          title: '个人信息',
+          tone: 'personal',
+          fields: [
+            { label: '运动项目', value: projectLabel(selectedAthlete.project) },
+            { label: '所属队伍', value: selectedAthlete.team },
+            { label: '具体小项', value: selectedAthlete.eventItem },
+            { label: '代表单位', value: selectedAthlete.representativeUnit },
+            { label: '负责教练', value: selectedAthlete.coaches || selectedAthlete.headCoaches || '—' },
+            {
+              label: '训练年限',
+              value: selectedAthlete.trainingYears == null
+                ? trainingExperience(selectedAthlete.startSportDate, props.to)
+                : `${selectedAthlete.trainingYears} 年`,
+            },
+            { label: '技术等级', value: selectedAthlete.technicalLevel },
+            {
+              label: '最佳成绩',
+              value: [selectedAthlete.bestResult, selectedAthlete.bestResultEvent]
+                .map((value) => value?.trim())
+                .filter(Boolean)
+                .join(' · '),
+            },
+            {
+              label: '位置/号位',
+              value: athletePositionValue(selectedAthlete.athletePosition),
+            },
+            { label: '运动员状态', value: selectedAthlete.athleteStatus },
+            ...(props.user.role === 'OBS' ? [] : [{ label: '健康状态', value: selectedAthlete.healthStatus }]),
+            {
+              label: '身高 / 体重',
+              value:
+                selectedAthlete.heightCm === null && selectedAthlete.weightKg === null
+                  ? null
+                  : `${selectedAthlete.heightCm ?? '—'} cm / ${selectedAthlete.weightKg ?? '—'} kg`,
+            },
+            {
+              label: '年龄 / 性别',
+              value:
+                ageAtDate(selectedAthlete.birthDate, props.to) === null
+                  ? selectedAthlete.gender
+                  : `${ageAtDate(selectedAthlete.birthDate, props.to)} 岁 / ${selectedAthlete.gender || '未填写'}`,
+            },
+            ...(props.user.role === 'OBS' ? [] : [
+              { label: '籍贯', value: selectedAthlete.nativePlace },
+            ]),
+            { label: '专项特长', value: selectedAthlete.specialties },
+          ] satisfies ProfileDetail[],
+        },
+      ]
+    : [];
+  const fmsMeasurementCount = profileMeasurements.filter(
+    (item) => item.domain === 'fms' && item.value !== null
+  ).length;
+  const bodyCompositionProfiles = useMemo(() => {
+    if (!selectedAthlete || !bodyCompositionHistory.length) return [];
+
+    const measurementTimestamp = (measurementDate: string) => {
+      const timestamp = new Date(`${measurementDate}T12:00:00`).getTime();
+      return Number.isFinite(timestamp) ? timestamp : Number.NEGATIVE_INFINITY;
+    };
+    const latestRecord = [...bodyCompositionHistory].sort(
+      (left, right) =>
+        measurementTimestamp(right.measurementDate) - measurementTimestamp(left.measurementDate)
+    )[0];
+
+    return [
+      {
+        athleteId: selectedAthlete.id,
+        athleteName: selectedAthlete.name,
+        project: selectedAthlete.project,
+        team: selectedAthlete.team,
+        gender: selectedAthlete.gender,
+        age: ageAtDate(selectedAthlete.birthDate, latestRecord.measurementDate),
+        bodyMeasurementDate: latestRecord.measurementDate,
+        heightCm: latestRecord.heightCm,
+        weightKg: latestRecord.weightKg,
+        bodyFatPct: latestRecord.bodyFatPct,
+        skeletalMuscleKg: latestRecord.skeletalMuscleKg,
+        muscleMassKg: latestRecord.muscleMassKg,
+        upperLimbMuscleKg: latestRecord.upperLimbMuscleKg,
+        lowerLimbMuscleKg: latestRecord.lowerLimbMuscleKg,
+        trunkMuscleKg: latestRecord.trunkMuscleKg,
+        tricepsSkinfoldMm: latestRecord.tricepsSkinfoldMm,
+        abdominalSkinfoldMm: latestRecord.abdominalSkinfoldMm,
+        thighSkinfoldMm: latestRecord.thighSkinfoldMm,
+        calfSkinfoldMm: latestRecord.calfSkinfoldMm,
+        visceralFatLevel: latestRecord.visceralFatLevel,
+        basalMetabolismKcal: latestRecord.basalMetabolismKcal,
+        totalBodyWaterKg: latestRecord.totalBodyWaterKg,
+        ecwTbwRatio: latestRecord.ecwTbwRatio,
+        phaseAngleDeg: latestRecord.phaseAngleDeg,
+        visceralFatAreaCm2: latestRecord.visceralFatAreaCm2,
+        leftArmLeanKg: latestRecord.leftArmLeanKg,
+        rightArmLeanKg: latestRecord.rightArmLeanKg,
+        trunkLeanKg: latestRecord.trunkLeanKg,
+        leftLegLeanKg: latestRecord.leftLegLeanKg,
+        rightLegLeanKg: latestRecord.rightLegLeanKg,
+        bodyCompositionHistory,
+      },
+    ];
+  }, [bodyCompositionHistory, selectedAthlete]);
+  const bodyCompositionStatus = !selectedAthlete
+    ? '未选择运动员。'
+    : bodyCompositionLoading
+      ? '正在读取身体成分。'
+      : bodyCompositionError
+        ? '身体成分读取失败，当前显示空状态。'
+        : bodyCompositionHistory.length
+          ? '身体成分已更新。'
+          : '暂无身体成分记录。';
+
+  return (
+    <PageContainer className="personal-page">
+      <PageHeader title="运动员档案" filters={props.filters} />
+>>>>>>> dev
 
       {canSwitchAthlete && (
         <section className="performance-athlete-picker">
           <div className="performance-picker-copy">
-            <span>ATHLETE SEARCH</span>
             <strong>选择运动员</strong>
-            <small>{selectedAthlete ? `${selectedAthlete.project} · ${selectedAthlete.team} · ${selectedAthlete.name}` : `当前项目可查看 ${props.athletes.length} 人`}</small>
+            {selectedAthlete && (
+              <small>
+                {projectLabel(selectedAthlete.project)} · {selectedAthlete.team} ·{' '}
+                {selectedAthlete.name}
+              </small>
+            )}
           </div>
-          <label className="performance-athlete-search">
+          <form className="performance-athlete-search" onSubmit={submitAthleteSearch}>
             <Search size={16} />
             <input
               value={athleteQuery}
               onChange={(event) => setAthleteQuery(event.target.value)}
-              placeholder="搜索姓名、队伍、地区、位置或教练"
-              aria-label="搜索运动员"
+              placeholder="搜索姓名或编号，回车查看"
+              aria-label="按姓名或编号搜索运动员"
             />
-          </label>
+          </form>
+          <select
+            className="performance-athlete-select"
+            value={selectedTeam || ''}
+            onChange={(event) => setSelectedTeam(event.target.value || null)}
+            aria-label="筛选队伍"
+          >
+            <option value="">全部队伍</option>
+            {teams.map((team) => (
+              <option key={team} value={team}>
+                {team}
+              </option>
+            ))}
+          </select>
           <select
             className="performance-athlete-select"
             value={selectedAthlete?.id || ''}
-            onChange={(event) => { if (event.target.value) switchAthlete(Number(event.target.value)); }}
+            onChange={(event) => {
+              if (event.target.value) switchAthlete(Number(event.target.value));
+            }}
             aria-label="选择运动员"
           >
             <option value="">选择运动员</option>
-            {filteredAthletes.map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.name} · {athlete.team}</option>)}
+            {filteredAthletes.map((athlete) => (
+              <option key={athlete.id} value={athlete.id}>
+                {athlete.name} · {athlete.team} · 编号 {athlete.athleteNumber || formatAthleteNumber(athlete.id)}
+              </option>
+            ))}
           </select>
-          {!filteredAthletes.length && <p className="performance-athlete-no-result">没有匹配的运动员</p>}
+          {!filteredAthletes.length && (
+            <p className="performance-athlete-no-result">没有匹配的运动员</p>
+          )}
         </section>
       )}
 
       {!selectedAthlete ? (
-        <ContentState kind="empty" className="personal-empty" icon={<CalendarRange size={34} />} title="暂无可展示运动员" description="请切换到有运动员数据的项目，或通过上方搜索选择运动员。"/>
+        <ContentState
+          kind="empty"
+          className="personal-empty"
+          icon={<CalendarRange size={34} />}
+          title="请选择运动员"
+          description={
+            canSwitchAthlete
+              ? '请从队伍中选择需要查看的运动员。'
+              : '当前账号暂无可展示的运动员档案。'
+          }
+        />
       ) : (
         <>
+<<<<<<< HEAD
           <section className="personal-profile-section" aria-label="个人信息">
             <SectionHeader title="个人信息" description="运动员基础档案" />
             <section className="personal-identity-card">
@@ -349,16 +833,392 @@ export function PersonalPage(props: Props) {
           <section className="personal-profile-section" aria-label="运动员表现档案">
             <StrengthProfileModule athlete={selectedAthlete} user={props.user} />
           </section>
+=======
+          <details
+            key={`report-${selectedAthlete.id}`}
+            className="personal-profile-section"
+            onToggle={(event) => {
+              if (event.currentTarget.open) setReportAthleteId(selectedAthlete.id);
+            }}
+          >
+            <summary>训练报告 · 周 / 月 / 自选日期</summary>
+            {reportAthleteId === selectedAthlete.id && (
+              <Suspense fallback={<p role="status">正在加载训练报告…</p>}>
+                <TrainingReport
+                  key={selectedAthlete.id}
+                  athleteId={selectedAthlete.id}
+                  athleteName={selectedAthlete.name}
+                  initialDate={props.to}
+                  readOnly={props.user.role === 'OBS'}
+                />
+              </Suspense>
+            )}
+          </details>
+          <section className="personal-dossier">
+            <header className="personal-dossier-identity">
+              <div className={`personal-avatar ${selectedAthlete.photoUrl ? 'has-photo' : ''}`}>
+                <ProtectedAthletePhoto
+                  athlete={selectedAthlete}
+                  alt={`${selectedAthlete.name}证件照`}
+                  fallback={selectedAthlete.name.slice(0, 1)}
+                />
+              </div>
+              <div className="personal-identity-copy">
+                <span>
+                  {projectLabel(selectedAthlete.project)} · {selectedAthlete.team}
+                </span>
+                <h2>{selectedAthlete.name}</h2>
+                <p>运动员编号 {selectedAthlete.athleteNumber || formatAthleteNumber(selectedAthlete.id)}</p>
+                <p>
+                  {props.user.role !== 'OBS' && <>{athleteLocation || '地区待补充'} · </>}{selectedAthlete.coaches || '未绑定教练'}
+                </p>
+                {canEditOwnPosition && (
+                  <form className="personal-position-editor" onSubmit={savePosition}>
+                    <label>
+                      <span>位置/号位</span>
+                      <input
+                        value={positionDraft}
+                        onChange={(event) => setPositionDraft(event.target.value)}
+                        maxLength={40}
+                        placeholder="填写本项目的位置、号位或角色"
+                        aria-invalid={positionMessage.includes('失败')}
+                        aria-describedby={positionMessage ? 'position-message' : undefined}
+                      />
+                    </label>
+                    <button
+                      disabled={
+                        positionSaving ||
+                        positionDraft === athletePositionValue(selectedAthlete.athletePosition)
+                      }
+                    >
+                      <Save size={14} />
+                      {positionSaving ? '保存中' : '保存'}
+                    </button>
+                    <small
+                      id="position-message"
+                      aria-live="polite"
+                      role={positionMessage.includes('失败') ? 'alert' : undefined}
+                    >
+                      {positionMessage}
+                    </small>
+                  </form>
+                )}
+              </div>
+              <section className="personal-header-metrics" aria-label="当前周期训练指标">
+                <article>
+                  <span>{getLoadPeriodLabel(props.from, props.to)}</span>
+                  <strong>
+                    {formatNumber(rangeAnalysis.totalSrpe)}
+                    <small>SRPE</small>
+                  </strong>
+                </article>
+                <article>
+                  <span>专项距离</span>
+                  <strong>
+                    {formatNumber(rangeAnalysis.totalDistanceKm, 1)}
+                    <small>km</small>
+                  </strong>
+                </article>
+                <article>
+                  <span>训练课次</span>
+                  <strong>
+                    {rangeAnalysis.sessions}
+                    <small>课</small>
+                  </strong>
+                </article>
+              </section>
+            </header>
+            <section className="personal-dossier-groups" aria-label="运动员完整档案信息">
+              {dossierGroups.map((group) => (
+                <section
+                  key={group.title}
+                  className={`personal-dossier-group ${group.tone}`}
+                  aria-label={group.title}
+                >
+                  <dl>
+                    {group.fields.map((field) => (
+                      <div key={field.label}>
+                        <dt>{field.label}</dt>
+                        <dd>
+                          {field.label === '位置/号位' && !field.value
+                            ? '—'
+                            : profileValue(field.value)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                </section>
+              ))}
+            </section>
+          </section>
+
+          <section className="personal-profile-section personal-test-section" aria-label="测试模块">
+            <div className="functional-test-grid">
+              <AppCard variant="chart" className="professional-panel body-composition-profile-card">
+                <header className="personal-analysis-card-heading">
+                  <div>
+                    <span>
+                      <h3>身体成分</h3>
+                      <p>身体组成、肌肉量与节段分布</p>
+                    </span>
+                  </div>
+                </header>
+                <section aria-busy={bodyCompositionLoading} aria-label="身体成分">
+                  <p className="visually-hidden" aria-live="polite">
+                    {bodyCompositionStatus}
+                  </p>
+                  {bodyCompositionLoading ? (
+                    <div className="professional-chart-empty">正在读取身体成分…</div>
+                  ) : bodyCompositionError ? (
+                    <ContentState
+                      kind="error"
+                      title="身体成分暂不可用"
+                      description="读取身体成分记录失败，请稍后重试。"
+                    />
+                  ) : (
+                    <DeferredProfileContent label="身体成分">
+                      <BodyCompositionModelOverview profiles={bodyCompositionProfiles} individual />
+                    </DeferredProfileContent>
+                  )}
+                </section>
+              </AppCard>
+              <AppCard
+                variant="chart"
+                className="professional-panel analysis-feature-panel personal-fms-card"
+              >
+                <header className="personal-analysis-card-heading">
+                  <div>
+                    <span>
+                      <h3>（FMS）功能动作筛查</h3>
+                    </span>
+                  </div>
+                  <strong>
+                    {profileAnalysisLoading ? '读取中' : `${fmsMeasurementCount} 项有效`}
+                  </strong>
+                </header>
+                {profileAnalysisLoading ? (
+                  <div className="professional-chart-empty">正在读取个人FMS测试…</div>
+                ) : physiologyError ? (
+                  <ContentState
+                    kind="error"
+                    title="FMS测试读取失败"
+                    description="请刷新页面重试。"
+                  />
+                ) : (
+                  <DeferredProfileContent label="功能动作筛查">
+                    <FmsPersonalChart measurements={profileMeasurements} />
+                  </DeferredProfileContent>
+                )}
+              </AppCard>
+              <DeferredProfileContent label="近期测试表现">
+                <RecentTestPerformance
+                  key={testScope}
+                  tests={recentStrength.key === testScope ? recentStrength.tests : []}
+                  events={specialTestScope === testScope ? specialTests : []}
+                  athleteId={selectedAthlete.id}
+                  project={selectedAthlete.project}
+                  from={props.from}
+                  to={props.to}
+                  strengthLoading={recentStrength.key !== testScope || recentStrength.loading}
+                  specialLoading={specialTestScope !== testScope || dossierDataLoading}
+                  strengthError={recentStrength.key === testScope && recentStrength.error}
+                  specialError={specialTestScope === testScope && specialTestError}
+                />
+              </DeferredProfileContent>
+              <AppCard
+                variant="chart"
+                className="professional-panel analysis-feature-panel athlete-radar-card"
+              >
+                <header className="personal-analysis-card-heading">
+                  <div>
+                    <span>
+                      <h3>专项测试</h3>
+                      <p>当前周期实测成绩与正式参考标准对照</p>
+                    </span>
+                  </div>
+                </header>
+                <DeferredProfileContent label="专项测试">
+                  <AthleteRadarComparison
+                    title="专项测试"
+                    model={radarModels?.special ?? null}
+                    loading={radarModelsLoading}
+                  />
+                </DeferredProfileContent>
+              </AppCard>
+              <AppCard
+                variant="chart"
+                className="professional-panel analysis-feature-panel athlete-radar-card"
+              >
+                <header className="personal-analysis-card-heading">
+                  <div>
+                    <span>
+                      <h3>体能测试</h3>
+                      <p>当前周期体能成绩、趋势与正式参考标准对照</p>
+                    </span>
+                  </div>
+                </header>
+                <DeferredProfileContent label="体能测试">
+                  <AthleteRadarComparison
+                    title="体能测试"
+                    model={radarModels?.physical ?? null}
+                    loading={radarModelsLoading}
+                  />
+                </DeferredProfileContent>
+              </AppCard>
+            </div>
+            <ProfileSection
+              title="训练情况"
+              subtitle="与同项目、同队且在当前授权范围内的团队平均对照；所有数据跟随页面总周期。"
+            >
+              <ProfileTrainingStatus
+                trainingStatus={trainingStatus}
+                loading={trainingStatusLoading}
+              />
+            </ProfileSection>
+          </section>
+
+          <ProfileSection
+            title="生理生化与恢复状态"
+            subtitle="生理生化读取当前运动员在所选周期内的有效检测记录；恢复趋势跟随同一周期。"
+          >
+            <ProfilePhysiologyRecords
+              records={physiologyRecords}
+              from={props.from}
+              to={props.to}
+              loading={profileAnalysisLoading}
+              error={physiologyError}
+            />
+            <WellnessTrendCards
+              trends={wellnessTrends}
+              loading={dossierDataLoading}
+              error={dossierDataError}
+              from={props.from}
+              to={props.to}
+            />
+            <EnodeTrends
+              key={`enode-wellness:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`}
+              athleteId={selectedAthlete.id}
+              project={selectedAthlete.project}
+              from={props.from}
+              to={props.to}
+              kind="wellness"
+            />
+            {props.user.role !== 'OBS' && <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />}
+            <StrengthProfileModule
+              key={selectedAthlete.id}
+              athlete={selectedAthlete}
+              user={props.user}
+              preloaded={
+                recentStrength.key === testScope
+                  ? recentStrength
+                  : { tests: [], loading: true, error: false }
+              }
+              onTestsChanged={(tests) =>
+                setRecentStrength((current) =>
+                  current.key === testScope
+                    ? { key: testScope, tests, loading: false, error: false }
+                    : current
+                )
+              }
+            />
+          </ProfileSection>
+          <ProfileSection
+            title="训练记录"
+            subtitle={props.user.role === 'OBS' ? '训练课次与 RPE 趋势。' : '公共课次填写，按实际活动显示专项字段。'}
+          >
+            <EnodeTrends
+              key={`enode-rpe:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`}
+              athleteId={selectedAthlete.id}
+              project={selectedAthlete.project}
+              from={props.from}
+              to={props.to}
+              kind="sessionRpe"
+            />
+            {(props.user.role === 'ATL' || ['SCC', 'REG', 'TD', 'DMD'].includes(props.user.role)) && (
+              <>
+                {props.user.role !== 'ATL' && (
+                  <ProjectFactVerification
+                    athleteId={selectedAthlete.id}
+                    project={selectedAthlete.project}
+                    onChanged={props.onChanged}
+                  />
+                )}
+                <TrainingSessionEntry
+                  key={`${selectedAthlete.id}:${selectedAthlete.project}`}
+                  athleteId={selectedAthlete.id}
+                  project={selectedAthlete.project}
+                  mode={props.user.role === 'ATL' ? 'self' : 'coach'}
+                  onSaved={props.onChanged}
+                />
+              </>
+            )}
+          </ProfileSection>
+          <ProfileSection
+            title="项目专项"
+            subtitle="按当前项目加载专项规则，公共内容沿用统一模块。"
+          >
+            <ProjectSpecialTraining project={selectedAthlete.project} records={selectedRecords} />
+          </ProfileSection>
+>>>>>>> dev
         </>
       )}
     </PageContainer>
   );
 }
 
-function PersonalMetric({ icon: Icon, label, value, unit }: { icon: typeof Gauge; label: string; value: string; unit: string }) {
-  return <article><Icon size={19} /><span>{label}</span><strong>{value}<small>{unit}</small></strong></article>;
+/** 保留分区标题与占位，滚动接近时再加载图表；键盘和读屏用户也可主动展开。 */
+function DeferredProfileContent({ children, label }: { children: ReactNode; label: string }) {
+  const container = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  const restoreFocus = useRef(false);
+  const reveal = useCallback(() => {
+    restoreFocus.current = Boolean(container.current?.contains(document.activeElement));
+    setVisible(true);
+  }, []);
+  useEffect(() => {
+    const element = container.current;
+    if (!element) return;
+    if (visible) {
+      if (restoreFocus.current) element.focus({ preventScroll: true });
+      return;
+    }
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          reveal();
+          observer.disconnect();
+        }
+      },
+      { rootMargin: '320px' }
+    );
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [visible, reveal]);
+  const loading = (
+    <div className="professional-chart-empty" role="status">
+      正在加载{label}…
+    </div>
+  );
+  return (
+    <div ref={container} tabIndex={-1} role="group" aria-label={label}>
+      {visible ? (
+        <Suspense fallback={loading}>{children}</Suspense>
+      ) : (
+        <div className="professional-chart-empty">
+          <button type="button" className="secondary-button" onClick={reveal}>
+            显示{label}
+          </button>
+        </div>
+      )}
+    </div>
+  );
 }
 
+<<<<<<< HEAD
 function ProfileDetail({ label, value, note }: { label: string; value: string; note?: string }) {
   return <div><dt>{label}</dt><dd>{value || '未填写'}</dd>{note && <small>{note}</small>}</div>;
 }
@@ -372,4 +1232,462 @@ function ArchivePlaceholder({ title, description }: { title: string; description
 
 function analyzerForProject(project: string) {
   return project === '激流' ? analyzeSlalomPeriod : project === '皮划艇' ? analyzeCanoePeriod : analyzeRowingPeriod;
+=======
+function ProfileSection({
+  title,
+  subtitle,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="personal-profile-section" aria-label={title}>
+      <header className="personal-profile-section-heading">
+        <div>
+          <span>ATHLETE DOSSIER</span>
+          <h2>{title}</h2>
+          <p>{subtitle}</p>
+        </div>
+      </header>
+      <DeferredProfileContent label={title}>{children}</DeferredProfileContent>
+    </section>
+  );
+}
+
+function WellnessTrendCards({
+  trends,
+  loading,
+  error,
+  from,
+  to,
+}: {
+  trends: WellnessTrend[];
+  loading: boolean;
+  error: boolean;
+  from: string;
+  to: string;
+}) {
+  const displayedTrends: WellnessTrend[] = trends.length
+    ? trends
+    : [
+        { key: 'rpe', label: 'RPE', unit: '', points: [] },
+        { key: 'sleepHours', label: '睡眠时长', unit: 'h', points: [] },
+        { key: 'morningPulse', label: '晨脉', unit: 'bpm', points: [] },
+        { key: 'weightKg', label: '体重', unit: 'kg', points: [] },
+        { key: 'fatigue', label: '疲劳', unit: '', points: [] },
+      ];
+  const hasData = trends.some((trend) =>
+    trend.points.some((point) => point.personalValue !== null)
+  );
+  const statusMessage = loading
+    ? '正在读取恢复趋势。'
+    : hasData
+      ? '恢复趋势已更新。'
+      : '暂无恢复趋势数据。';
+  return (
+    <div className="personal-wellness-status">
+      <p className="visually-hidden" aria-live="polite">
+        {statusMessage}
+      </p>
+      {loading ? (
+        <AppCard variant="chart" className="professional-panel">
+          <div className="professional-chart-empty">正在读取恢复趋势…</div>
+        </AppCard>
+      ) : (
+        <section className="personal-wellness-grid" aria-label="恢复趋势">
+          {error && (
+            <ContentState kind="error" title="恢复趋势读取失败" description="请刷新页面重试。" />
+          )}
+          {!error &&
+            displayedTrends.map((trend) => {
+              const personalPoints = trend.points.filter(
+                (point): point is typeof point & { personalValue: number } =>
+                  point.personalValue !== null
+              );
+              const first = personalPoints[0];
+              const latest = personalPoints.at(-1);
+              const change =
+                first && latest && first !== latest
+                  ? latest.personalValue - first.personalValue
+                  : null;
+              const axisLabel = wellnessAxisLabel(trend);
+              const hasTeamMean = trend.points.some((point) => point.teamMean !== null);
+              return (
+                <AppCard
+                  key={trend.key}
+                  variant="chart"
+                  className="professional-panel personal-wellness-card"
+                >
+                  <header>
+                    <h3>{wellnessTrendTitle(trend)}</h3>
+                    <small>{trend.unit || '0–10 分'}</small>
+                  </header>
+                  {latest ? (
+                    <>
+                      <dl className="personal-wellness-summary">
+                        <div>
+                          <dt>最近记录</dt>
+                          <dd>{wellnessValue(latest.personalValue, trend)}</dd>
+                          <small>{latest.date}</small>
+                        </div>
+                        <div>
+                          <dt>周期变化</dt>
+                          <dd>
+                            {change === null
+                              ? '暂无对比'
+                              : `${change > 0 ? '+' : ''}${wellnessValue(change, trend)}`}
+                          </dd>
+                          <small>{change === null ? '仅 1 次有效记录' : '首条至最近'}</small>
+                        </div>
+                      </dl>
+                      <EChart
+                        option={wellnessTrendOption(trend, from, to)}
+                        label={`${trend.label}每日变化：当前运动员${hasTeamMean ? '与团队平均' : ''}；最近记录 ${wellnessValue(latest.personalValue, trend)}，${change === null ? '暂无周期对比' : `较首条记录变化 ${wellnessValue(change, trend)}`}。缺失日期不连线。`}
+                      />
+                      <p className="personal-wellness-axis-note">横轴：日期 · 纵轴：{axisLabel}</p>
+                      <div
+                        className="personal-wellness-data visually-hidden"
+                        role="region"
+                        tabIndex={0}
+                        aria-label={`${trend.label}按日期查看数值，按 Tab 键显示`}
+                      >
+                        <table>
+                          <caption>{trend.label}每日数据</caption>
+                          <thead>
+                            <tr>
+                              <th scope="col">日期</th>
+                              <th scope="col">当前运动员</th>
+                              <th scope="col">团队平均</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {trend.points.map((point) => (
+                              <tr key={point.date}>
+                                <td>{point.date}</td>
+                                <td>
+                                  {point.personalValue === null
+                                    ? '暂无数据'
+                                    : wellnessValue(point.personalValue, trend)}
+                                </td>
+                                <td>
+                                  {point.teamMean === null
+                                    ? '暂无可比数据'
+                                    : wellnessValue(point.teamMean, trend)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <EChart
+                        option={wellnessTrendOption(trend, from, to)}
+                        label={`${trend.label}趋势${hasTeamMean ? '，仅有团队平均记录' : ''}`}
+                        isPlaceholder={!hasTeamMean}
+                      />
+                      {hasTeamMean && (
+                        <p className="analysis-empty-note">暂无个人记录，图中显示团队平均</p>
+                      )}
+                    </>
+                  )}
+                </AppCard>
+              );
+            })}
+        </section>
+      )}
+    </div>
+  );
+}
+
+function wellnessTrendTitle(trend: WellnessTrend) {
+  if (trend.key === 'rpe') return '训练主观强度（RPE）';
+  if (trend.key === 'fatigue') return '恢复日报疲劳程度';
+  return trend.label;
+}
+
+function wellnessAxisLabel(trend: WellnessTrend) {
+  return `${trend.label}（${trend.unit || '分'}）`;
+}
+
+function wellnessValue(value: number, trend: WellnessTrend) {
+  return `${formatNumber(value, 1)}${trend.unit ? ` ${trend.unit}` : ' 分'}`;
+}
+
+function wellnessTrendOption(trend: WellnessTrend, from: string, to: string): EChartsOption {
+  const fromTime = Date.parse(`${from}T00:00:00Z`);
+  const toTime = Date.parse(`${to}T00:00:00Z`);
+  const hasTeamMean = trend.points.some((point) => point.teamMean !== null);
+  return {
+    animation: false,
+    useUTC: true,
+    textStyle: { color: '#092b39' },
+    legend: {
+      top: 0,
+      data: hasTeamMean ? ['当前运动员', '团队平均'] : ['当前运动员'],
+      selectedMode: false,
+      textStyle: { color: '#092b39' },
+    },
+    tooltip: {
+      trigger: 'axis',
+      renderMode: 'richText',
+      confine: true,
+      padding: [12, 16],
+      textStyle: { fontSize: 12, lineHeight: 22 },
+      valueFormatter: (value) => wellnessValue(Number(value), trend),
+    },
+    grid: {
+      top: 44,
+      right: 20,
+      bottom: 40,
+      left: 46,
+      outerBoundsMode: 'same',
+      outerBoundsContain: 'axisLabel',
+    },
+    xAxis: {
+      type: 'time',
+      min: fromTime === toTime ? fromTime - 43200000 : fromTime,
+      max: fromTime === toTime ? toTime + 43200000 : toTime,
+      name: '日期',
+      nameLocation: 'middle',
+      nameGap: 26,
+      nameTextStyle: { color: '#092b39' },
+      axisLabel: { formatter: '{MM}/{dd}', hideOverlap: true, color: '#092b39' },
+    },
+    yAxis: {
+      type: 'value',
+      name: trend.unit || '分',
+      scale: true,
+      ...(trend.key === 'rpe' || trend.key === 'fatigue' ? { min: 0, max: 10 } : {}),
+      nameTextStyle: { color: '#092b39' },
+      axisLabel: { color: '#092b39' },
+      splitLine: { lineStyle: { color: '#e0e9e9' } },
+    },
+    series: [
+      {
+        id: trend.key,
+        name: '当前运动员',
+        type: 'line',
+        connectNulls: false,
+        symbol: 'circle',
+        symbolSize: 7,
+        lineStyle: { width: 3, color: '#176f7f' },
+        itemStyle: { color: '#176f7f' },
+        areaStyle: { color: 'rgb(23 111 127 / 10%)' },
+        data: trend.points.map((point) => [
+          Date.parse(`${point.date}T00:00:00Z`),
+          point.personalValue,
+        ]),
+      },
+      ...(hasTeamMean
+        ? [
+            {
+              id: `${trend.key}-team`,
+              name: '团队平均',
+              type: 'line' as const,
+              connectNulls: false,
+              symbol: 'emptyCircle',
+              symbolSize: 6,
+              lineStyle: { width: 2.5, type: 'dashed' as const, color: '#8a651e' },
+              itemStyle: { color: '#8a651e' },
+              data: trend.points.map((point) => [
+                Date.parse(`${point.date}T00:00:00Z`),
+                point.teamMean,
+              ]),
+            },
+          ]
+        : []),
+    ],
+  };
+}
+
+function ProfilePhysiologyRecords({
+  records,
+  from,
+  to,
+  loading,
+  error,
+}: {
+  records: ProfilePhysiologyRecord[];
+  from: string;
+  to: string;
+  loading: boolean;
+  error: boolean;
+}) {
+  const selectorId = useId();
+  const [selectedKey, setSelectedKey] = useState('');
+  const recordKey = (record: ProfilePhysiologyRecord) =>
+    JSON.stringify([record.code, record.unit, record.protocol ?? '']);
+  const metrics = records.filter(
+    (record, index) => records.findIndex((item) => recordKey(item) === recordKey(record)) === index
+  );
+  const selected = metrics.find((record) => recordKey(record) === selectedKey) ?? metrics[0];
+  const points = selected
+    ? records
+        .filter((record) => recordKey(record) === recordKey(selected))
+        .sort((a, b) => a.date.localeCompare(b.date) || a.id - b.id)
+    : [];
+  const latest = points.at(-1);
+  const first = points[0];
+  const change = points.length > 1 && first && latest ? latest.value - first.value : null;
+  const dateValue = (date: string) => Date.parse(`${date}T00:00:00Z`);
+  const option: EChartsOption = {
+    animation: false,
+    useUTC: true,
+    grid: {
+      top: 40,
+      left: 12,
+      right: 20,
+      bottom: 24,
+      outerBoundsMode: 'same',
+      outerBoundsContain: 'axisLabel',
+    },
+    tooltip: {
+      trigger: 'axis',
+      renderMode: 'richText',
+      confine: true,
+      padding: [12, 16],
+      textStyle: { fontSize: 12, lineHeight: 22 },
+      valueFormatter: (value) => `${formatNumber(Number(value), 2)} ${selected?.unit ?? ''}`,
+    },
+    xAxis: {
+      type: 'time',
+      min: dateValue(from),
+      max: dateValue(to) + (from === to ? 86400000 : 0),
+      splitNumber: 5,
+      axisLabel: { formatter: '{MM}/{dd}', hideOverlap: true },
+    },
+    yAxis: {
+      type: 'value',
+      name: selected?.unit ?? '',
+      scale: true,
+      splitLine: { lineStyle: { type: 'dashed' } },
+    },
+    series: [
+      {
+        id: 'physiology',
+        name: selected?.label ?? '生理生化',
+        type: 'line',
+        data: points.map((record) => [dateValue(record.date), record.value]),
+        smooth: false,
+        connectNulls: false,
+        showSymbol: true,
+        symbol: 'circle',
+        symbolSize: 8,
+        lineStyle: { width: 3 },
+      },
+    ],
+  };
+  return (
+    <AppCard variant="chart" className="professional-panel">
+      <h3>生理生化</h3>
+      <p className="visually-hidden" role="status">
+        {loading
+          ? '正在读取生理生化检测记录。'
+          : error
+            ? '生理生化检测记录读取失败。'
+            : records.length
+              ? `已加载${records.length}项生理生化检测记录。`
+              : '当前周期暂无有效生理生化检测记录。'}
+      </p>
+      {loading ? (
+        <ContentState kind="loading" title="正在读取生理生化检测记录" />
+      ) : error ? (
+        <ContentState kind="error" title="生理生化数据读取失败" description="请刷新页面重试。" />
+      ) : !records.length ? (
+        <EChart option={option} label="生理生化检测趋势，暂无有效记录" isPlaceholder />
+      ) : (
+        <>
+          <div className="profile-physiology-toolbar">
+            <label htmlFor={selectorId}>趋势指标</label>
+            <select
+              id={selectorId}
+              value={selected ? recordKey(selected) : ''}
+              onChange={(event) => setSelectedKey(event.target.value)}
+            >
+              {metrics.map((record) => (
+                <option key={recordKey(record)} value={recordKey(record)}>
+                  {record.label} · {record.unit}
+                  {metrics.some(
+                    (item) => item.code === record.code && recordKey(item) !== recordKey(record)
+                  )
+                    ? ` · ${record.protocol || '未注明协议'}`
+                    : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+          <dl className="personal-wellness-summary" aria-label="当前指标摘要">
+            <div>
+              <dt>最近检测</dt>
+              <dd>{latest ? `${formatNumber(latest.value, 2)} ${latest.unit}` : '—'}</dd>
+              <dd>{latest?.date}</dd>
+            </div>
+            <div>
+              <dt>周期变化</dt>
+              <dd>
+                {change == null
+                  ? '暂无对比'
+                  : `${change > 0 ? '+' : ''}${formatNumber(change, 2)} ${selected?.unit}`}
+              </dd>
+              <dd>{points.length} 次有效检测</dd>
+            </div>
+          </dl>
+          <EChart
+            option={option}
+            label={`${selected?.label}变化趋势，单位${selected?.unit}，${points.length}次检测。原始数值见下方检测记录。`}
+          />
+          <p className="personal-wellness-axis-note">
+            横轴：检测日期 · 纵轴：{selected?.label}（{selected?.unit}）。
+            {points.length === 1
+              ? '当前周期仅一次检测，显示单点，暂无变化趋势。'
+              : '连线用于观察检测节点间变化，不代表每日测量。'}
+          </p>
+          <details>
+            <summary>查看检测记录（{records.length}项）</summary>
+            <div
+              className="personal-wellness-data profile-physiology-records"
+              role="region"
+              tabIndex={0}
+              aria-label="生理生化检测记录，可横向滚动"
+            >
+              <table>
+                <caption>当前运动员 · 所选周期内的有效检测记录</caption>
+                <thead>
+                  <tr>
+                    <th scope="col">日期</th>
+                    <th scope="col">指标</th>
+                    <th scope="col">结果</th>
+                    <th scope="col">单位</th>
+                    <th scope="col">测试协议</th>
+                    <th scope="col">来源</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {records.map((record) => (
+                    <tr key={record.id}>
+                      <th scope="row">{record.date}</th>
+                      <td>{record.label}</td>
+                      <td>{formatNumber(record.value, 2)}</td>
+                      <td>{record.unit}</td>
+                      <td>{record.protocol || '未注明'}</td>
+                      <td>
+                        {/synthetic|simulation|seed|demo|estimated/i.test(record.source)
+                          ? '模拟补充'
+                          : '已记录'}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </details>
+        </>
+      )}
+    </AppCard>
+  );
+>>>>>>> dev
 }

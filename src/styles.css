@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 :root {
   font-family: "Microsoft YaHei UI", "Microsoft YaHei", "PingFang SC", "Noto Sans SC", sans-serif;
   color: #12303b;
@@ -2608,3 +2609,46 @@ aside nav::-webkit-scrollbar-thumb {
     box-shadow: 0 8px 22px rgba(8, 48, 61, .12) !important;
   }
 }
+=======
+/* stylelint-disable no-descending-specificity -- 全局样式按分区顺序拆分于 src/styles/，各分区保持基础样式与后置页面精修的覆盖顺序，@import 顺序即级联顺序。 */
+@import url('./styles/00-base-tokens.css');
+@import url('./styles/01-login.css');
+@import url('./styles/02-shell.css');
+@import url('./styles/03-overview.css');
+@import url('./styles/04-analysis-cards.css');
+@import url('./styles/05-overview-heatmap.css');
+@import url('./styles/06-calendar.css');
+@import url('./styles/07-roster.css');
+@import url('./styles/08-regional-access.css');
+@import url('./styles/09-account-review.css');
+@import url('./styles/10-professional-overview-dashboard.css');
+@import url('./styles/11-status-tags.css');
+@import url('./styles/12-body-composition.css');
+@import url('./styles/13-body-figure.css');
+@import url('./styles/14-responsive.css');
+@import url('./styles/15-birthplace-roster.css');
+@import url('./styles/16-page-layer.css');
+@import url('./styles/17-athlete-operations.css');
+@import url('./styles/18-account-authority-center.css');
+@import url('./styles/19-personal-training-archive.css');
+@import url('./styles/20-injury-and-recovery-record.css');
+@import url('./styles/21-personal-report-calendar.css');
+@import url('./styles/22-a4-personal-pdf.css');
+@import url('./styles/23-strength-assessment-dossier.css');
+@import url('./styles/24-strength-a4-export.css');
+@import url('./styles/26-strength-decision-support.css');
+@import url('./styles/27-mobile-coaching-station.css');
+@import url('./styles/28-bluetooth-connection-module.css');
+@import url('./styles/29-sidebar-scroll-fix.css');
+@import url('./styles/30-ai-training-module.css');
+@import url('./styles/31-animations.css');
+@import url('./styles/32-loading-animation.css');
+@import url('./styles/33-pulse-animation.css');
+@import url('./styles/35-personal-archive-paper.css');
+@import url('./styles/36-archive-portrait-refinement.css');
+@import url('./styles/37-coach-only-archive-entry-workspace.css');
+@import url('./styles/38-coach-responsibility-workspace.css');
+@import url('./styles/39-coach-directory.css');
+@import url('./styles/40-visual-color-refinement-2026.css');
+@import url('./styles/41-overview-legend.css');
+>>>>>>> dev

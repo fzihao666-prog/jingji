@@ -1,137 +1,627 @@
-import { Activity, ArrowRight, Target, Trophy } from 'lucide-react';
+import { latestStrengthMetricTests } from '../components/strength-test-samples';
+import { metricAppliesToProject } from '../../shared/import-metric-choice';
+import { StrengthSessionAnalysis, strengthSessionSummary } from '../components/StrengthSessionAnalysis';
+import { Activity } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
-import type { CSSProperties } from 'react';
-import { Bar, CartesianGrid, ComposedChart, Line, ReferenceLine, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import type { CSSProperties, ReactNode } from 'react';
+import {
+  Bar,
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  Legend,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
 import { api } from '../api';
-import { AppCard, ChartCard, ContentState, PageContainer, PageHeader, SectionHeader } from '../components/PageLayout';
-import type { Athlete, Project, StrengthTest, StrengthTrainingSession } from '../types';
+import { PhysicalChampionModel } from '../components/PhysicalChampionModel';
+import { PhysicalTestModule } from '../components/PhysicalTestModule';
+import { AthleteAnalysisSelector } from '../components/AthleteAnalysisSelector';
+import {
+  AppCard,
+  ChartCard,
+  ContentState,
+  PageContainer,
+  PageHeader,
+  SectionHeader,
+} from '../components/PageLayout';
+import type {
+  Athlete,
+  Project,
+  StrengthTest,
+  StrengthTrainingSession,
+} from '../types';
 import { formatNumber } from '../utils';
 import { STRENGTH_METRICS, type StrengthMetricKey } from '../../shared/strength-model';
-import { STRENGTH_CONTENT_ANALYSIS_CATEGORIES, inferStrengthContentAnalysisCategory } from '../../shared/strength-training';
+import '../components/EChart.css';
+import {
+  STRENGTH_CONTENT_ANALYSIS_CATEGORIES,
+  inferStrengthContentAnalysisCategory,
+} from '../../shared/strength-training';
 import '../pages/SpecialTrainingPage.css';
 
-type Navigation = (page: 'special-schedule' | 'strength-plan') => void;
+const strengthTooltipStyle = {
+  borderRadius: 12, border: '1px solid var(--line)', padding: '12px 16px',
+  background: 'var(--surface, white)', color: 'var(--ink)', fontSize: 12,
+  boxShadow: '0 8px 24px rgb(18 61 74 / 12%)', lineHeight: 1.8,
+};
 
-type CurrentMetric = { key: StrengthMetricKey; label: string; unit: string; value: number; testDate: string; target?: number; sampleCount?: number; median?: number };
+type Navigation = (page: 'special-schedule' | 'strength-plan' | 'strength-enode') => void;
+
+type CurrentMetric = {
+  key: StrengthMetricKey;
+  label: string;
+  unit: string;
+  value: number;
+  score: number | null;
+  sampleCount: number;
+};
 type ScopedStrengthSession = StrengthTrainingSession & { athleteId: number };
 
-function PhysicalChampionModelPlaceholder({ project, onPlanOpen, currentMetrics = [], scopeLabel = '当前运动员' }: { project: Project; onPlanOpen: () => void; currentMetrics?: CurrentMetric[]; scopeLabel?: string }) {
-  return <ChartCard title="冠军模型" description={`${project} · 体能能力参考模型`} actions={<button className="dashboard-action-button" onClick={onPlanOpen}>查看训练计划 <ArrowRight size={15} /></button>} className="training-dashboard-champion">
-    {currentMetrics.length ? <div className="champion-current-comparison"><div className="champion-comparison-head"><span>指标</span><span>冠军模型</span><span>{scopeLabel}</span><span>达成率</span></div>{currentMetrics.slice(0, 4).map((metric) => <div key={metric.key}><strong>{metric.label}</strong><span>--</span><b>{formatNumber(metric.value, 1)} {metric.unit}</b><span>--</span></div>)}<small>模型数据待配置；当前仅展示已录入的真实{scopeLabel === '当前队伍均值' ? '群体均值' : '测试值'}。</small></div> : <ContentState kind="empty" title="模型数据待配置" icon={<Trophy size={26} />} description="将按当前项目配置真实冠军表现与能力指标；模型启用后可在此对比当前范围、模型值、差距和达成率。" />}
-  </ChartCard>;
-}
-
-type StrengthProps = { athletes: Athlete[]; athleteId: number | null; project: Project; from: string; to: string; onNavigate: Navigation; onAthleteChange: (athleteId: number | null) => void };
+type StrengthProps = {
+  filters?: ReactNode;
+  teamId?: number | null;
+  athletes: Athlete[];
+  project: Project;
+  from: string;
+  to: string;
+  onNavigate: Navigation;
+};
 
 function configuredMetrics(project: Project) {
-  return STRENGTH_METRICS.filter((metric) => !metric.projects || metric.projects.includes(project));
-}
-
-function median(values: number[]) {
-  const sorted = [...values].sort((left, right) => left - right);
-  const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
-
-function latestTestsByAthlete(tests: StrengthTest[]) {
-  const latest = new Map<number, StrengthTest>();
-  [...tests].sort((left, right) => right.testDate.localeCompare(left.testDate)).forEach((test) => {
-    if (!latest.has(test.athleteId)) latest.set(test.athleteId, test);
-  });
-  return [...latest.values()];
+  return STRENGTH_METRICS.filter((metric) => metricAppliesToProject(metric, project));
 }
 
 function metricsFromTests(tests: StrengthTest[], project: Project) {
   return configuredMetrics(project).flatMap((definition) => {
-    const rows = tests.flatMap((test) => typeof test.metrics[definition.key] === 'number' ? [{ test, value: test.metrics[definition.key] as number, target: test.targets[definition.key] }] : []);
+    const rows = latestStrengthMetricTests(tests, definition.key).map((test) => ({
+      value: Number(test.metrics[definition.key]),
+      target: test.targets[definition.key],
+    }));
     if (!rows.length) return [];
     const values = rows.map((row) => row.value);
-    const targets = rows.flatMap((row) => typeof row.target === 'number' && row.target > 0 ? [row.target] : []);
-    return [{ key: definition.key, label: definition.label, unit: definition.unit, value: values.reduce((sum, value) => sum + value, 0) / values.length, median: median(values), testDate: `n=${values.length}`, sampleCount: values.length, target: targets.length ? targets.reduce((sum, value) => sum + value, 0) / targets.length : undefined }];
+    const paired = rows.filter((row) => typeof row.target === 'number' && Number.isFinite(row.target) && row.target > 0);
+    const score = paired.length
+      ? paired.reduce((sum, row) => sum + row.value / Number(row.target) * 100, 0) / paired.length
+      : null;
+    return [
+      {
+        key: definition.key,
+        label: definition.label,
+        unit: definition.unit,
+        value: values.reduce((sum, value) => sum + value, 0) / values.length,
+        sampleCount: values.length,
+        score,
+      },
+    ];
   });
 }
 
-function PhysicalCoreMetrics({ metrics, sessions, athleteId }: { metrics: CurrentMetric[]; sessions: ScopedStrengthSession[]; athleteId: number | null }) {
-  if (athleteId) {
-    if (!metrics.length && !sessions.length) return <ContentState kind="empty" title="暂无体能训练数据" description="当前时间范围内没有可用于分析的真实训练或测试数据。" />;
-    return <section className="training-dashboard-metrics physical-core-metrics">{metrics.slice(0, 6).map((metric) => <AppCard key={metric.key} variant="compact" className="training-dashboard-metric"><span>{metric.label}</span><strong>{formatNumber(metric.value, 1)}<small>{metric.unit}</small></strong><em>{metric.testDate}</em></AppCard>)}</section>;
-  }
+function PhysicalCoreMetrics({
+  sessions,
+  athleteId,
+}: {
+  sessions: ScopedStrengthSession[];
+  athleteId: number | null;
+}) {
+  const summary = strengthSessionSummary(sessions);
   const participants = new Set(sessions.map((session) => session.athleteId)).size;
-  const totalDuration = sessions.reduce((sum, session) => sum + session.durationMin, 0);
   const cards: Array<[string, string | number, string, string]> = [
-    ['参与体能训练人数', participants, '人', '当前时间范围内有训练结果'],
-    ['体能训练总次数', sessions.length, '场', '当前组织范围内有效训练'],
-    ['总训练时长', formatNumber(totalDuration / 60, 1), 'h', '按已记录训练时长汇总'],
-    ['人均训练时长', participants ? formatNumber(totalDuration / participants / 60, 1) : '—', participants ? 'h' : '', '按参与训练运动员计算'],
-    ...metrics.filter((metric) => metric.sampleCount).slice(0, 2).map((metric) => [`${metric.label}均值`, formatNumber(metric.value, 1), metric.unit, `中位数 ${formatNumber(metric.median || 0, 1)}${metric.unit} · n=${metric.sampleCount}`] as [string, string | number, string, string])
+    ['累计体能训练时长', sessions.length ? formatNumber(summary.duration / 60, 1) : '—', 'h', '按当前周期已记录时长汇总'],
+    ['体能训练课次', sessions.length, '课', '按运动员课次统计'],
+    ['累计训练负荷', summary.load === null ? '—' : formatNumber(summary.load), 'AU', `SRPE · 有效 ${summary.loadCount}/${sessions.length} 课`],
+    ['平均 RPE', summary.rpe === null ? '—' : formatNumber(summary.rpe, 1), '分', `课次均值 · 有效 ${summary.rpeCount}/${sessions.length} 课`],
+    ['训练参与人数', participants, '人', athleteId ? '当前运动员' : '当前周期有训练记录的运动员'],
   ];
-  if (!sessions.length && !metrics.length) return <ContentState kind="empty" title="暂无体能训练数据" description="当前项目、组织范围和时间范围内没有有效体能训练或测试数据。" />;
-  return <section className="training-dashboard-metrics physical-core-metrics">{cards.map(([label, value, unit, note]) => <AppCard key={label} variant="compact" className="training-dashboard-metric"><span>{label}</span><strong>{value}<small>{unit}</small></strong><em>{note}</em></AppCard>)}</section>;
+  // 测试结果在下方测试模块展示，顶部集中呈现训练投入。
+  return (
+    <section className="training-dashboard-metrics physical-core-metrics">
+      {cards.map(([label, value, unit, note]) => (
+        <AppCard key={label} variant="compact" className="training-dashboard-metric">
+          <span className="strength-metric-heading">{label}</span>
+          <strong>
+            {value}
+            <small>{unit}</small>
+          </strong>
+          <em>{note}</em>
+        </AppCard>
+      ))}
+    </section>
+  );
 }
 
-function AbilityProfile({ metrics, athleteId }: { metrics: CurrentMetric[]; athleteId: number | null }) {
-  const scored = metrics.filter((metric) => typeof metric.target === 'number' && metric.target > 0).map((metric) => ({ ...metric, score: Math.min(120, metric.value / Number(metric.target) * 100) }));
-  if (scored.length < 3) return <ContentState kind="empty" title="能力评价标准待配置" icon={<Target size={25} />} description="只有配置至少三项真实个人目标或项目标准后，才会生成标准化能力画像和优先级判断。" />;
-  const ordered = [...scored].sort((a, b) => b.score - a.score);
-  return <div className="physical-ability-profile"><div className="physical-radar">{scored.map((metric, index) => <div key={metric.key} style={{ '--profile-score': `${Math.min(metric.score, 100)}%`, '--profile-color': ['#0d9488', '#3b82f6', '#f59e0b', '#8b5cf6', '#ef6b5b', '#22a06b'][index] } as CSSProperties}><span>{metric.label}</span><i><b /></i><strong>{formatNumber(metric.score, 0)}</strong></div>)}</div><aside><span>基于已配置的{athleteId ? '个人目标' : '群体目标均值'}</span><h3>{athleteId ? '个人能力摘要' : '团队能力摘要'}</h3><p><b>相对达成</b>{ordered.slice(0, 2).map((metric) => <em key={metric.key}>{metric.label} · {formatNumber(metric.score, 0)}%</em>)}</p><p><b>优先关注</b>{ordered.slice(-2).reverse().map((metric) => <em key={metric.key}>{metric.label} · {formatNumber(metric.score, 0)}%</em>)}</p></aside></div>;
+function AbilityProfile({
+  metrics,
+  athleteId,
+}: {
+  metrics: CurrentMetric[];
+  athleteId: number | null;
+}) {
+  const ordered = metrics.flatMap((metric) =>
+    metric.score === null ? [] : [{ ...metric, score: metric.score }]
+  ).sort((a, b) => b.score - a.score);
+  return (
+    <div className="physical-ability-profile">
+      {!metrics.length && <span className="app-chart-example">当前周期暂无体能测试</span>}
+      <div className="physical-radar">
+        {metrics.map((metric, index) => (
+          <div
+            key={metric.key}
+            style={
+              {
+                '--profile-score': `${metric.score === null ? 0 : Math.min(metric.score, 100)}%`,
+                '--profile-color': [
+                  '#0d9488',
+                  '#3b82f6',
+                  '#f59e0b',
+                  '#8b5cf6',
+                  '#ef6b5b',
+                  '#22a06b',
+                ][index % 6],
+              } as CSSProperties
+            }
+          >
+            <span>{metric.label}</span>
+            <strong title={athleteId ? undefined : `${metric.sampleCount} 人实测`}>{formatNumber(metric.value, 1)} {metric.unit}</strong>
+            {metric.score !== null && (
+              <>
+                <i aria-hidden="true"><b /></i>
+                <strong>{formatNumber(metric.score, 0)}%</strong>
+              </>
+            )}
+          </div>
+        ))}
+      </div>
+      <aside>
+        {ordered.length ? <>
+        <span>{athleteId ? '按个人目标计算' : '仅汇总已有对应目标的运动员达成率'}</span>
+        <h3>{athleteId ? '个人能力摘要' : '团队能力摘要'}</h3>
+        <p>
+          <b>相对达成</b>
+          {ordered.slice(0, 2).map((metric) => (
+            <em key={metric.key}>
+              {metric.label} · {formatNumber(metric.score, 0)}%
+            </em>
+          ))}
+        </p>
+        <p>
+          <b>优先关注</b>
+          {ordered
+            .slice(-2)
+            .reverse()
+            .map((metric) => (
+              <em key={metric.key}>
+                {metric.label} · {formatNumber(metric.score, 0)}%
+              </em>
+            ))}
+        </p>
+        </> : <p>{metrics.length ? '已展示实测成绩，填写目标后可查看达成率。' : '调整日期范围可查看其他周期。'}</p>}
+      </aside>
+    </div>
+  );
 }
 
-function MetricTrend({ tests, metrics, athleteId }: { tests: StrengthTest[]; metrics: CurrentMetric[]; athleteId: number | null }) {
+function MetricTrend({
+  tests,
+  metrics,
+  athleteId,
+}: {
+  tests: StrengthTest[];
+  metrics: CurrentMetric[];
+  athleteId: number | null;
+}) {
   const [selected, setSelected] = useState<StrengthMetricKey | ''>('');
-  const metricKey = selected || metrics[0]?.key || '';
+  const metricKey = metrics.some((metric) => metric.key === selected) ? selected : metrics[0]?.key ?? STRENGTH_METRICS[0].key;
   const definition = STRENGTH_METRICS.find((metric) => metric.key === metricKey);
-  const raw = [...tests].sort((a, b) => a.testDate.localeCompare(b.testDate)).flatMap((test) => typeof test.metrics[metricKey as StrengthMetricKey] === 'number' ? [{ date: test.testDate, value: test.metrics[metricKey as StrengthMetricKey] as number }] : []);
-  const data = athleteId ? raw : [...new Map(raw.map((item) => [item.date, item.date])).keys()].map((date) => { const values = raw.filter((item) => item.date === date).map((item) => item.value); return { date, value: values.reduce((sum, value) => sum + value, 0) / values.length }; });
-  const best = data.length ? Math.max(...data.map((item) => item.value)) : null;
-  if (!metrics.length) return <ContentState kind="empty" title="暂无可展示的体能趋势" description="至少录入两次同一项目的真实体能测试后展示变化趋势。" />;
-  return <div className="physical-trend"><label>指标<select value={metricKey} onChange={(event) => setSelected(event.target.value as StrengthMetricKey)}>{metrics.map((metric) => <option key={metric.key} value={metric.key}>{metric.label}</option>)}</select></label><div className="physical-chart-canvas">{data.length > 1 ? <ResponsiveContainer width="100%" height="100%"><ComposedChart data={data} margin={{ top: 18, right: 18, left: -12, bottom: 0 }}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="date" tick={{ fontSize: 10, fill: '#62767d' }} axisLine={false} tickLine={false}/><YAxis tick={{ fontSize: 10, fill: '#62767d' }} axisLine={false} tickLine={false} unit={definition?.unit}/><Tooltip formatter={(value) => [`${formatNumber(Number(value), 1)} ${definition?.unit || ''}`, definition?.label || '测试值']} /><ReferenceLine y={best ?? undefined} stroke="#f59e0b" strokeDasharray="4 3" label={{ value: 'PB', position: 'right', fontSize: 10, fill: '#b7791f' }} /><Line type="monotone" dataKey="value" name={definition?.label || '测试值'} stroke="#0d9488" strokeWidth={2.6} dot={{ r: 3, fill: '#fff', strokeWidth: 2 }} /></ComposedChart></ResponsiveContainer> : <ContentState kind="empty" title="至少两次测试后显示趋势" />}</div></div>;
+  const raw = [...tests]
+    .sort((a, b) => a.testDate.localeCompare(b.testDate))
+    .map((test) => {
+      const measured = test.metrics[metricKey as StrengthMetricKey];
+      return { date: test.testDate, value: typeof measured === 'number' && Number.isFinite(measured) ? measured : null };
+    });
+  const data = athleteId
+    ? raw
+    : [...new Set(raw.map((item) => item.date))].map((date) => {
+        const values = raw.filter((item) => item.date === date).flatMap((item) => item.value === null ? [] : [item.value]);
+        return { date, value: values.length ? values.reduce((sum, value) => sum + value, 0) / values.length : null };
+      });
+  const values = data.flatMap((item) => item.value === null ? [] : [item.value]);
+  const best = values.length ? Math.max(...values) : null;
+  const isPlaceholder = values.length === 0;
+  const chartData = data.length ? data : [{ date: '', value: null }];
+  return (
+    <div className="physical-trend">
+      <label>
+        指标
+        <select
+          value={metricKey}
+          onChange={(event) => setSelected(event.target.value as StrengthMetricKey)}
+        >
+          {(metrics.length ? metrics : STRENGTH_METRICS.slice(0, 1)).map((metric) => (
+            <option key={metric.key} value={metric.key}>
+              {metric.label}
+            </option>
+          ))}
+        </select>
+      </label>
+      {isPlaceholder && <p className="app-chart-example">暂无真实体能测试趋势</p>}
+      <div className="physical-chart-canvas">
+        {(
+          <ResponsiveContainer width="100%" height="100%">
+            <ComposedChart data={chartData} margin={{ top: 18, right: 18, left: -12, bottom: 0 }}>
+              <CartesianGrid stroke="var(--line)" strokeDasharray="3 6" vertical={false} />
+              <XAxis
+                dataKey="date"
+                tick={{ fontSize: 11, fill: 'var(--muted)' }}
+                axisLine={false}
+                tickLine={false}
+              />
+              <YAxis
+                allowDataOverflow={isPlaceholder}
+                domain={isPlaceholder ? [0, 1] : undefined}
+                ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
+                tick={{ fontSize: 11, fill: 'var(--muted)' }}
+                axisLine={false}
+                tickLine={false}
+                unit={definition?.unit}
+              />
+              <Tooltip contentStyle={strengthTooltipStyle}
+                labelFormatter={(label) => `${label}`}
+                formatter={(value) => [
+                  `${formatNumber(Number(value), 1)} ${definition?.unit || ''}`,
+                  definition?.label || '测试值',
+                ]}
+              />
+              {athleteId && best !== null && <ReferenceLine
+                y={best ?? undefined}
+                stroke="#f59e0b"
+                strokeDasharray="4 3"
+                label={{ value: 'PB', position: 'right', fontSize: 10, fill: '#b7791f' }}
+              />}
+              <Line
+                type="monotone"
+                dataKey="value"
+                name={definition?.label || '测试值'}
+                stroke="var(--teal)"
+                strokeWidth={3}
+                activeDot={{ r: 6, strokeWidth: 3 }}
+                dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+      {isPlaceholder && <p className="app-chart-example-note">PB 仅根据真实测试显示。</p>}
+    </div>
+  );
 }
 
 function TrainingStructure({ sessions }: { sessions: StrengthTrainingSession[] }) {
   const recordedSets = sessions.flatMap((session) => session.sets.map((set) => ({ session, set })));
-  const items = STRENGTH_CONTENT_ANALYSIS_CATEGORIES.map((name) => ({ name, value: recordedSets.filter(({ session, set }) => inferStrengthContentAnalysisCategory({ sessionLabel: session.sessionLabel, trainingType: session.trainingType, structureType: session.structureType, exerciseName: set.exerciseName, trainingCategory: set.trainingCategory }) === name).length }));
+  const items = STRENGTH_CONTENT_ANALYSIS_CATEGORIES.map((name) => ({
+    name,
+    value: recordedSets.filter(
+      ({ session, set }) =>
+        inferStrengthContentAnalysisCategory({
+          sessionLabel: session.sessionLabel,
+          trainingType: session.trainingType,
+          structureType: session.structureType,
+          exerciseName: set.exerciseName,
+          trainingCategory: set.trainingCategory,
+        }) === name
+    ).length,
+  }));
   const total = items.reduce((sum, item) => sum + item.value, 0);
-  if (!total) return <ContentState kind="empty" title="暂无可统计的体能训练结构" />;
-  return <div className="physical-structure"><div className="physical-structure-bar">{items.filter((item) => item.value).map((item, index) => <i key={item.name} style={{ width: `${item.value / total * 100}%`, background: ['#0d9488','#3b82f6','#8b5cf6','#f59e0b','#ef6b5b','#22a06b','#64748b','#16a3b6'][index] }} title={`${item.name}：${item.value} 项`} />)}</div>{items.filter((item) => item.value).map((item) => <div key={item.name}><span>{item.name}</span><b>{item.value} 项</b><strong>{formatNumber(item.value / total * 100, 1)}%</strong></div>)}<small>统计口径：当前筛选范围内已记录的训练项次数。</small></div>;
+  const displayItems = items;
+  const displayTotal = total || 1;
+  return (
+    <div className="physical-structure">
+      {!total && <p className="app-chart-example">暂无数据</p>}
+      <div className="physical-structure-bar">
+        {displayItems
+          .filter((item) => item.value)
+          .map((item, index) => (
+            <i
+              key={item.name}
+              style={{
+                width: `${(item.value / displayTotal) * 100}%`,
+                background: [
+                  '#0d9488',
+                  '#3b82f6',
+                  '#8b5cf6',
+                  '#f59e0b',
+                  '#ef6b5b',
+                  '#22a06b',
+                  '#64748b',
+                  '#16a3b6',
+                ][index],
+              }}
+              title={`${item.name}：${item.value} 项`}
+            />
+          ))}
+      </div>
+      {displayItems
+        .map((item) => (
+          <div key={item.name}>
+            <span>{item.name}</span>
+            <b>{total ? `${item.value} 项` : '—'}</b>
+            <strong>{total ? `${formatNumber((item.value / displayTotal) * 100, 1)}%` : '—'}</strong>
+          </div>
+        ))}
+      <small>{total ? '统计口径：当前筛选范围内已记录的训练项次数。' : '暂无真实训练项，暂不计算占比。'}</small>
+    </div>
+  );
 }
 
 function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }) {
-  const data = [...new Map(sessions.map((session) => [session.trainingDate, session.trainingDate])).keys()].sort().map((date) => { const items = sessions.filter((session) => session.trainingDate === date); const loads = items.filter((item) => item.srpe > 0); return { date, duration: items.reduce((sum, item) => sum + item.durationMin, 0), load: loads.length ? loads.reduce((sum, item) => sum + item.srpe, 0) : null }; });
-  if (!data.some((item) => item.duration > 0 || item.load !== null)) return <ContentState kind="empty" title="暂无体能训练量数据" />;
-  return <div className="physical-chart-canvas"> <ResponsiveContainer width="100%" height="100%"><ComposedChart data={data} margin={{ top: 18, right: 18, left: -12, bottom: 0 }}><CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false}/><XAxis dataKey="date" tick={{ fontSize: 10, fill: '#62767d' }} axisLine={false} tickLine={false}/><YAxis yAxisId="duration" tick={{ fontSize: 10, fill: '#62767d' }} axisLine={false} tickLine={false} unit=" min"/><YAxis yAxisId="load" orientation="right" tick={{ fontSize: 10, fill: '#62767d' }} axisLine={false} tickLine={false} unit=" AU"/><Tooltip /><Bar yAxisId="duration" dataKey="duration" name="训练时长 min" fill="#70b9b2" radius={[4,4,0,0]} maxBarSize={32}/><Line yAxisId="load" type="monotone" dataKey="load" name="SRPE 训练负荷 AU" stroke="#f59e0b" strokeWidth={2.5} connectNulls /></ComposedChart></ResponsiveContainer></div>;
+  const data = [
+    ...new Map(sessions.map((session) => [session.trainingDate, session.trainingDate])).keys(),
+  ]
+    .sort()
+    .map((date) => {
+      const items = sessions.filter((session) => session.trainingDate === date);
+      const loads = items.filter((item) => item.srpe != null);
+      return {
+        date,
+        duration: items.reduce((sum, item) => sum + item.durationMin, 0),
+        load: loads.length ? loads.reduce((sum, item) => sum + (item.srpe ?? 0), 0) : null,
+      };
+    });
+  const isPlaceholder = data.length === 0;
+  const hasLoad = data.some((item) => item.load !== null);
+  const chartData: Array<{ date: string; duration: number | null; load: number | null }> = data.length
+    ? data
+    : [{ date: '', duration: null, load: null }];
+  return (
+    <div className="physical-chart-canvas">
+      {isPlaceholder && <span className="app-chart-example">暂无数据</span>}
+      <ResponsiveContainer width="100%" height="100%">
+        <ComposedChart data={chartData} margin={{ top: 18, right: 18, left: -12, bottom: 0 }}>
+          <CartesianGrid yAxisId="duration" stroke="var(--line)" strokeDasharray="3 6" vertical={false} />
+          <XAxis
+            dataKey="date"
+            tick={{ fontSize: 11, fill: 'var(--muted)' }}
+            axisLine={false}
+            tickLine={false}
+          />
+          <YAxis
+            allowDataOverflow={isPlaceholder}
+            domain={isPlaceholder ? [0, 1] : undefined}
+            ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
+            yAxisId="duration"
+            tick={{ fontSize: 11, fill: 'var(--muted)' }}
+            axisLine={false}
+            tickLine={false}
+            unit=" min"
+          />
+          <YAxis
+            allowDataOverflow={!hasLoad}
+            domain={!hasLoad ? [0, 1] : undefined}
+            ticks={!hasLoad ? [0, 0.25, 0.5, 0.75, 1] : undefined}
+            yAxisId="load"
+            orientation="right"
+            tick={{ fontSize: 11, fill: 'var(--muted)' }}
+            axisLine={false}
+            tickLine={false}
+            unit=" AU"
+          />
+          <Legend verticalAlign="top" iconType="circle" iconSize={8} wrapperStyle={{ fontSize: 12, paddingBottom: 12 }} />
+          <Tooltip contentStyle={strengthTooltipStyle} cursor={{ fill: 'var(--line)', fillOpacity: 0.25 }} labelFormatter={(label) => `${label}`} />
+          <Bar
+            yAxisId="duration"
+            dataKey="duration"
+            name="训练时长 min"
+            fill="var(--teal)"
+            fillOpacity={0.75}
+            radius={[6, 6, 0, 0]}
+            maxBarSize={28}
+          />
+          <Line
+            yAxisId="load"
+            type="monotone"
+            dataKey="load"
+            name="SRPE 训练负荷 AU"
+            stroke="var(--amber)"
+            strokeWidth={3}
+            dot={{ r: 3, fill: 'var(--surface, white)', strokeWidth: 2 }}
+            activeDot={{ r: 6 }}
+            connectNulls={false}
+          />
+        </ComposedChart>
+      </ResponsiveContainer>
+      {isPlaceholder && <p className="app-chart-example-note">暂无当前周期真实数据</p>}
+    </div>
+  );
 }
 
-export function StrengthTrainingDashboard({ athletes, athleteId, project, from, to, onNavigate, onAthleteChange }: StrengthProps) {
+export function StrengthTrainingDashboard({
+  filters,
+  teamId,
+  athletes,
+  project,
+  from,
+  to,
+  onNavigate,
+}: StrengthProps) {
+  const [athleteId, setAthleteId] = useState<number | null>(null);
+  useEffect(() => { setAthleteId(null); }, [project, teamId]);
   const [sessions, setSessions] = useState<ScopedStrengthSession[]>([]);
   const [tests, setTests] = useState<StrengthTest[]>([]);
   const [loading, setLoading] = useState(true);
-  const scopedAthletes = useMemo(() => athleteId ? athletes.filter((item) => item.id === athleteId) : athletes, [athleteId, athletes]);
-  const athleteKey = scopedAthletes.map((item) => item.id).join(',');
+  const [error, setError] = useState(false);
+  const athleteKey = athletes.map((item) => item.id).join(',');
   useEffect(() => {
     let ignored = false;
     setLoading(true);
-    Promise.all(scopedAthletes.map(async (athlete) => {
-      const [resultSessions, resultTests] = await Promise.all([api.strengthTrainingResults(athlete.id), api.strengthTests(athlete.id)]);
-      return { sessions: resultSessions.sessions.map((session) => ({ ...session, athleteId: athlete.id })), tests: resultTests.tests };
-    })).then((results) => { if (!ignored) { setSessions(results.flatMap((item) => item.sessions)); setTests(results.flatMap((item) => item.tests)); } }).catch(() => { if (!ignored) { setSessions([]); setTests([]); } }).finally(() => { if (!ignored) setLoading(false); });
-    return () => { ignored = true; };
-  }, [athleteKey]);
-  const periodSessions = useMemo(() => sessions.filter((item) => item.trainingDate >= from && item.trainingDate <= to), [sessions, from, to]);
-  const periodTests = useMemo(() => tests.filter((test) => test.testDate >= from && test.testDate <= to), [tests, from, to]);
-  const selectedTests = useMemo(() => athleteId ? periodTests.filter((test) => test.athleteId === athleteId) : periodTests, [athleteId, periodTests]);
-  const latestTest = useMemo(() => latestTestsByAthlete(selectedTests)[0], [selectedTests]);
-  const currentMetrics = useMemo(() => configuredMetrics(project).flatMap((definition) => {
-    const value = latestTest?.metrics[definition.key];
-    return typeof value === 'number' ? [{ key: definition.key, label: definition.label, unit: definition.unit, value, testDate: latestTest.testDate, target: latestTest.targets[definition.key] }] : [];
-  }), [latestTest, project]);
-  const teamMetrics = useMemo(() => metricsFromTests(latestTestsByAthlete(periodTests), project), [periodTests, project]);
-  const displayMetrics = athleteId ? currentMetrics : teamMetrics;
-  return <PageContainer className="professional-overview training-dashboard-page strength-dashboard-page">
-    <PageHeader variant="dashboard" className="overview-page-heading" eyebrow="PHYSICAL TRAINING" title="体能训练" actions={<label className="physical-athlete-filter">运动员<select aria-label="体能训练运动员筛选" value={athleteId ?? ''} onChange={(event) => onAthleteChange(event.target.value ? Number(event.target.value) : null)}><option value="">全部运动员（整体分析）</option>{athletes.map((athlete) => <option key={athlete.id} value={athlete.id}>{athlete.name}</option>)}</select></label>} />
-    <PhysicalChampionModelPlaceholder project={project} onPlanOpen={() => onNavigate('strength-plan')} currentMetrics={displayMetrics} scopeLabel={athleteId ? '当前运动员' : '当前队伍均值'} />
-    {loading ? <ContentState kind="loading" title="正在同步体能训练数据" icon={<Activity className="spin" />} /> : <>
-      <section aria-label="整体体能指标"><SectionHeader title={athleteId ? '体能核心指标概览' : '整体体能指标概览'} description={athleteId ? '当前运动员本时间范围内最近一次真实测试' : '当前项目、权限与组织范围内的整体体能训练数据'} /><PhysicalCoreMetrics metrics={displayMetrics} sessions={periodSessions} athleteId={athleteId} /></section>
-      <section className="training-dashboard-grid physical-dashboard-grid"><ChartCard title={athleteId ? '体能能力画像' : '团队体能能力画像'} description={athleteId ? '仅使用已配置的个人目标进行标准化' : '仅使用真实目标标准化后的团队均值'} className="dashboard-span-5"><AbilityProfile metrics={displayMetrics} athleteId={athleteId} /></ChartCard><ChartCard title={athleteId ? '关键体能指标趋势' : '关键体能指标整体趋势'} description={athleteId ? '单指标展示，标记个人历史最佳值' : '单指标展示，按测试日期汇总团队均值'} className="dashboard-span-7"><MetricTrend tests={selectedTests} metrics={displayMetrics} athleteId={athleteId} /></ChartCard><ChartCard title="体能训练结构" description="100% 堆叠比例 · 按当前范围内已记录训练项次数" className="dashboard-span-5"><TrainingStructure sessions={periodSessions} /></ChartCard><ChartCard title="体能训练量趋势" description="柱状为总训练时长；折线为已有 SRPE 训练负荷" className="dashboard-span-7"><TrainingLoadTrend sessions={periodSessions} /></ChartCard></section>
-    </>}
-  </PageContainer>;
+    setError(false);
+    const athleteIds = athleteKey ? athleteKey.split(',').map(Number) : [];
+    api.strengthDashboardData(athleteIds, from, to)
+      .then((result) => {
+        if (!ignored) {
+          setSessions(result.sessions);
+          setTests(result.tests);
+        }
+      })
+      .catch(() => {
+        if (!ignored) {
+          setError(true);
+          setSessions([]);
+          setTests([]);
+        }
+      })
+      .finally(() => {
+        if (!ignored) setLoading(false);
+      });
+    return () => {
+      ignored = true;
+    };
+  }, [athleteKey, from, to]);
+  const periodSessions = useMemo(
+    () => sessions.filter((item) => item.trainingDate >= from && item.trainingDate <= to),
+    [sessions, from, to]
+  );
+  const periodTests = useMemo(
+    () => tests.filter((test) => test.testDate >= from && test.testDate <= to),
+    [tests, from, to]
+  );
+  const selectedTests = useMemo(
+    () => (athleteId ? periodTests.filter((test) => test.athleteId === athleteId) : periodTests),
+    [athleteId, periodTests]
+  );
+  const analysisSessions = useMemo(
+    () => (athleteId ? periodSessions.filter((session) => session.athleteId === athleteId) : periodSessions),
+    [athleteId, periodSessions]
+  );
+  const selectorAthletes = useMemo(
+    () =>
+      athletes.map((athlete) => {
+        const athleteSessions = periodSessions.filter((session) => session.athleteId === athlete.id);
+        return {
+          ...athlete,
+          summary: {
+            sessionCount: athleteSessions.length,
+            durationMin: athleteSessions.length
+              ? athleteSessions.reduce((sum, session) => sum + session.durationMin, 0)
+              : null,
+            distanceKm: null,
+            load: athleteSessions.some((session) => session.srpe != null)
+              ? athleteSessions.reduce((sum, session) => sum + (session.srpe ?? 0), 0)
+              : null,
+          },
+        };
+      }),
+    [athletes, periodSessions]
+  );
+  const displayMetrics = useMemo(
+    () => metricsFromTests(selectedTests, project),
+    [selectedTests, project]
+  );
+  return (
+    <PageContainer className="professional-overview training-dashboard-page strength-dashboard-page">
+      <PageHeader
+        variant="dashboard"
+        className="overview-page-heading"
+        title="体能训练"
+        filters={filters}
+        filterActions={
+          <>
+            <button type="button" className="primary-button" onClick={() => onNavigate('strength-plan')}>
+              训练计划
+            </button>
+            <button type="button" className="secondary-button" onClick={() => onNavigate('strength-enode')}>
+              Enode VBT
+            </button>
+            {athleteId ? (
+              <button type="button" className="secondary-button" onClick={() => setAthleteId(null)}>
+                当前运动员：{athletes.find((athlete) => athlete.id === athleteId)?.name || '已选运动员'} · 清除
+              </button>
+            ) : null}
+          </>
+        }
+      />
+
+      {loading ? (
+        <ContentState
+          kind="loading"
+          title="正在同步体能训练数据"
+          icon={<Activity className="spin" />}
+        />
+      ) : error ? (
+        <ContentState kind="error" title="体能训练数据加载失败" description="请刷新页面重试。" />
+      ) : (
+        <>
+          <section aria-label="整体体能指标">
+            <SectionHeader
+              title={athleteId ? '体能核心指标概览' : '整体体能指标概览'}
+              description={
+                athleteId
+                  ? '当前运动员在所选周期内的体能训练汇总'
+                  : '当前项目、权限与组织范围内的整体体能训练数据'
+              }
+            />
+            <PhysicalCoreMetrics
+              sessions={analysisSessions}
+              athleteId={athleteId}
+            />
+          </section>
+          <section className="training-dashboard-grid physical-dashboard-grid">
+            <ChartCard
+              title={athleteId ? '体能能力画像' : '团队体能能力画像'}
+              description={
+                athleteId ? '各指标最近有效实测与目标达成率' : '各指标按每名运动员最近有效实测汇总'
+              }
+              className="dashboard-span-5"
+            >
+              <AbilityProfile metrics={displayMetrics} athleteId={athleteId} />
+            </ChartCard>
+            <ChartCard
+              title={athleteId ? '关键体能指标趋势' : '关键体能指标整体趋势'}
+              description={
+                athleteId ? '单指标展示，标记个人历史最佳值' : '单指标展示，按测试日期汇总团队均值'
+              }
+              className="dashboard-span-7"
+            >
+              <MetricTrend tests={selectedTests} metrics={displayMetrics} athleteId={athleteId} />
+            </ChartCard>
+            <ChartCard
+              title="体能训练结构"
+              description="100% 堆叠比例 · 按当前范围内已记录训练项次数"
+              className="dashboard-span-5"
+            >
+              <TrainingStructure sessions={analysisSessions} />
+            </ChartCard>
+            <ChartCard
+              title="体能训练量趋势"
+              description="柱状为总训练时长；折线为已有 SRPE 训练负荷"
+              className="dashboard-span-7"
+            >
+              <TrainingLoadTrend sessions={analysisSessions} />
+            </ChartCard>
+          </section>
+          <StrengthSessionAnalysis sessions={analysisSessions} />
+          <PhysicalChampionModel project={project} from={from} to={to} teamId={teamId} />
+          <PhysicalTestModule
+            tests={periodTests}
+            project={project}
+            from={from}
+            to={to}
+            athleteId={athleteId}
+            athletes={athletes}
+          />
+          <ChartCard title="运动员" description={`当前范围共 ${athletes.length} 名运动员 · 默认显示约5条`}>
+            <AthleteAnalysisSelector
+              athletes={selectorAthletes}
+              selectedAthleteId={athleteId}
+              onSelect={setAthleteId}
+              onClear={() => setAthleteId(null)}
+              renderSummary={(athlete) => <span className="athlete-analysis-selector-meta">课次 {athlete.summary?.sessionCount ?? '—'} · 时长 {athlete.summary?.durationMin === null ? '—' : `${formatNumber((athlete.summary?.durationMin || 0) / 60, 1)} h`} · 负荷 {athlete.summary?.load === null ? '—' : `${formatNumber(athlete.summary?.load || 0)} AU`}</span>}
+            />
+          </ChartCard>
+        </>
+      )}
+    </PageContainer>
+  );
 }

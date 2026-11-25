@@ -1,0 +1,328 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Strength A4 export */
+.strength-pdf-sheet {
+  padding: 9mm 11mm 8mm;
+}
+
+.strength-poster-pdf {
+  position: relative;
+  height: 100%;
+  background-size: 18px 18px;
+}
+
+.strength-poster-pdf .strength-poster-header {
+  min-height: 18mm;
+  padding: 1mm 0 3mm;
+  grid-template-columns: 40mm minmax(0, 1fr) 25mm;
+}
+
+.strength-poster-pdf .strength-poster-brand {
+  gap: 2mm;
+}
+
+.strength-poster-pdf .strength-poster-brand > span strong {
+  font-size: 11pt;
+}
+
+.strength-poster-pdf .strength-poster-brand > span small {
+  font-size: 4pt;
+}
+
+.strength-poster-pdf .strength-poster-header > div:nth-child(2) > span {
+  font-size: 4.5pt;
+}
+
+.strength-poster-pdf .strength-poster-header h2 {
+  margin-top: 1.3mm;
+  font-size: 16pt;
+}
+
+.strength-poster-pdf .strength-poster-header p {
+  margin-top: 1mm;
+  font-size: 5.5pt;
+}
+
+.strength-poster-pdf .strength-poster-date {
+  font-size: 5pt;
+}
+
+.strength-poster-pdf .strength-poster-identity {
+  min-height: 15mm;
+}
+
+.strength-poster-pdf .strength-poster-identity > div {
+  padding: 3mm 4mm;
+}
+
+.strength-poster-pdf .strength-poster-identity span {
+  font-size: 5pt;
+}
+
+.strength-poster-pdf .strength-poster-identity strong {
+  margin-top: 1mm;
+  font-size: 8pt;
+}
+
+.strength-poster-pdf .strength-body-map {
+  min-height: 170mm;
+  height: 170mm;
+  margin-top: 2mm;
+}
+
+.strength-poster-pdf .strength-morphology-column {
+  top: 3%;
+  width: 20%;
+  gap: 1mm;
+}
+
+.strength-poster-pdf .strength-morphology-column > div {
+  min-height: 7mm;
+  padding: 0.8mm 1.5mm;
+}
+
+.strength-poster-pdf .strength-morphology-column span {
+  font-size: 5pt;
+}
+
+.strength-poster-pdf .strength-morphology-column strong {
+  font-size: 7.5pt;
+}
+
+.strength-poster-pdf .strength-morphology-column strong small {
+  font-size: 4.5pt;
+}
+
+.strength-poster-pdf .strength-callout {
+  width: 21.5%;
+  min-height: 8mm;
+  padding: 0.7mm 1.5mm;
+}
+
+.strength-poster-pdf .strength-callout span {
+  font-size: 5.2pt;
+}
+
+.strength-poster-pdf .strength-callout strong {
+  margin-top: 0.4mm;
+  font-size: 7.3pt;
+}
+
+.strength-poster-pdf .strength-callout strong small {
+  font-size: 4.6pt;
+}
+
+.strength-poster-pdf .strength-callout > i {
+  height: 0.45mm;
+}
+
+.strength-poster-pdf .strength-callout.left > i {
+  transform: rotate(var(--callout-angle)) scaleX(0.55);
+}
+
+.strength-poster-pdf .strength-callout.right > i {
+  transform: rotate(var(--callout-angle)) scaleX(0.55);
+}
+
+.strength-poster-pdf .strength-body-figure img {
+  width: auto;
+  max-width: 72%;
+  height: 168mm;
+}
+
+.strength-poster-pdf .strength-poster-legend {
+  min-height: 11mm;
+  padding: 2mm 3mm;
+  gap: 3mm;
+}
+
+.strength-poster-pdf .strength-poster-legend > span {
+  font-size: 4.8pt;
+}
+
+.strength-poster-pdf .strength-poster-legend i {
+  width: 2mm;
+  height: 2mm;
+}
+
+.strength-poster-pdf .strength-evaluation {
+  margin-top: 3mm;
+  min-height: 31mm;
+  padding: 3mm 4mm;
+  border-left-width: 1mm;
+}
+
+.strength-poster-pdf .strength-evaluation > span {
+  font-size: 5.5pt;
+}
+
+.strength-poster-pdf .strength-evaluation p {
+  margin-top: 1.5mm;
+  font-size: 6.3pt;
+  line-height: 1.65;
+}
+
+.strength-poster-pdf .strength-evaluation small {
+  margin-top: 1mm;
+  font-size: 4.8pt;
+}
+
+.strength-pdf-footer {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  padding-top: 2mm;
+  border-top: 1px solid #cedbdd;
+  color: #70858c;
+  display: flex;
+  justify-content: space-between;
+  font-size: 4.5pt;
+}
+
+@media (width <= 980px) {
+  .strength-module-heading {
+    align-items: flex-start;
+    padding: 18px;
+    flex-direction: column;
+  }
+
+  .strength-module-actions {
+    width: 100%;
+    flex-wrap: wrap;
+  }
+
+  .strength-module-actions .primary-button {
+    margin-left: auto;
+  }
+
+  .strength-body-map {
+    min-height: 590px;
+    height: 590px;
+  }
+
+  .strength-body-figure img {
+    max-width: 78%;
+  }
+
+  .strength-callout {
+    width: 27%;
+  }
+}
+
+@media (width <= 720px) {
+  .strength-poster-web {
+    padding: 16px;
+  }
+
+  .strength-poster-header {
+    grid-template-columns: 1fr auto;
+  }
+
+  .strength-poster-header > div:nth-child(2) {
+    grid-column: 1 / -1;
+    grid-row: 2;
+    text-align: left;
+  }
+
+  .strength-poster-date {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .strength-poster-identity {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .strength-poster-identity > div:nth-child(2) {
+    border-right: 0;
+  }
+
+  .strength-poster-identity > div:nth-child(-n + 2) {
+    border-bottom: 1px solid #e0e9eb;
+  }
+
+  .strength-body-map {
+    min-height: 520px;
+    height: 520px;
+    overflow: visible;
+  }
+
+  .strength-body-figure img {
+    max-width: 88%;
+  }
+
+  .strength-morphology-column {
+    width: 30%;
+  }
+
+  .strength-callout {
+    width: 31%;
+    padding: 2px 4px;
+    background: rgb(255 255 255 / 82%);
+  }
+
+  .strength-callout span {
+    font-size: 7px;
+  }
+
+  .strength-callout strong {
+    font-size: 9px;
+  }
+
+  .strength-callout strong small {
+    display: block;
+    margin-left: 0;
+    font-size: 6px;
+  }
+
+  .strength-callout > i {
+    display: none;
+  }
+
+  .strength-measure-axis.arm-span {
+    left: 6%;
+    right: 6%;
+  }
+
+  .strength-poster-legend .legend-rule {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .strength-editor-meta {
+    grid-template-columns: 1fr;
+  }
+
+  .strength-entry-head,
+  .strength-entry-row {
+    grid-template-columns: minmax(105px, 1fr) 1fr 1fr;
+    gap: 6px;
+  }
+
+  .strength-entry-head {
+    padding: 0 12px;
+  }
+
+  .strength-entry-row {
+    padding: 6px 12px;
+  }
+
+  .strength-entry-row > div {
+    grid-template-columns: 1fr 30px;
+  }
+
+  .strength-editor-modal form > footer {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .strength-editor-modal form > footer p {
+    width: 100%;
+  }
+
+  .strength-editor-modal form > footer button {
+    flex: 1;
+  }
+}
+

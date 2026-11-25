@@ -1,0 +1,7 @@
+{
+  "component": true,
+  "usingComponents": {
+    "pager-nav": "/components/pager-nav/index"
+  },
+  "styleIsolation": "apply-shared"
+}

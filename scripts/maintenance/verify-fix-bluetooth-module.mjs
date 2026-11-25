@@ -25,14 +25,14 @@ function log(status, message) {
 
 function ensureImportIcon(source) {
   if (source.includes('BluetoothConnected')) return source;
-  return source.replace(
-    /import\s*\{([\s\S]*?)\}\s*from ['"]lucide-react['"];?/,
-    (_match, body) => {
-      const icons = body.split(',').map((item) => item.trim()).filter(Boolean);
-      icons.push('BluetoothConnected');
-      return `import {\n  ${icons.join(',\n  ')}\n} from 'lucide-react';`;
-    }
-  );
+  return source.replace(/import\s*\{([\s\S]*?)\}\s*from ['"]lucide-react['"];?/, (_match, body) => {
+    const icons = body
+      .split(',')
+      .map((item) => item.trim())
+      .filter(Boolean);
+    icons.push('BluetoothConnected');
+    return `import {\n  ${icons.join(',\n  ')}\n} from 'lucide-react';`;
+  });
 }
 
 function ensurePageKey(source) {
@@ -49,7 +49,8 @@ function ensureNav(source) {
   const accountAuditPattern = /(\n\s*\{\s*key:\s*['"]accountAudit['"][^}]*\},?)/;
   const weeklyPattern = /(\n\s*\{\s*key:\s*['"]weeklyPlan['"][^}]*\},?)/;
   const plansPattern = /(\n\s*\{\s*key:\s*['"]plans['"][^}]*\},?)/;
-  if (accountAuditPattern.test(source)) return source.replace(accountAuditPattern, `$1\n${navItem}`);
+  if (accountAuditPattern.test(source))
+    return source.replace(accountAuditPattern, `$1\n${navItem}`);
   if (weeklyPattern.test(source)) return source.replace(weeklyPattern, `$1\n${navItem}`);
   if (plansPattern.test(source)) return source.replace(plansPattern, `$1\n${navItem}`);
   return source;
@@ -60,11 +61,14 @@ function ensureRouteImport(source) {
   const imports = [
     /import \{ AccountAuditPage \} from ['"]\.\/pages\/AccountAuditPage['"];?/,
     /import \{ WeeklyTrainingPlanPage \} from ['"]\.\/pages\/WeeklyTrainingPlanPage['"];?/,
-    /import \{ TrainingPlanPage \} from ['"]\.\/pages\/TrainingPlanPage['"];?/
+    /import \{ TrainingPlanPage \} from ['"]\.\/pages\/TrainingPlanPage['"];?/,
   ];
   for (const pattern of imports) {
     if (pattern.test(source)) {
-      return source.replace(pattern, (match) => `${match}\nimport { BluetoothConnectPage } from './pages/BluetoothConnectPage';`);
+      return source.replace(
+        pattern,
+        (match) => `${match}\nimport { BluetoothConnectPage } from './pages/BluetoothConnectPage';`
+      );
     }
   }
   return `import { BluetoothConnectPage } from './pages/BluetoothConnectPage';\n${source}`;
@@ -75,11 +79,14 @@ function ensureRouteRender(source) {
   const patterns = [
     /(\s*\{page === ['"]accountAudit['"] && <AccountAuditPage[^\n]+\/>\})/,
     /(\s*\{page === ['"]weeklyPlan['"] && <WeeklyTrainingPlanPage[^\n]+\/>\})/,
-    /(\s*\{page === ['"]plans['"] && <TrainingPlanPage[^\n]+\/>\})/
+    /(\s*\{page === ['"]plans['"] && <TrainingPlanPage[^\n]+\/>\})/,
   ];
   for (const pattern of patterns) {
     if (pattern.test(source)) {
-      return source.replace(pattern, `$1\n        {page === 'bluetooth' && <BluetoothConnectPage user={user} />}`);
+      return source.replace(
+        pattern,
+        `$1\n        {page === 'bluetooth' && <BluetoothConnectPage user={user} />}`
+      );
     }
   }
   return source;
@@ -127,7 +134,7 @@ const required = [
   'src/pages/BluetoothConnectPage.tsx',
   'src/components/AppShell.tsx',
   'src/App.tsx',
-  'src/styles.css'
+  'src/styles.css',
 ];
 
 for (const item of required) {
@@ -136,7 +143,10 @@ for (const item of required) {
 
 if (!exists('src/pages/BluetoothConnectPage.tsx')) {
   if (exists('scripts/maintenance/install-bluetooth-module.mjs')) {
-    log('INFO', 'Bluetooth page missing. Run: node scripts/maintenance/install-bluetooth-module.mjs');
+    log(
+      'INFO',
+      'Bluetooth page missing. Run: node scripts/maintenance/install-bluetooth-module.mjs'
+    );
     process.exit(2);
   }
   log('ERR', 'Bluetooth page and install script are missing.');
@@ -168,9 +178,11 @@ console.log('\n检查关键词：');
 for (const [name, source] of [
   ['AppShell', appShell],
   ['App', app],
-  ['styles', css]
+  ['styles', css],
 ]) {
-  console.log(`${name}: 蓝牙连接=${source.includes('蓝牙连接')} bluetooth=${source.includes('bluetooth')} BluetoothConnectPage=${source.includes('BluetoothConnectPage')}`);
+  console.log(
+    `${name}: 蓝牙连接=${source.includes('蓝牙连接')} bluetooth=${source.includes('bluetooth')} BluetoothConnectPage=${source.includes('BluetoothConnectPage')}`
+  );
 }
 
 console.log('\n如果上面有 FIX，请继续运行：');

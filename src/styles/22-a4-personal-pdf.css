@@ -1,0 +1,277 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* A4 personal PDF */
+.pdf-export-stage {
+  position: fixed;
+  z-index: -1000;
+  left: -10000px;
+  top: 0;
+  width: 210mm;
+  background: #fff;
+}
+
+.personal-pdf-sheet {
+  position: relative;
+  width: 210mm;
+  height: 297mm;
+  overflow: hidden;
+  padding: 12mm 14mm 11mm;
+  color: #173844;
+  background: #fff;
+  font-family: 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
+}
+
+.personal-pdf-sheet::before {
+  content: '';
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 2.6mm;
+  background: linear-gradient(180deg, #18958e 0 18%, #092f3d 18% 100%);
+}
+
+.pdf-standard-note {
+  margin-top: 3.5mm;
+  padding: 3mm 4mm;
+  color: #6a560f;
+  background: #fff8df;
+  display: grid;
+  grid-template-columns: 20mm 1fr;
+  gap: 3mm;
+}
+
+.pdf-standard-note strong {
+  font-size: 6pt;
+}
+
+.pdf-standard-note p {
+  font-size: 5.4pt;
+  line-height: 1.45;
+}
+
+@media (width <= 980px) {
+  .performance-athlete-picker {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .performance-picker-copy {
+    grid-column: 1 / -1;
+  }
+
+  .performance-athlete-no-result {
+    grid-column: 1 / -1;
+  }
+
+  .personal-dossier .personal-inline-details {
+    border-top-color: rgb(191 232 225 / 22%);
+  }
+
+  .personal-dossier-identity {
+    min-height: 0;
+  }
+
+  .personal-header-metrics {
+    min-width: 0;
+    width: min(420px, 46%);
+  }
+
+  .personal-dossier-groups {
+    grid-template-columns: 1fr;
+  }
+
+  .injury-current-panel {
+    grid-template-columns: 180px 1fr;
+  }
+
+  .injury-current-review {
+    grid-column: 1 / -1;
+    border-top: 1px solid #dce6e8;
+  }
+
+  .injury-current-panel > div:nth-child(2) {
+    border-right: 0;
+  }
+}
+
+@media (width <= 620px) {
+  .performance-athlete-picker {
+    grid-template-columns: 1fr;
+    padding: 14px;
+  }
+
+  .performance-picker-copy,
+  .performance-athlete-no-result {
+    grid-column: 1;
+  }
+
+  .personal-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 13px;
+    font-size: 21px;
+  }
+
+  .personal-identity-copy h2 {
+    font-size: 22px;
+  }
+
+  .personal-dossier {
+    padding: 18px 14px;
+  }
+
+  .personal-dossier .personal-avatar {
+    width: 58px;
+    height: 58px;
+  }
+
+  .personal-dossier .personal-detail-identity {
+    min-height: 0;
+  }
+
+  .personal-dossier .personal-inline-details {
+    grid-column: 1 / -1;
+  }
+
+  .personal-profile-details > dl > div.wide {
+    grid-column: span 2;
+  }
+
+  .personal-dossier-identity {
+    align-items: flex-start;
+    gap: 12px;
+    flex-wrap: wrap;
+  }
+
+  .personal-header-metrics {
+    width: 100%;
+    min-width: 0;
+    grid-template-columns: 1fr;
+    border-top: 1px solid var(--dossier-divider);
+    border-left: 0;
+  }
+
+  .personal-header-metrics article {
+    padding: 11px 0;
+    border-right: 0;
+    border-bottom: 1px solid var(--dossier-divider);
+  }
+
+  .personal-header-metrics article:last-child {
+    border-bottom: 0;
+  }
+
+  .personal-header-metrics article:first-child {
+    padding-left: 0;
+  }
+
+  .personal-header-metrics strong {
+    font-size: 19px;
+  }
+
+  .personal-dossier-groups {
+    margin-top: 14px;
+    gap: 10px;
+  }
+
+  .personal-dossier-group {
+    padding: 13px;
+  }
+
+  .personal-dossier-group dl {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px 12px;
+  }
+
+  .personal-dossier-group dl > div {
+    padding-left: 7px;
+  }
+
+  .period-actions .secondary-button {
+    flex: 1;
+  }
+
+  .injury-module-heading {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .injury-module-heading .secondary-button {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .injury-current-panel {
+    grid-template-columns: 1fr;
+  }
+
+  .injury-current-panel > div {
+    border-right: 0;
+    border-bottom: 1px solid #dce6e8;
+  }
+
+  .injury-current-panel > div:last-child {
+    border-bottom: 0;
+  }
+
+  .injury-clear-state {
+    grid-column: 1;
+  }
+
+  .injury-guidance-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .injury-timeline article {
+    grid-template-columns: 1fr 70px;
+    padding-top: 10px;
+    padding-bottom: 10px;
+  }
+
+  .injury-timeline time {
+    grid-column: 1;
+  }
+
+  .injury-timeline article div {
+    grid-column: 1;
+  }
+
+  .injury-timeline article > b {
+    grid-column: 2;
+    grid-row: 1;
+  }
+
+  .injury-timeline article > small {
+    grid-column: 2;
+    grid-row: 2;
+  }
+
+  .injury-dialog-overlay {
+    padding: 10px;
+  }
+
+  .injury-dialog {
+    max-height: calc(100vh - 20px);
+  }
+
+  .injury-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .injury-form-grid label.wide {
+    grid-column: 1;
+  }
+
+  .injury-dialog form > footer {
+    align-items: stretch;
+    flex-wrap: wrap;
+  }
+
+  .injury-dialog form > footer p {
+    width: 100%;
+    max-width: none;
+  }
+
+  .injury-dialog form > footer button {
+    flex: 1;
+  }
+}
+

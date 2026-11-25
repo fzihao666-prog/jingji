@@ -1,23 +1,50 @@
 import { useEffect, useRef } from 'react';
-import { init, use, type EChartsType } from 'echarts/core';
-import { BarChart, LineChart, PieChart } from 'echarts/charts';
-import { GridComponent, TooltipComponent, LegendComponent } from 'echarts/components';
+import { init, use as registerEChartsComponents, type EChartsType } from 'echarts/core';
+import { BarChart, LineChart, PieChart, RadarChart, ScatterChart } from 'echarts/charts';
+import {
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  RadarComponent,
+} from 'echarts/components';
 import { CanvasRenderer } from 'echarts/renderers';
 import type { EChartsOption } from 'echarts';
 import './EChart.css';
+import { emptyChartOption } from './empty-chart-option';
 
-use([BarChart, LineChart, PieChart, GridComponent, TooltipComponent, LegendComponent, CanvasRenderer]);
+registerEChartsComponents([
+  BarChart,
+  ScatterChart,
+  LineChart,
+  PieChart,
+  RadarChart,
+  GridComponent,
+  TooltipComponent,
+  LegendComponent,
+  RadarComponent,
+  CanvasRenderer,
+]);
 const resizers = new Map<Element, () => void>();
 let observer: ResizeObserver | undefined;
 
 /** 共用容器尺寸监听；隐藏容器显示后再初始化，卸载时释放实例。 */
-export function EChart({ option, label }: { option: EChartsOption; label: string }) {
+export function EChart({
+  option,
+  label,
+  isPlaceholder = false,
+}: {
+  option: EChartsOption;
+  label: string;
+  isPlaceholder?: boolean;
+}) {
   const element = useRef<HTMLDivElement>(null);
   const chart = useRef<EChartsType | null>(null);
-  const currentOption = useRef(option);
-  currentOption.current = option;
+  const displayOption = isPlaceholder ? emptyChartOption(option) : option;
+  const currentOption = useRef(displayOption);
+  currentOption.current = displayOption;
   useEffect(() => {
-    const container = element.current!;
+    const container = element.current;
+    if (!container) return;
     const resize = () => {
       if (!container.clientWidth || !container.clientHeight) return;
       if (!chart.current) {
@@ -29,12 +56,14 @@ export function EChart({ option, label }: { option: EChartsOption; label: string
           categoryAxis: { axisLine: { lineStyle: { color: token('--line') } } },
           timeAxis: { axisLine: { lineStyle: { color: token('--line') } } },
           valueAxis: { splitLine: { lineStyle: { color: token('--line') } } },
-          legend: { textStyle: { color: token('--muted') } }
+          legend: { textStyle: { color: token('--muted') } },
         });
         chart.current.setOption(currentOption.current);
       } else chart.current.resize();
     };
-    observer ??= new ResizeObserver((entries) => entries.forEach((entry) => resizers.get(entry.target)?.()));
+    observer ??= new ResizeObserver((entries) =>
+      entries.forEach((entry) => resizers.get(entry.target)?.())
+    );
     resizers.set(container, resize);
     observer.observe(container);
     resize();
@@ -47,7 +76,17 @@ export function EChart({ option, label }: { option: EChartsOption; label: string
   }, []);
   useEffect(() => {
     // 系列数量随成绩分组/数据变化；替换系列避免残留，同时保留其他交互状态。
-    chart.current?.setOption(option, { replaceMerge: ['series'] });
-  }, [option]);
-  return <div ref={element} className="app-echart" role="img" aria-label={label} />;
+    chart.current?.setOption(displayOption, { notMerge: true });
+  }, [displayOption]);
+  return (
+    <div className="app-echart-wrap">
+      <div
+        ref={element}
+        className="app-echart"
+        role="img"
+        aria-label={isPlaceholder ? `${label}；暂无当前周期真实数据` : label}
+      />
+      {isPlaceholder && <p className="app-chart-example-note">暂无当前周期真实数据</p>}
+    </div>
+  );
 }

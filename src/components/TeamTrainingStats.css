@@ -1,0 +1,380 @@
+.team-training-mapping-dialog {
+  width: min(720px, calc(100vw - 32px));
+  max-height: 90vh;
+  padding: 20px;
+  color: var(--ink);
+  background: var(--paper, white);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+}
+
+.team-training-mapping-dialog::backdrop {
+  background: rgb(0 0 0 / 45%);
+}
+
+.team-training-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 12px;
+  margin-block: 12px;
+}
+
+.team-training-controls label,
+.team-training-mappings label {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  color: var(--ink);
+}
+
+.team-training-controls input,
+.team-training-controls select,
+.team-training-mappings input,
+.team-training-mappings select {
+  min-height: 42px;
+  max-width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  color: var(--ink);
+  background: var(--paper);
+  font: inherit;
+}
+
+.team-training-controls p,
+.team-training-chart p,
+.team-training-mappings p {
+  color: var(--muted);
+}
+
+.team-training-mappings fieldset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  min-width: 0;
+  margin-block: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+}
+
+.team-training-mappings legend {
+  overflow-wrap: anywhere;
+}
+
+.team-training-module {
+  container: training-board / inline-size;
+  margin-block: 24px;
+  padding-block-start: 20px;
+  border-block-start: 1px solid var(--line);
+  scroll-margin-block-start: 24px;
+}
+
+.team-training-periods {
+  display: flex;
+  gap: 4px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.team-training-periods legend {
+  margin-block-end: 6px;
+}
+
+.team-training-periods label {
+  position: relative;
+  cursor: pointer;
+}
+
+.team-training-periods label input {
+  position: absolute;
+  width: 1px;
+  min-height: 0;
+  height: 1px;
+  opacity: 0;
+}
+
+.team-training-periods label span {
+  display: grid;
+  min-width: 44px;
+  min-height: 42px;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+}
+
+.team-training-periods input:checked + span {
+  border-color: var(--ink);
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.team-training-periods input:focus-visible + span {
+  outline: 2px solid var(--ink);
+  outline-offset: 2px;
+}
+
+.team-training-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 12px;
+  margin-block: 16px;
+}
+
+.team-training-kpis > div {
+  padding: 12px 16px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+}
+
+.team-training-kpis dt {
+  color: var(--muted);
+}
+
+.team-training-kpis dd {
+  margin: 4px 0 0;
+  color: var(--ink);
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.team-training-kpi-unit {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.team-training-overview,
+.team-training-analysis-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.team-training-overview {
+  margin-block-end: 16px;
+}
+
+@container training-board (min-width: 640px) {
+  .team-training-overview {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+  }
+
+  .team-training-overview-water {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .team-training-overview-water > :first-child {
+    grid-column: 1 / -1;
+  }
+
+  .team-training-analysis-grid {
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    align-items: center;
+  }
+
+  .team-training-analysis-grid > .team-training-donut-layout {
+    padding-inline-start: 16px;
+    border-inline-start: 1px solid var(--line);
+  }
+}
+
+@container training-board (min-width: 900px) {
+  .team-training-overview-water {
+    grid-template-columns: minmax(0, 2.25fr) repeat(2, minmax(0, 1fr));
+  }
+
+  .team-training-overview-water > :first-child {
+    grid-column: auto;
+  }
+}
+
+.team-training-metric-switch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-block: 0 12px;
+}
+
+.team-training-metric-switch button[aria-pressed='true'] {
+  color: var(--paper);
+  background: var(--ink);
+}
+
+.team-training-chart,
+.team-training-volume-chart {
+  min-width: 0;
+}
+
+.team-training-module .team-training-chart {
+  margin-block-end: 16px;
+}
+
+.team-training-module .team-training-overview .team-training-chart {
+  margin-block-end: 0;
+}
+
+.team-training-volume-chart h4 {
+  margin-block: 0 8px;
+}
+
+.team-training-donut-layout {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.team-training-donut {
+  position: relative;
+  min-width: 0;
+}
+
+.team-training-donut .app-echart {
+  --chart-height: 205px;
+}
+
+.team-training-donut-total {
+  position: absolute;
+  inset: 50% auto auto 50%;
+  display: grid;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
+.team-training-donut-total strong {
+  font-size: 19px;
+}
+
+.team-training-donut-unit {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.team-training-volume-chart .app-echart {
+  --chart-height: 230px;
+}
+
+.team-training-table-scroll tr.team-training-table-group > :is(th, td) {
+  background: var(--mist);
+  font-weight: 700;
+}
+
+.team-training-ratio-legend,
+.team-training-bars {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.team-training-ratio-legend {
+  gap: 0;
+  min-width: 0;
+}
+
+.team-training-ratio-legend li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(3.5ch, auto);
+  align-items: baseline;
+  gap: 6px;
+  padding-block: 7px;
+  border-block-start: 1px solid var(--line);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  overflow-wrap: anywhere;
+}
+
+.team-training-ratio-legend strong,
+.team-training-legend-share {
+  text-align: end;
+  white-space: nowrap;
+}
+
+.team-training-legend-share {
+  color: var(--muted);
+}
+
+.team-training-bars li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 6px 12px;
+  overflow-wrap: anywhere;
+}
+
+.team-training-ratio-legend i {
+  display: inline-block;
+  width: 10px;
+  height: 10px;
+  margin-inline-end: 8px;
+  border-radius: 50%;
+}
+
+.team-training-bar-track {
+  grid-column: 1 / -1;
+  height: 9px;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--line);
+}
+
+.team-training-bar-track i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--teal);
+}
+
+.team-training-table-scroll {
+  max-height: 440px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+
+.team-training-table-scroll table {
+  width: 100%;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+
+.team-training-table-scroll :is(th, td) {
+  padding: 8px 12px;
+  border-block-end: 1px solid var(--line);
+  text-align: end;
+  white-space: nowrap;
+}
+
+.team-training-table-scroll thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--paper);
+}
+
+.team-training-table-scroll tr > th:first-child {
+  position: sticky;
+  left: 0;
+  max-width: 160px;
+  border-inline-end: 1px solid var(--line);
+  background: var(--paper);
+  text-align: start;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.team-training-table-scroll thead th:first-child {
+  z-index: 2;
+}
+
+.team-training-week-navigation {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}

@@ -1,0 +1,367 @@
+import type { EChartsOption } from 'echarts';
+import { useState, type ReactNode } from 'react';
+import type { AthleteRadarDimension, AthleteRadarModel, AthleteTestSeries } from '../types';
+import { formatNumber } from '../utils';
+import { EChart } from './EChart';
+import { ContentState } from './PageLayout';
+
+type Props = {
+  model: AthleteRadarModel | null;
+  loading: boolean;
+  title: string;
+};
+
+const metricNumber = new Intl.NumberFormat('zh-CN', {
+  maximumFractionDigits: 2,
+});
+
+function formatMetric(value: number | null, unit: string) {
+  return value === null ? '—' : `${metricNumber.format(value)} ${unit}`;
+}
+
+function formatAchieved(value: number | null) {
+  if (value === null) return '—';
+  return `${metricNumber.format(value)}%`;
+}
+
+function pendingReason(dimension: AthleteRadarDimension) {
+  return dimension.status === 'measurement_pending'
+    ? '待采集'
+    : dimension.status === 'reference_pending'
+      ? '待参考'
+      : null;
+}
+function formatRadarDifference(dimension: AthleteRadarDimension) {
+  const diff = dimension.signedDifference;
+
+  if (diff === null) return '--';
+
+  const abs = Math.abs(diff);
+
+  const formattedValue =
+    dimension.unit === 's' || dimension.unit === 's/500m'
+      ? formatRadarValue(abs, dimension.unit)
+      : `${formatNumber(abs, 1)} ${dimension.unit}`.trim();
+
+  if (dimension.direction === 'lower_better') {
+    if (diff > 0) return `慢 ${formattedValue}`;
+    if (diff < 0) return `快 ${formattedValue}`;
+    return '与参考一致';
+  }
+
+  if (diff > 0) return `高 ${formattedValue}`;
+  if (diff < 0) return `低 ${formattedValue}`;
+
+  return '与参考一致';
+}
+function formatRadarValue(value: number | null, unit: string) {
+  if (value === null) return '—';
+
+  if (unit === 's' || unit === 's/500m') {
+    const totalSeconds = Math.round(value);
+
+    const minutes = Math.floor(totalSeconds / 60);
+    const seconds = totalSeconds % 60;
+
+    const formatted = `${minutes}:${String(seconds).padStart(2, '0')}`;
+
+    return unit === 's/500m' ? `${formatted} /500m` : formatted;
+  }
+
+  return `${formatNumber(value, 1)} ${unit}`.trim();
+}
+function radarOption(title: string, dimensions: AthleteRadarDimension[], gridOnly = false): EChartsOption {
+  const athleteValues = dimensions.map((dimension) =>
+    Math.min(120, dimension.achievedPercent ?? 0)
+  );
+
+  const referenceValues = dimensions.map(() => 100);
+
+  return {
+    tooltip: {
+      trigger: 'item', renderMode: 'richText', confine: true,
+      padding: [12, 16], textStyle: { fontSize: 12, lineHeight: 21 },
+      formatter: () => dimensions.map(dimension => [
+        dimension.label,
+        `当前值：${formatRadarValue(dimension.currentValue, dimension.unit)}`,
+        `参考值：${formatRadarValue(dimension.referenceValue, dimension.unit)}`,
+        `差值：${formatRadarDifference(dimension)}`,
+        `达成度：${dimension.achievedPercent === null ? '—' : `${formatNumber(dimension.achievedPercent, 1)}%`}`,
+      ].join('\n')).join('\n\n'),
+    },
+    animation: false,
+
+    legend: {
+      top: 0,
+      right: 4,
+      itemWidth: 14,
+      itemHeight: 8,
+      textStyle: {
+        color: '#52666d',
+        fontSize: 11,
+      },
+    },
+
+    radar: {
+      center: ['50%', '54%'],
+      radius: '52%',
+      splitNumber: 4,
+
+      indicator: dimensions.map((dimension) => ({
+        name: dimension.label,
+        max: 120,
+      })),
+
+      axisName: {
+        color: '#365660',
+        fontSize: 11,
+        lineHeight: 16,
+      },
+
+      axisLine: {
+        lineStyle: {
+          color: '#c8d9dc',
+        },
+      },
+
+      splitLine: {
+        lineStyle: {
+          color: '#c8d9dc',
+        },
+      },
+
+      splitArea: {
+        areaStyle: {
+          color: ['#f8fbfb', '#eef6f5'],
+        },
+      },
+    },
+
+    series: gridOnly ? [] : [
+      {
+        name: title,
+        type: 'radar',
+
+        data: [
+          {
+            name: '冠军参考模型',
+            value: referenceValues,
+
+            symbol: 'none',
+
+            lineStyle: {
+              width: 2,
+              type: 'dashed',
+              color: '#c59745',
+            },
+
+            areaStyle: {
+              color: 'rgba(197, 151, 69, 0.05)',
+            },
+          },
+
+          {
+            name: '当前运动员',
+            value: athleteValues,
+
+            symbol: 'circle',
+            symbolSize: 7,
+
+            lineStyle: {
+              width: 3,
+              color: '#176f7f',
+            },
+
+            itemStyle: {
+              color: '#1b9d95',
+            },
+
+            areaStyle: {
+              color: 'rgba(27, 157, 149, 0.20)',
+            },
+          },
+        ],
+      },
+    ],
+  };
+}
+
+function RadarDetails({ dimensions }: { dimensions: AthleteRadarDimension[] }) {
+  return (
+    <dl className="athlete-radar-details">
+      {dimensions.map((dimension) => {
+        const reason = pendingReason(dimension);
+        return (
+          <div key={dimension.key} className={`athlete-radar-detail is-${dimension.status}`}>
+            <dt>
+              <strong>{dimension.label}</strong>
+
+              {reason && <span className="athlete-radar-detail-status">{reason}</span>}
+            </dt>
+
+            <dd>
+              <span>
+                <small>当前值</small>
+
+                <strong>{formatRadarValue(dimension.currentValue, dimension.unit)}</strong>
+              </span>
+
+              <span>
+                <small>参考值</small>
+
+                <strong>{formatRadarValue(dimension.referenceValue, dimension.unit)}</strong>
+              </span>
+
+              <span>
+                <small>差值</small>
+
+                <strong>{formatRadarDifference(dimension)}</strong>
+              </span>
+
+              <span>
+                <small>达成度</small>
+
+                <strong>{formatAchieved(dimension.achievedPercent)}</strong>
+              </span>
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
+function AthleteTestResults({ series }: { series: AthleteTestSeries[] }) {
+  const [selectedKey, setSelectedKey] = useState('');
+  const trends = series.filter(({ points }) => points.length >= 2);
+  const selected = trends.find(({ key }) => key === selectedKey) ?? trends[0];
+  const conditions = ({ testType, protocol, protocolVersion, testContext, side }: AthleteTestSeries) =>
+    [testType, protocol, protocolVersion, testContext,
+      side === 'left' ? '左侧' : side === 'right' ? '右侧' : side === 'bilateral' ? '双侧' : '',
+    ].filter(Boolean).join(' · ');
+  const describe = (metric: AthleteTestSeries) =>
+    [metric.label, metric.unit, conditions(metric)].filter(Boolean).join(' · ');
+  const points = selected ? [...selected.points].reverse() : [];
+  return (
+    <section className="athlete-test-results" aria-label="当前周期实测成绩">
+      <h4>当前周期实测成绩</h4>
+      <dl className="athlete-test-metrics">
+        {series.map((metric) => (
+          <div key={metric.key}>
+            <dt>{metric.label}</dt>
+            <dd>
+              <strong>{formatMetric(metric.points[0].value, metric.unit)}</strong>
+              <time dateTime={metric.points[0].date}>{metric.points[0].date}</time>
+              <small>{conditions(metric)}</small>
+            </dd>
+          </div>
+        ))}
+      </dl>
+      {selected && (
+        <details className="athlete-test-trend">
+          <summary>查看成绩趋势</summary>
+          <label className="athlete-test-trend-filter">
+            <span>成绩趋势</span>
+            <select value={selected.key} onChange={(event) => setSelectedKey(event.target.value)}>
+              {trends.map((metric) => <option key={metric.key} value={metric.key}>{describe(metric)}</option>)}
+            </select>
+          </label>
+          <div className="athlete-radar-chart">
+            <EChart
+              label={`${describe(selected)}实测趋势`}
+              option={{
+                tooltip: { trigger: 'axis' },
+                grid: { left: 12, right: 16, top: 20, bottom: 16, containLabel: true },
+                xAxis: { type: 'category', data: points.map(({ date }) => date) },
+                yAxis: { type: 'value', scale: true, name: selected.unit },
+                series: [{ type: 'line', data: points.map(({ value }) => value) }],
+              }}
+            />
+          </div>
+          <details>
+            <summary>查看趋势数值</summary>
+            <ul>{points.map(({ date, value }, index) => (
+              <li key={index}>{date} · {formatMetric(value, selected.unit)}</li>
+            ))}</ul>
+          </details>
+        </details>
+      )}
+    </section>
+  );
+}
+
+export function AthleteRadarComparison({ model, loading, title }: Props) {
+  let statusMessage: string;
+  let content: ReactNode;
+
+  if (loading) {
+    statusMessage = `正在读取${title}。`;
+    content = (
+      <ContentState
+        kind="loading"
+        title={`正在读取${title}`}
+        description="正在汇总当前周期测试与正式参考标准。"
+      />
+    );
+  } else if (!model) {
+    statusMessage = `${title}暂不可用。未能读取雷达模型，请稍后重试。`;
+    content = (
+      <ContentState
+        kind="error"
+        title={`${title}暂不可用`}
+        description="未能读取雷达模型，请稍后重试。"
+      />
+    );
+  } else {
+    const readyDimensions = model.dimensions.filter(
+      (dimension) => dimension.status === 'ready' && dimension.achievedPercent !== null
+    );
+    const pendingCount = model.dimensions.length - readyDimensions.length;
+    const summary = `${title}共 ${model.dimensions.length} 项指标，${readyDimensions.length} 项可比，${pendingCount} 项待补充；可达成度最高显示 120%。`;
+
+    if (model.dimensions.length === 0) {
+      statusMessage = model.series?.length
+        ? '已显示当前周期实测成绩，暂无可用的雷达对照维度。'
+        : '当前周期暂无有效实测成绩。';
+      content = <p className="analysis-empty-note">{statusMessage}</p>;
+    } else if (readyDimensions.length < 3) {
+      statusMessage = `${summary}可比指标不足。`;
+      content = (
+        <section className="athlete-radar-comparison is-incomplete" aria-label={`${title}数据状态`}>
+          {model.dimensions.length >= 3 && (
+            <div className="athlete-radar-chart">
+              <EChart option={radarOption(title, model.dimensions, true)} label={`${summary}暂无足够可比指标，显示雷达网格。`} />
+            </div>
+          )}
+          <p className="analysis-empty-note">可比指标不足，至少需要 3 项同时具备当前值与正式参考值的指标。</p>
+          <p className="athlete-radar-summary">{summary}</p>
+          <RadarDetails dimensions={model.dimensions} />
+        </section>
+      );
+    } else {
+      const chartLabel = `${summary}雷达图仅包含可比指标。`;
+      statusMessage = `${summary}雷达图与明细已更新。`;
+      content = (
+        <section className="athlete-radar-comparison" aria-label={`${title}比较结果`}>
+          <div className="athlete-radar-chart">
+            <EChart option={radarOption(title, readyDimensions)} label={chartLabel} />
+          </div>
+          <div className="athlete-radar-copy">
+            <p className="athlete-radar-summary">{summary}</p>
+            <RadarDetails dimensions={model.dimensions} />
+          </div>
+        </section>
+      );
+    }
+  }
+
+  return (
+    <section className="athlete-radar-root" aria-label={`${title}状态与结果`} aria-busy={loading}>
+      <p className="visually-hidden athlete-radar-live-status" aria-live="polite">
+        {statusMessage}
+      </p>
+      {!loading && !!model?.series?.length && <AthleteTestResults series={model.series} />}
+      {content}
+    </section>
+  );
+}

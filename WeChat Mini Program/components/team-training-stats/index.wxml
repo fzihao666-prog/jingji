@@ -1,0 +1,141 @@
+<template name="team-trend">
+  <view class="team-stat-chart team-stat-tone-{{series.tone}}">
+    <view class="card-head-title">{{series.title}}（{{series.unit}}）</view>
+    <view class="team-stat-frame" aria-label="{{series.title}}">
+      <view class="team-stat-axis" aria-hidden="true">
+        <text wx:for="{{series.ticks}}" wx:key="index">{{item.label}}</text>
+      </view>
+      <view class="team-stat-plot">
+        <view class="team-stat-gridlines" aria-hidden="true"><view></view><view></view><view></view></view>
+        <button wx:for="{{series.points}}" wx:key="date" class="team-stat-point {{selected === index ? 'team-stat-point-selected' : ''}}"
+          aria-label="{{item.date}}，{{item.missing ? '未填报' : item.value + ' ' + series.unit}}{{selected === index ? '，已选中' : ''}}"
+          data-index="{{index}}" bindtap="onPoint">
+          <view class="team-stat-track">
+            <view wx:if="{{!item.missing}}" class="team-stat-bar {{item.zero ? 'team-stat-zero' : ''}}" style="{{'height: ' + item.height + '%;'}}"></view>
+          </view>
+          <view class="team-stat-label-slot">
+            <text wx:if="{{item.label}}" class="team-stat-label team-stat-label-{{item.edge}}">{{item.label}}</text>
+          </view>
+        </button>
+      </view>
+    </view>
+    <view wx:if="{{!series.hasValues}}" class="card-head-note">此周期暂无该指标数据。</view>
+  </view>
+</template>
+
+<template name="team-donut">
+  <view class="team-stat-donut" style="{{'background: ' + chart.background}}" aria-hidden="true">
+    <view class="team-stat-donut-center"><text>{{chart.total}}</text><text class="team-stat-donut-unit">min</text></view>
+  </view>
+</template>
+
+<view class="section-head">
+  <view class="section-head-title">周训练数据看板</view>
+  <view class="section-head-note">{{projectLabel}} · 按队伍统计</view>
+</view>
+<view class="card team-stat-card">
+  <picker wx:if="{{teams.length}}" mode="selector" range="{{teamOptions}}"
+    value="{{teamIndex + 1}}" bindchange="onTeamChange" disabled="{{loading && teamIndex < 0}}">
+    <view class="team-stat-picker"><text>统计队伍</text><text>{{teamName || '请选择'}}</text><text aria-hidden="true">⌄</text></view>
+  </picker>
+  <block wx:if="{{teamIndex >= 0}}">
+    <view class="team-stat-periods" aria-label="统计周期">
+      <button wx:for="{{periods}}" wx:key="id" class="secondary-button {{period === item.id ? 'team-stat-period-active' : ''}}"
+        aria-label="{{item.label}}{{period === item.id ? '，已选中' : ''}}" data-period="{{item.id}}" bindtap="onPeriodChange">{{item.label}}</button>
+    </view>
+    <picker mode="date" fields="{{dateFields.fields}}" value="{{pickerDate}}" start="0002-01-01" end="9998-12-31" bindchange="onDateChange">
+      <view class="team-stat-picker"><text>{{dateFields.label}}</text><text>{{dateText || '最近有数据的日期'}}</text><text aria-hidden="true">⌄</text></view>
+    </picker>
+    <view wx:if="{{period === 'week'}}" class="team-stat-week-navigation">
+      <button class="secondary-button" disabled="{{!pickerDate}}" data-step="-1" bindtap="onMoveWeek">上一周</button>
+      <button class="secondary-button" disabled="{{!pickerDate}}" data-step="1" bindtap="onMoveWeek">下一周</button>
+    </view>
+  </block>
+  <view wx:if="{{loading}}" class="team-stat-status" aria-live="polite">正在读取周训练数据看板…</view>
+  <view wx:elif="{{error}}" class="error-box"><text>{{error}}</text><button class="error-retry" bindtap="onRetry">重试</button></view>
+  <view wx:elif="{{teamIndex < 0}}" class="team-stat-status">{{teams.length ? '请选择要查看的队伍' : '当前项目暂无可查看的队伍'}}</view>
+  <block wx:elif="{{view}}">
+    <view class="team-stat-context">
+      <text class="card-head-title">{{teamName}}</text>
+      <text class="card-head-note">{{view.start}} 至 {{view.end}} · {{period === 'year' ? '按月汇总' : '按日汇总'}}</text>
+    </view>
+    <view wx:if="{{!view.hasData}}" class="team-stat-status">此周期暂无已导入的队伍训练数据。</view>
+    <block wx:else>
+      <view class="team-stat-volume-totals">
+        <view wx:for="{{view.summary}}" wx:key="title" class="team-stat-tone-{{item.tone}}">
+          <text class="team-stat-summary-label">{{item.title}}</text>
+          <text class="team-stat-volume-value">{{item.total}} <text>{{item.unit}}</text></text>
+        </view>
+      </view>
+      <view class="team-stat-section">
+        <view class="card-head-title">训练量统计</view>
+        <view class="team-stat-volume-selection" aria-live="polite">
+          <block wx:if="{{volumeSelection}}">
+            <text>{{volumeSelection.date}}</text>
+            <text>时长 {{volumeSelection.minutes}} min</text>
+            <text>距离 {{volumeSelection.distance}} km</text>
+          </block>
+          <text wx:else>点选柱位可同时查看时长和距离</text>
+        </view>
+        <block wx:for="{{view.volumes}}" wx:key="title">
+          <template is="team-trend" data="{{series: item, selected: volumeIndex}}" />
+        </block>
+        <view class="card-head-note">{{period === 'year' ? '横轴为月份' : '横轴为日期'}} · 空位表示未填报，基线短线表示实测 0</view>
+      </view>
+      <view class="team-stat-section team-stat-ratio-grid {{view.ratios.length > 1 ? 'team-stat-ratio-pair' : ''}}">
+        <view wx:for="{{view.ratios}}" wx:for-item="ratio" wx:key="title" class="team-stat-ratio-panel">
+          <view class="card-head-title">{{ratio.title}}</view>
+          <template wx:if="{{ratio.background}}" is="team-donut" data="{{chart: ratio}}" />
+          <view wx:else class="card-head-note">{{ratio.rows.length ? '时长均为 0，暂无占比。' : '此周期暂无训练时长。'}}</view>
+          <view wx:for="{{ratio.rows}}" wx:key="name" class="team-stat-legend-row">
+            <text><text class="team-stat-dot" style="{{'background: ' + item.color}}" aria-hidden="true"></text>{{item.name}}</text>
+            <text class="team-stat-legend-value">{{item.value}} min</text>
+            <text class="team-stat-legend-share">{{item.share}}</text>
+          </view>
+        </view>
+      </view>
+      <view wx:for="{{view.timeAnalysis}}" wx:for-item="group" wx:key="title" class="team-stat-section">
+        <view class="card-head-title">{{group.title}}（min）</view>
+        <view wx:if="{{!group.rows.length}}" class="card-head-note">此周期暂无该类训练时长。</view>
+        <view wx:else class="team-stat-analysis {{group.background ? 'team-stat-analysis-with-donut' : ''}}">
+          <template wx:if="{{group.background}}" is="team-donut" data="{{chart: group}}" />
+          <view class="team-stat-analysis-list">
+            <view wx:for="{{group.rows}}" wx:key="name">
+              <view class="team-stat-legend-row">
+                <text><text class="team-stat-dot" style="{{'background: ' + item.color}}" aria-hidden="true"></text>{{item.name}}</text>
+                <text class="team-stat-legend-value">{{item.value}} min</text>
+                <text class="team-stat-legend-share">{{item.share}}</text>
+              </view>
+              <view class="team-stat-distribution-track" aria-hidden="true"><view style="{{'width: ' + item.width + '%; background: ' + item.color + ';'}}"></view></view>
+            </view>
+          </view>
+        </view>
+      </view>
+      <view class="team-stat-section">
+        <view class="card-head-title">具体训练统计</view>
+        <picker wx:if="{{view.hasTotals && view.hasRaw}}" range="{{['训练时长与距离', '其他单位的每日原值']}}" value="{{rawDetail ? 1 : 0}}" bindchange="onDetailModeChange">
+          <view class="team-stat-picker"><text>数值类型</text><text>{{rawDetail ? '其他单位的每日原值' : '训练时长与距离'}}</text><text aria-hidden="true">⌄</text></view>
+        </picker>
+        <view wx:if="{{rawDetail}}" class="card-head-note">按日显示原值。</view>
+        <scroll-view scroll-x class="team-stat-scroll" aria-label="具体训练统计，可横向滚动">
+          <view class="team-stat-matrix">
+            <view class="team-stat-matrix-row team-stat-table-head">
+              <text class="team-stat-matrix-label">分项 · 单位</text>
+              <text wx:for="{{detail.columns}}" wx:key="date" class="team-stat-cell">{{item.label}}</text>
+              <text wx:if="{{!rawDetail}}" class="team-stat-cell">周期合计</text>
+            </view>
+            <block wx:for="{{detail.rows}}" wx:for-item="row" wx:key="key">
+              <view wx:if="{{row.group}}" class="team-stat-matrix-row team-stat-matrix-group"><text class="team-stat-matrix-label">{{row.group}}</text></view>
+              <view class="team-stat-matrix-row">
+                <text class="team-stat-matrix-label">{{row.name}}</text>
+                <text wx:for="{{row.cells}}" wx:key="date" class="team-stat-cell">{{item.text}}</text>
+                <text wx:if="{{!rawDetail}}" class="team-stat-cell">{{row.total}}</text>
+              </view>
+            </block>
+          </view>
+        </scroll-view>
+        <pager-nav wx:if="{{detail.pageCount > 1}}" page="{{detailPage}}" page-count="{{detail.pageCount}}" total="{{detail.datesCount}}" unit="天" label="明细日期" bind:pagechange="onDetailPage" />
+      </view>
+    </block>
+  </block>
+</view>

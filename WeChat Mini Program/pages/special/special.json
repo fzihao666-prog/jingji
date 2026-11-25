@@ -1,0 +1,6 @@
+{
+  "navigationBarTitleText": "专项训练",
+  "enablePullDownRefresh": true,
+  "backgroundTextStyle": "dark",
+  "usingComponents": { "team-training-stats": "/components/team-training-stats/index" }
+}

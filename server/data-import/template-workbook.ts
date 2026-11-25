@@ -1,0 +1,123 @@
+import { projectRules, ACTIVITY_LABELS } from '../../shared/sport-rules.ts';
+import { DEFAULT_IMPORT_METRICS, importMetricChoices, type ImportMetricDefinition } from '../../shared/import-metric-choice.ts';
+import ExcelJS from 'exceljs';
+import { importTemplateFields } from '../../shared/import-template-fields.ts';
+import { createTemplateWorkbook, addTemplateSheet, addTemplateInstructions } from './template-layout.ts';
+import {
+  UNIFIED_IMPORT_HEADERS,
+  BODY_TEMPLATE_FIELDS,
+  FITNESS_TEMPLATE_METRICS,
+  FMS_TEMPLATE_METRICS,
+  EVALUATION_SCORE_METRICS,
+  IMPORT_SHEET_NOTES,
+  TEMPLATE_INSTRUCTIONS,
+} from '../../shared/data-import-template.ts';
+
+/** 下载、导出及静态模板使用同一构建器；不读取数据库或填入演示测量数据。 */
+export function buildImportWorkbook(sheetNames = UNIFIED_IMPORT_HEADERS.map(([name]) => name), options: { mode?: 'export'; project?: string; metrics?: readonly ImportMetricDefinition[]; omitProfileTeam?: boolean; coachView?: boolean; includeAthleteNumber?: boolean } = {}) {
+  const workbook = options.mode === 'export' ? new ExcelJS.Workbook() : createTemplateWorkbook();
+  workbook.creator = '竞迹训练监控系统';
+  const metricChoices = importMetricChoices(options.metrics ?? DEFAULT_IMPORT_METRICS);
+  for (const [name, headers] of UNIFIED_IMPORT_HEADERS) {
+    if (!sheetNames.includes(name)) continue;
+    if (options.mode !== 'export') {
+      const profileUsesPageTeam = options.omitProfileTeam && name === '运动员基本资料';
+      const fields = importTemplateFields(name, { coachView: options.coachView, metricCodes: options.metrics && new Set(options.metrics.map(metric => metric.code)) })
+        .filter(field => options.includeAthleteNumber || field.key !== '系统运动员编号')
+        .filter(field => !profileUsesPageTeam || !['运动项目', '所属队伍'].includes(field.key))
+        .map(field => {
+          if (name === '其他测试' && field.key === '指标名称' && metricChoices.length) return { ...field, choices: metricChoices.map(metric => metric.name), choiceFormula: '_JINGJI_TEST_NAMES' };
+          const rules = options.project ? projectRules(options.project) : null;
+          if (name === '训练课次' && field.key === '训练活动' && rules) return { ...field, choices: rules.activities.map(activity => ACTIVITY_LABELS[activity]) };
+          return field;
+        });
+      const note = name === '其他测试'
+        ? '选择中文测试项目，再填实测成绩；单位已在选项中，无需填写代码。一项测试一行，未测不填0。'
+        : options.coachView && name === '训练课次'
+          ? '普通训练每人每课只填一行。本表记录整课时长、距离及RPE；有力量细节才填力量训练组次，有恢复测量才填每日恢复。同日多课填实际开始时间。'
+          : options.coachView && name === '力量训练组次'
+            ? '仅记录力量细节时填写。组序是第几组，组次是每组完成次数。同一动作各组的填写值完全一致时可填一行并填写组数；有差异时逐组填写。整课时长只填在训练课次。'
+            : options.coachView && name === '体能测试'
+              ? '每人每次测试一行，只填实测值。1RM和CMJ跳高按各自的测试口径入库；不对称指数须注明测试方法。身高体重与档案中的同次测量只填一处。'
+              : IMPORT_SHEET_NOTES[name];
+      addTemplateSheet(workbook, name, fields, profileUsesPageTeam
+        ? '建档仅需姓名，所属项目和队伍使用导入页面的选择。已有人员优先按系统编号匹配。'
+        : note, options.coachView && ['训练课次', '力量训练组次', '每日恢复', '身体测量', '体能测试', 'FMS测试', '其他测试'].includes(name));
+      continue;
+    }
+    const sheet = workbook.addWorksheet(name, {
+      views: [{ state: 'frozen', ySplit: 3, xSplit: 2 }],
+    });
+    sheet.mergeCells(1, 1, 1, headers.length);
+    sheet.getCell('A1').value = name;
+    sheet.getCell('A1').font = { bold: true, size: 16, color: { argb: 'FFFFFFFF' } };
+    sheet.getCell('A1').fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF246BFD' } };
+    sheet.getRow(1).height = 30;
+    sheet.mergeCells(2, 1, 2, headers.length);
+    sheet.getCell('A2').value = IMPORT_SHEET_NOTES[name];
+    sheet.getCell('A2').alignment = { wrapText: true, vertical: 'middle' };
+    sheet.getRow(2).height = 36;
+    sheet.getRow(3).values = headers;
+    sheet.getRow(3).font = { bold: true, color: { argb: 'FFFFFFFF' } };
+    sheet.getRow(3).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF193A44' } };
+    sheet.getRow(3).alignment = { wrapText: true, vertical: 'middle' };
+    sheet.getRow(3).height = 32;
+    headers.forEach((header, index) => {
+      const column = sheet.getColumn(index + 1);
+      column.hidden = header === '系统运动员编号';
+      column.width = /备注|协议|内容|地址/.test(header)
+        ? 28
+        : /日期|编号|姓名|队伍|项目/.test(header)
+          ? 18
+          : 16;
+      if (/日期/.test(header)) column.numFmt = 'yyyy-mm-dd';
+    });
+    sheet.autoFilter = { from: { row: 3, column: 1 }, to: { row: 3, column: headers.length } };
+  }
+  if (options.mode === 'export') {
+    const instructions = workbook.addWorksheet('填写说明');
+    instructions.getCell('A1').value = '竞迹训练监控系统｜统一数据导入模板';
+    instructions.getCell('A1').font = { bold: true, size: 18 };
+    instructions.getColumn(1).width = 110;
+    TEMPLATE_INSTRUCTIONS.forEach((line, index) => {
+      instructions.getCell(index + 3, 1).value = `${index + 1}. ${line}`;
+      instructions.getCell(index + 3, 1).alignment = { wrapText: true, vertical: 'middle' };
+      instructions.getRow(index + 3).height = 36;
+    });
+  } else {
+    addTemplateInstructions(workbook, '竞迹训练监控系统｜简化数据导入模板');
+  }
+  const dictionary = workbook.addWorksheet('数据字典');
+  if (options.mode !== 'export') {
+    dictionary.addRow(['测试项目（下拉选项）', '单位', '填写说明']);
+    metricChoices.forEach(metric => dictionary.addRow([metric.name, metric.unit, '在其他测试中选择本项目，再填写实测成绩；不要与专用表重复填报']));
+    if (metricChoices.length) workbook.definedNames.add(`'数据字典'!$A$2:$A$${metricChoices.length + 1}`, '_JINGJI_TEST_NAMES');
+    dictionary.columns.forEach(column => { column.width = 32; });
+    dictionary.getColumn(3).width = 75;
+    dictionary.getRow(1).font = { bold: true };
+    return workbook;
+  }
+  dictionary.addRow(['指标代码', '指标名称', '单位', '填写工作表', '说明']);
+  for (const [, , code, label, unit] of BODY_TEMPLATE_FIELDS)
+    dictionary.addRow([code, label, unit, '身体测量', '实测数值，可留空；不在其它表重复填报']);
+  for (const [, code, label, unit] of FITNESS_TEMPLATE_METRICS)
+    dictionary.addRow([code, label, unit, '体能测试', '实测数值，注明测试协议或方法']);
+  for (const [, code, label] of FMS_TEMPLATE_METRICS)
+    dictionary.addRow([code, label, '分', 'FMS测试', '原始得分0—3；合计由系统计算']);
+  for (const [, code, label, unit] of EVALUATION_SCORE_METRICS)
+    dictionary.addRow([code, label, unit, '竞技评估', '仅在有明确评分协议时填写，不自动生成分数']);
+  for (const [code, label, unit] of [
+    ['squat_kg', '深蹲', 'kg'],
+    ['deadlift_kg', '硬拉', 'kg'],
+    ['bench_press_kg', '卧推', 'kg'],
+    ['bench_pull_kg', '卧拉', 'kg'],
+    ['vertical_jump_cm', '纵跳', 'cm'],
+  ])
+    dictionary.addRow([code, label, unit, '其他测试', '每项一行，不与专用表重复填写']);
+  dictionary.columns.forEach((column) => {
+    column.width = 28;
+  });
+  dictionary.getColumn(5).width = 55;
+  dictionary.getRow(1).font = { bold: true };
+  return workbook;
+}

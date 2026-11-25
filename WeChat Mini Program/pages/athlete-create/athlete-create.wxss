@@ -1,0 +1,8 @@
+.athlete-create .form-field { min-width: 0; margin-top: 22rpx; }
+.field-label { display: block; margin-bottom: 10rpx; color: var(--ink-soft); font-size: 24rpx; font-weight: 700; }
+.create-picker { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; height: auto; min-height: 86rpx; padding-top: 16rpx; padding-bottom: 16rpx; overflow-wrap: anywhere; }
+.create-picker text { flex: none; color: var(--muted); }
+.field-error { display: block; margin-top: 8rpx; color: #a64234; font-size: 22rpx; line-height: 1.5; }
+.field-note { display: block; margin-top: 8rpx; color: var(--muted); font-size: 22rpx; line-height: 1.5; }
+.create-notes { height: 180rpx; padding-top: 18rpx; padding-bottom: 18rpx; }
+.create-submit { width: 100%; min-width: 0; max-width: 100%; margin: 20rpx 0 0; white-space: normal; }

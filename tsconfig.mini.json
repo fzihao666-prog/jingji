@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": true,
+    "noEmit": true,
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "skipLibCheck": true
+  },
+  "include": [
+    "WeChat Mini Program/config.js",
+    "WeChat Mini Program/utils/date.js",
+    "WeChat Mini Program/utils/request-guard.js"
+  ]
+}

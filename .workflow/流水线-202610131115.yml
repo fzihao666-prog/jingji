@@ -1,0 +1,137 @@
+version: "1.0"
+name: 竞迹：检查、构建与 Docker 发布
+displayName: 竞迹：检查、构建与 Docker 发布
+# 发布 Agent 必须是专用构建主机（Docker Buildx + ACR 登录 + SSH），不要选择生产 ECS。
+# 生产 ECS 继续只拉取镜像；发布复用 scripts/release.sh，不使用旧 PM2 部署。
+stages:
+- name: 测试
+  displayName: 测试
+  strategy: naturally
+  trigger: auto
+  steps:
+  # 注意：不要改回 ut@nodejs。该步骤固定跑在 Node 8~10 老运行时上（不认 nodeVersion），
+  # 且强制要求 mochawesome 测试报告目录，本项目（ESM + Vitest + node:sqlite）跑不了。
+  # 这里复用 build@nodejs：它支持 nodeVersion，且不依赖测试报告。
+  - step: build@nodejs
+    name: ""
+    displayName: 静态检查、小程序契约、单元测试与接口冒烟
+    # 固定与 Dockerfile / GitHub CI 同版本，同时满足 node:sqlite、Vite 和 Vitest 要求。
+    # 平台若不支持此版本，应先配置兼容运行环境，不降级到旧 Node。
+    nodeVersion: 22.23.2
+    commands:
+    - '# 设置NPM源，提升安装速度'
+    - npm config set registry https://registry.npmmirror.com
+    - '# 快速失败：Node 版本不对时给出明确报错，而不是后面莫名的 import 语法错误'
+    - node -e "console.log('Node', process.version, '/ npm', process.env.npm_config_user_agent||''); if(process.versions.node!=='22.23.2'){console.error('CI 固定使用 Node 22.23.2（与 Dockerfile 一致），当前 '+process.version+'；请在步骤 nodeVersion 中配置 22.23.2'); process.exit(1);}"
+    - '# 安装依赖并执行静态检查、小程序契约、Vitest 与服务端接口冒烟（与 .github/workflows/ci.yml 阻断检查同口径）；'
+    - '# 合成一条命令链，避免依赖未安装时后续命令在无 node_modules 状态下误跑'
+    - npm ci --no-audit --no-fund && npm run lint && npm run mini:typecheck && npm run mini:dictionary-check && npm run test && npm run api-check
+    checkpoints: {}
+    caches:
+    - "~/.npm"
+    - "~/.yarn"
+    notify: []
+    strategy:
+      retry: "0"
+      resource:
+        cpu: "2"
+        memory: "4"
+- name: build
+  displayName: 构建
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: build@nodejs
+    name: build-node
+    displayName: Nodejs 构建
+    # 固定与测试、Dockerfile 相同的 Node 版本；不使用模板默认的旧版本。
+    nodeVersion: 22.23.2
+    commands:
+    - '# 设置NPM源，提升安装速度'
+    - npm config set registry https://registry.npmmirror.com
+    - '# 快速失败：Node 版本不对时给出明确报错'
+    - node -e "console.log('Node', process.version); if(process.versions.node!=='22.23.2'){console.error('CI 固定使用 Node 22.23.2（与 Dockerfile 一致），当前 '+process.version+'；请在步骤 nodeVersion 中配置 22.23.2'); process.exit(1);}"
+    - '# 构建命令已包含全量类型检查（tsc -b && vite build），无需重复执行 check'
+    - npm ci --no-audit --no-fund && npm run build
+    # 源码只取当前提交，不打包工作区、.env、数据库或 node_modules。
+    # origin/main 必须与当前提交一致才允许生产发布；其他分支仍可运行 CI。
+    - mkdir -p release && git archive --format=tar HEAD -o release/source.tar && git rev-parse HEAD > release/REVISION
+    - |
+      if [ "$(git rev-parse HEAD)" = "$(git rev-parse refs/remotes/origin/main 2>/dev/null)" ]; then
+        printf 'main\n' > release/DEPLOYABLE
+      else
+        printf 'disabled\n' > release/DEPLOYABLE
+      fi
+      (cd release && sha256sum source.tar REVISION DEPLOYABLE > SHA256SUMS)
+    artifacts:
+    - name: BUILD_ARTIFACT
+      path:
+      - ./dist
+      type: .tar.gz
+    - name: RELEASE_SOURCE
+      path:
+      - ./release
+      type: .tar.gz
+    caches:
+    - "~/.npm"
+    - "~/.yarn"
+    notify: []
+    strategy:
+      retry: "0"
+      resource:
+        cpu: "2"
+        memory: "4"
+- name: 上传
+  displayName: 上传
+  strategy: naturally
+  trigger: auto
+  steps:
+  - step: publish@general_artifacts
+    name: ""
+    displayName: 上传制品
+    dependArtifact: BUILD_ARTIFACT
+    artifactName: output
+    notify: []
+    strategy:
+      retry: "0"
+      resource:
+        cpu: "2"
+        memory: "4"
+- name: docker-release
+  displayName: 构建镜像并部署到 ECS（需手动确认）
+  strategy: naturally
+  trigger: manual
+  steps:
+  - step: deploy@agent
+    name: docker-release
+    displayName: 专用发布主机构建、推送与部署
+    deployArtifact:
+    - name: RELEASE_SOURCE
+      target: "~/gitee_go/jingji-release"
+      # 直接引用本次流水线的构建制品，不从制品仓库取 latest。
+      source: build@build/build-node
+      dependArtifact: RELEASE_SOURCE
+    script: |-
+      set -eu
+      # 发布主机配置见 README；不在流水线或源码中写入凭据。
+      workspace=$(mktemp -d)
+      trap 'rm -rf -- "$workspace"' EXIT
+      mkdir -p "$workspace/bundle" "$workspace/source"
+      cp -a "$HOME/gitee_go/jingji-release/release/." "$workspace/bundle/"
+      cd "$workspace/bundle"
+      sha256sum -c SHA256SUMS
+      test "$(cat DEPLOYABLE)" = main || { echo '只允许发布本次构建时的 origin/main 提交' >&2; exit 1; }
+      revision=$(cat REVISION)
+      tar -xf source.tar -C "$workspace/source"
+      cd "$workspace/source"
+      bash scripts/gitee-release.sh "$revision"
+    # 必须在 Gitee Go 界面选择专用发布主机组，再保存实际 ID；仓库不臆造 ID。
+    hostGroupID: {}
+    notify: []
+    strategy:
+      retry: "0"
+triggers:
+  trigger: manual
+notify: []
+strategy:
+  blocking: true

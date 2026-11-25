@@ -1,0 +1,26 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Overview */
+.metric-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 13px;
+  margin-bottom: 13px;
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 13px;
+}
+
+.panel {
+  min-width: 0;
+  min-height: 332px;
+  padding: 20px;
+  border: 1px solid #dbe5e8;
+  border-radius: 13px;
+  background: rgb(255 255 255 / 90%);
+  box-shadow: 0 12px 35px rgb(14 55 68 / 4.5%);
+}
+

@@ -1,0 +1,24 @@
+.custom-test-trend-select {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+
+.custom-test-trend-select select {
+  max-width: min(100%, 24rem);
+  min-height: 40px;
+  padding: 6px 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--paper);
+  color: var(--ink);
+  font: inherit;
+}
+
+.custom-test-trend-summary {
+  margin-block: 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}

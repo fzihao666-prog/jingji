@@ -1,30 +1,139 @@
-import { BluetoothConnectPage } from './pages/BluetoothConnectPage';
-import { lazy, Suspense, useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, getToken, setToken } from './api';
-import { AppShell, type PageKey, type SpecialPageKey, type StrengthPageKey } from './components/AppShell';
+import { trainingRecordScope } from './training-record-scope';
+import {
+  AppShell,
+  type PageKey,
+  type SpecialPageKey,
+  type StrengthPageKey,
+} from './components/AppShell';
 import { BrandLogo } from './components/BrandLogo';
 import { DateToolbar } from './components/DateToolbar';
 import { LoginPage } from './pages/LoginPage';
-import { PhysiologyBiochemistryPage } from './pages/PhysiologyBiochemistryPage';
-import { StrengthTrainingDashboard } from './pages/TrainingDashboards';
-import type { Athlete, Project, TrainingRecord, User } from './types';
+import type { Athlete, Project, ProjectTeam, TrainingRecord, User } from './types';
 import { addDays, toIsoDate } from './utils';
-import { DEFAULT_PROJECT, isProject, normalizeProject, PROJECTS } from '../shared/projects';
+import { SYSTEM_MANAGEMENT_ROLES } from '../shared/access';
+import { isProject, normalizeProject, PROJECTS } from '../shared/projects';
 
-const OverviewPage = lazy(() => import('./pages/OverviewPage').then((module) => ({ default: module.OverviewPage })));
-const SpecialTrainingDashboard = lazy(() => import('./pages/SpecialTrainingDashboard').then((module) => ({ default: module.SpecialTrainingDashboard })));
-const SpecialTestsPage = lazy(() => import('./pages/SpecialTestsPage').then((module) => ({ default: module.SpecialTestsPage })));
-const TrainingPlanPage = lazy(() => import('./pages/TrainingPlanPage').then((module) => ({ default: module.TrainingPlanPage })));
-const PersonalPage = lazy(() => import('./pages/PersonalPage').then((module) => ({ default: module.PersonalPage })));
-const AthleteManagementPage = lazy(() => import('./pages/AthleteManagementPage').then((module) => ({ default: module.AthleteManagementPage })));
-const CoachManagementPage = lazy(() => import('./pages/CoachManagementPage').then((module) => ({ default: module.CoachManagementPage })));
-const TeamsPage = lazy(() => import('./pages/TeamsPage').then((module) => ({ default: module.TeamsPage })));
-const AccountsPage = lazy(() => import('./pages/AccountsPage').then((module) => ({ default: module.AccountsPage })));
-const RegionAccessPage = lazy(() => import('./pages/RegionAccessPage').then((module) => ({ default: module.RegionAccessPage })));
-const DataImportPage = lazy(() => import('./pages/DataImportPage').then((module) => ({ default: module.DataImportPage })));
-const DataManagementPage = lazy(() => import('./pages/DataManagementPage').then((module) => ({ default: module.DataManagementPage })));
+const BluetoothConnectPage = lazy(() =>
+  import('./pages/BluetoothConnectPage').then((module) => ({
+    default: module.BluetoothConnectPage,
+  }))
+);
+const PhysiologyBiochemistryPage = lazy(() =>
+  import('./pages/PhysiologyBiochemistryPage').then((module) => ({
+    default: module.PhysiologyBiochemistryPage,
+  }))
+);
+const EnodePage = lazy(() => import('./pages/EnodePage').then(module => ({ default: module.EnodePage })));
+const StrengthTrainingDashboard = lazy(() =>
+  import('./pages/TrainingDashboards').then((module) => ({
+    default: module.StrengthTrainingDashboard,
+  }))
+);
+
+const OverviewPage = lazy(() =>
+  import('./pages/OverviewPage').then((module) => ({ default: module.OverviewPage }))
+);
+const SpecialTrainingDashboard = lazy(() =>
+  import('./pages/SpecialTrainingDashboard').then((module) => ({
+    default: module.SpecialTrainingDashboard,
+  }))
+);
+const SpecialTestsPage = lazy(() =>
+  import('./pages/SpecialTestsPage').then((module) => ({ default: module.SpecialTestsPage }))
+);
+const StrengthTrainingAnalysisPage = lazy(() =>
+  import('./pages/StrengthTrainingAnalysisPage').then((module) => ({
+    default: module.StrengthTrainingAnalysisPage,
+  }))
+);
+const UnifiedTrainingPlansPage = lazy(() =>
+  import('./pages/UnifiedTrainingPlansPage').then((module) => ({
+    default: module.UnifiedTrainingPlansPage,
+  }))
+);
+const PersonalPage = lazy(() =>
+  import('./pages/PersonalPage').then((module) => ({ default: module.PersonalPage }))
+);
+const AthleteManagementPage = lazy(() =>
+  import('./pages/AthleteManagementPage').then((module) => ({
+    default: module.AthleteManagementPage,
+  }))
+);
+const CoachManagementPage = lazy(() =>
+  import('./pages/CoachManagementPage').then((module) => ({ default: module.CoachManagementPage }))
+);
+const TeamsPage = lazy(() =>
+  import('./pages/TeamsPage').then((module) => ({ default: module.TeamsPage }))
+);
+const AiManagementPage = lazy(() =>
+  import('./pages/AiManagementPage').then((module) => ({ default: module.AiManagementPage }))
+);
+const AccountsPage = lazy(() =>
+  import('./pages/AccountsPage').then((module) => ({ default: module.AccountsPage }))
+);
+const RegionAccessPage = lazy(() =>
+  import('./pages/RegionAccessPage').then((module) => ({ default: module.RegionAccessPage }))
+);
+const DataImportPage = lazy(() =>
+  import('./pages/DataImportPage').then((module) => ({ default: module.DataImportPage }))
+);
+const ReportsPage = lazy(() =>
+  import('./pages/ReportsPage').then((module) => ({ default: module.ReportsPage }))
+);
+const DataManagementPage = lazy(() =>
+  import('./pages/DataManagementPage').then((module) => ({ default: module.DataManagementPage }))
+);
+
 
 const today = toIsoDate(new Date());
+const pageKeys: PageKey[] = [
+  'overview',
+  'training-plans',
+  'special-overview',
+  'special-volume',
+  'special-time',
+  'special-load',
+  'special-rate',
+  'special-heart',
+  'special-power',
+  'special-records',
+  'special-schedule',
+  'strength-overview',
+  'strength-plan',
+  'strength-records',
+  'strength-analysis',
+  'strength-assessment',
+  'strength-enode',
+  'physiology-biochemistry',
+  'athletes',
+  'personal',
+  'coaches',
+  'teams',
+  'regions',
+  'accounts',
+  'ai-management',
+  'bluetooth',
+  'data-import',
+  'data-management',
+  'reports',
+];
+
+function pageFromHash(): PageKey {
+  const key =
+    window.location.hash.replace(/^#\/?/, '').split('?')[0] ||
+    (window.location.pathname === '/training-plans' ? 'training-plans' : '');
+  if (key === 'team-training-stats') return 'special-overview';
+  if (key === 'data-import-history') return 'data-import';
+  if (key === 'special-schedule' || key === 'strength-plan') return 'training-plans';
+  return pageKeys.includes(key as PageKey) ? (key as PageKey) : 'overview';
+}
+
+function writePageHash(page: PageKey, query = '') {
+  const nextHash = `#/${page}${query}`;
+  if (window.location.hash !== nextHash) window.history.pushState(null, '', nextHash);
+}
 
 function orderedProjects(values: string[]) {
   const available = new Set(values.filter(isProject));
@@ -33,88 +142,216 @@ function orderedProjects(values: string[]) {
 
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
-  const [authLoading, setAuthLoading] = useState(Boolean(getToken()));
-  const [page, setPage] = useState<PageKey>('overview');
+  const [sessionStatus, setSessionStatus] = useState<'loading' | 'failed' | 'ready'>(() =>
+    getToken() ? 'loading' : 'ready'
+  );
+  const [requestedPage, setPage] = useState<PageKey>(() => pageFromHash());
+  const canOpenSystemPages = Boolean(user && SYSTEM_MANAGEMENT_ROLES.includes(user.role));
+  const restrictedPage =
+    (requestedPage === 'ai-management' && user?.role !== 'DMD') ||
+    (!canOpenSystemPages && (requestedPage === 'regions' || requestedPage === 'accounts')) ||
+    (user?.role === 'OBS' && ['athletes', 'coaches', 'teams', 'data-import', 'data-management', 'reports', 'bluetooth'].includes(requestedPage));
+  const page = restrictedPage ? 'overview' : requestedPage;
+  const [routeHash, setRouteHash] = useState(() => window.location.hash);
   const [athletes, setAthletes] = useState<Athlete[]>([]);
   const [records, setRecords] = useState<TrainingRecord[]>([]);
-  const [from, setFrom] = useState(addDays(today, -6));
+  const [from, setFrom] = useState(addDays(today, -29));
   const [to, setTo] = useState(today);
+  const [teamSelection, setTeamSelection] = useState<{ project: Project; id: number } | null>(null);
+  const [teamOptions, setTeamOptions] = useState<{ project: Project; teams: ProjectTeam[] } | null>(null);
+  const [teamError, setTeamError] = useState('');
   const [athleteId, setAthleteId] = useState<number | null>(null);
   const [project, setProject] = useState<Project | null>(null);
+  const teamId = teamSelection?.project === project ? teamSelection.id : null;
+  const teams = teamOptions?.project === project ? teamOptions.teams : [];
+  const [authorizedProjects, setAuthorizedProjects] = useState<Project[]>([]);
   const [athletesReady, setAthletesReady] = useState(false);
+  const rosterUserRef = useRef<User | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
+  useEffect(() => {
+    if (!user || !project) return;
+    let active = true;
+    setTeamError('');
+    api.overviewTeams(project).then(({ teams }) => {
+      if (!active) return;
+      setTeamOptions({ project, teams });
+      setTeamSelection(current => current?.project === project && !teams.some(team => team.id === current.id) ? null : current);
+    }).catch(() => { if (active) { setTeamOptions(null); setTeamError('队伍列表加载失败，请刷新重试'); } });
+    return () => { active = false; };
+  }, [user, project, refreshKey]);
   const [globalError, setGlobalError] = useState('');
+  const importNavigationGuard = useRef<(() => boolean) | null>(null);
+  const acceptedHash = useRef(window.location.hash);
+  const setImportNavigationGuard = useCallback((guard: (() => boolean) | null) => {
+    importNavigationGuard.current = guard;
+  }, []);
 
   useEffect(() => {
-    if (!getToken()) return;
-    api.me().then(({ user: current }) => setUser(current)).catch(() => setToken(null)).finally(() => setAuthLoading(false));
+    const syncPageFromHash = () => {
+      if (window.location.hash === acceptedHash.current) return;
+      if (importNavigationGuard.current && !importNavigationGuard.current()) {
+        window.history.replaceState(null, '', `${window.location.pathname}${window.location.search}${acceptedHash.current}`);
+        return;
+      }
+      acceptedHash.current = window.location.hash;
+      setPage(pageFromHash());
+      setRouteHash(window.location.hash);
+    };
+    window.addEventListener('hashchange', syncPageFromHash);
+    return () => window.removeEventListener('hashchange', syncPageFromHash);
+  }, []);
+
+  const changePage = (nextPage: PageKey, query?: string) => {
+    if (nextPage !== page && importNavigationGuard.current && !importNavigationGuard.current()) return false;
+    if (nextPage === 'special-schedule' || nextPage === 'strength-plan') {
+      const kind = nextPage === 'special-schedule' ? 'special' : 'physical';
+      const source =
+        page.startsWith('special-') || page.startsWith('strength-')
+          ? page
+          : kind === 'special'
+            ? 'special-overview'
+            : 'strength-overview';
+      window.location.hash = `/training-plans?type=${kind}&source=${source}`;
+      acceptedHash.current = window.location.hash;
+      setPage('training-plans');
+      return true;
+    }
+    setPage(nextPage);
+    writePageHash(nextPage, query);
+    acceptedHash.current = window.location.hash;
+    setRouteHash(window.location.hash);
+    return true;
+  };
+
+  useEffect(() => {
+    if (!getToken()) {
+      setSessionStatus('ready');
+      return;
+    }
+    let active = true;
+    api
+      .me()
+      .then(({ user: current }) => {
+        if (!active) return;
+        setUser(current);
+        setSessionStatus('ready');
+      })
+      .catch(() => {
+        if (active) setSessionStatus(getToken() ? 'failed' : 'ready');
+      });
+    return () => { active = false; };
   }, []);
 
   useEffect(() => {
     if (!user) return;
-    setAthletesReady(false);
+    // 同账号刷新保留页面和导入回执；账号变化仍等待新名册。
+    if (rosterUserRef.current !== user) setAthletesReady(false);
+    rosterUserRef.current = user;
     Promise.all([api.athletes(), api.currentProject()])
       .then(([{ athletes: nextAthletes }, saved]) => {
         setAthletes(nextAthletes);
-        const ownProject = user.athleteId ? nextAthletes.find((athlete) => athlete.id === user.athleteId)?.project : '';
-        const available = saved.projects.length ? saved.projects : orderedProjects(nextAthletes.map((athlete) => athlete.project));
-        const fallback = user.role === 'DMD' || user.role === 'TD' ? DEFAULT_PROJECT : null;
+        const ownProject = user.athleteId
+          ? nextAthletes.find((athlete) => athlete.id === user.athleteId)?.project
+          : '';
+        const available = orderedProjects(saved.projects);
+        setAuthorizedProjects(available);
         const normalizedOwnProject = normalizeProject(ownProject);
         if (saved.project && available.includes(saved.project)) setProject(saved.project);
         else if (available.length === 1) setProject(available[0]);
-        else if (normalizedOwnProject && available.includes(normalizedOwnProject)) setProject(normalizedOwnProject);
+        else if (normalizedOwnProject && available.includes(normalizedOwnProject))
+          setProject(normalizedOwnProject);
         else if (available[0]) setProject(available[0]);
-        else setProject(fallback);
+        else setProject(null);
         if (user.role === 'ATL' && user.athleteId) setAthleteId(user.athleteId);
       })
       .catch((error) => {
         setGlobalError(error instanceof Error ? error.message : '运动员数据加载失败。');
-        setProject(user.role === 'DMD' || user.role === 'TD' ? DEFAULT_PROJECT : null);
+        setAuthorizedProjects([]);
+        setProject(null);
       })
       .finally(() => setAthletesReady(true));
   }, [user, refreshKey]);
 
+  const recordScope = trainingRecordScope(
+    page,
+    user?.role === 'ATL' ? (user.athleteId ?? null) : athleteId
+  );
+  const recordsRequired = recordScope !== undefined;
+  const recordsAthleteId = recordScope?.athleteId ?? null;
+
   useEffect(() => {
     if (!user || !athletesReady || !project) return;
-    const selected = athleteId ? athletes.find((athlete) => athlete.id === athleteId) : null;
+    const selected = recordsAthleteId
+      ? athletes.find((athlete) => athlete.id === recordsAthleteId)
+      : null;
     if (selected && selected.project !== project) {
       setAthleteId(user.role === 'ATL' ? user.athleteId : null);
       return;
     }
-    if (page === 'overview' || page === 'special-overview') {
+    if (!recordsRequired) {
       setRecords([]);
       setLoading(false);
       return;
     }
+    let active = true;
+    const controller = new AbortController();
+    setRecords([]);
     setLoading(true);
     setGlobalError('');
-    api.records(from, to, null, project)
-      .then(({ records: nextRecords }) => setRecords(nextRecords))
-      .catch((error) => setGlobalError(error instanceof Error ? error.message : '训练数据加载失败。'))
-      .finally(() => setLoading(false));
-  }, [user, athletesReady, athletes, from, to, athleteId, project, page, refreshKey]);
+    api
+      .records(from, to, recordsAthleteId, project, teamId ?? undefined, controller.signal)
+      .then(({ records: nextRecords }) => { if (active) setRecords(nextRecords); })
+      .catch((error) =>
+        active && setGlobalError(error instanceof Error ? error.message : '训练数据加载失败。')
+      )
+      .finally(() => { if (active) setLoading(false); });
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [
+    user,
+    athletesReady,
+    athletes,
+    from,
+    to,
+    recordsAthleteId,
+    project,
+    teamId,
+    recordsRequired,
+    refreshKey,
+  ]);
 
-  const projects = useMemo(() => {
-    if (user?.role === 'DMD' || user?.role === 'TD') return [...PROJECTS];
-    return orderedProjects(athletes.map((athlete) => athlete.project));
-  }, [athletes, user?.role]);
-  const projectAthletes = useMemo(() => athletes.filter((athlete) => athlete.project === project), [athletes, project]);
+  const projects = authorizedProjects;
+  const projectAthletes = useMemo(
+    () => athletes.filter((athlete) => athlete.project === project && (teamId === null || athlete.teamId === teamId)),
+    [athletes, project, teamId]
+  );
 
   const login = (token: string, current: User) => {
     setToken(token);
     setUser(current);
     setAthleteId(current.role === 'ATL' ? current.athleteId : null);
-    setPage('overview');
+    changePage('overview');
   };
 
-  const logout = () => {
+  const logout = async () => {
+    if (importNavigationGuard.current && !importNavigationGuard.current()) return;
+    try {
+      await api.logout();
+    } catch {
+      // 注销接口失败时仍清除本地登录态
+    }
     setToken(null);
     setUser(null);
     setAthletes([]);
     setRecords([]);
     setAthleteId(null);
     setProject(null);
+    setTeamSelection(null);
+    setTeamOptions(null);
+    setAuthorizedProjects([]);
     setAthletesReady(false);
   };
 
@@ -122,18 +359,61 @@ export default function App() {
     const result = await api.updateProfileName(name);
     setUser(result.user);
     if (result.user.athleteId) {
-      setAthletes((current) => current.map((athlete) => athlete.id === result.user.athleteId ? { ...athlete, name } : athlete));
-      setRecords((current) => current.map((record) => record.athleteId === result.user.athleteId ? { ...record, athleteName: name } : record));
+      setAthletes((current) =>
+        current.map((athlete) =>
+          athlete.id === result.user.athleteId ? { ...athlete, name } : athlete
+        )
+      );
+      setRecords((current) =>
+        current.map((record) =>
+          record.athleteId === result.user.athleteId ? { ...record, athleteName: name } : record
+        )
+      );
     }
     setRefreshKey((key) => key + 1);
   };
 
-  if (authLoading) return <div className="boot-screen"><BrandLogo className="large" /><strong>竞迹</strong><p>正在恢复训练数据会话…</p></div>;
+  if (sessionStatus !== 'ready')
+    return (
+      <div className="boot-screen">
+        <BrandLogo className="large" />
+        <strong>竞迹</strong>
+        <p>{sessionStatus === 'loading' ? '正在恢复训练数据会话…' : '暂时无法恢复登录状态，请重试。'}</p>
+        {sessionStatus === 'failed' && (
+          <button type="button" className="secondary-button" onClick={() => window.location.reload()}>
+            重试
+          </button>
+        )}
+      </div>
+    );
   if (!user) return <LoginPage onLogin={login} />;
-  if (!athletesReady) return <div className="boot-screen"><BrandLogo className="large" /><strong>竞迹</strong><p>正在加载项目信息…</p></div>;
-  if (!project) return <div className="boot-screen"><BrandLogo className="large" /><strong>竞迹</strong><p>当前账号暂无可访问项目。</p></div>;
+  if (!athletesReady)
+    return (
+      <div className="boot-screen">
+        <BrandLogo className="large" />
+        <strong>竞迹</strong>
+        <p>正在加载项目信息…</p>
+      </div>
+    );
+  if (!project)
+    return (
+      <div className="boot-screen">
+        <BrandLogo className="large" />
+        <strong>竞迹</strong>
+        <p>当前账号暂无可访问项目。</p>
+      </div>
+    );
+
+  const trainingQuery = new URLSearchParams(routeHash.split('?')[1]);
+  const trainingTarget = trainingQuery.get('teamTraining');
+  const importedTeamId = trainingQuery.get('project') === project && trainingTarget
+    ? Number(trainingTarget) || null : null;
+  const focusTrainingStats = trainingTarget !== null || /^#\/?team-training-stats(?:\?|$)/.test(routeHash);
+  const importedDate = trainingQuery.get('date');
+  const canViewTrainingStats = ['SCC', 'REG', 'TD', 'DMD', 'OBS'].includes(user.role);
 
   const shared = {
+    teamId,
     records,
     athletes: projectAthletes,
     project,
@@ -142,38 +422,196 @@ export default function App() {
     to,
     athleteId,
     loading,
-    onRangeChange: (nextFrom: string, nextTo: string) => { setFrom(nextFrom); setTo(nextTo); },
+    onRangeChange: (nextFrom: string, nextTo: string) => {
+      setFrom(nextFrom);
+      setTo(nextTo);
+    },
     onAthleteChange: setAthleteId,
-    onProjectChange: (nextProject: Project) => { setProject(nextProject); setAthleteId(null); void api.saveCurrentProject(nextProject).catch(() => undefined); }
+    onProjectChange: (nextProject: Project) => {
+      if (nextProject !== project && importNavigationGuard.current && !importNavigationGuard.current()) return;
+      if (nextProject !== project && page === 'special-overview' && focusTrainingStats) changePage(page);
+      setProject(nextProject);
+      setTeamSelection(null);
+      setAthleteId(null);
+      void api.saveCurrentProject(nextProject).catch(() => undefined);
+    },
   };
-  const usesGlobalTrainingFilter = page === 'overview' || page === 'physiology-biochemistry' || page === 'personal' || page.startsWith('special-') || page.startsWith('strength-');
+  const usesGlobalTrainingFilter =
+    page === 'overview' ||
+    page === 'physiology-biochemistry' ||
+    page === 'personal' ||
+    page.startsWith('special-') ||
+    page.startsWith('strength-');
+
+  const trainingFilters = usesGlobalTrainingFilter ? (
+    <DateToolbar
+      {...shared}
+      presetMode="period"
+      layout="scope-first"
+      teams={teams}
+      teamError={teamError}
+      onTeamChange={(id) => {
+        if (page === 'special-overview' && focusTrainingStats) changePage(page);
+        setTeamSelection(id === null ? null : { project, id });
+        setAthleteId(null);
+        setRecords([]);
+      }}
+    />
+  ) : null;
 
   return (
-    <AppShell user={user} page={page} onPageChange={setPage} onLogout={logout} onProfileNameChange={renameOwnProfile}>
+    <AppShell
+      user={user}
+      page={page}
+      onPageChange={changePage}
+      onLogout={logout}
+      onProfileNameChange={renameOwnProfile}
+    >
       {globalError && <div className="global-error">{globalError}</div>}
-      {usesGlobalTrainingFilter && <div className="global-training-filter">
-        <DateToolbar
-          {...shared}
-          presetMode="period"
-        />
-      </div>}
-      <Suspense fallback={<div className="route-loading"><BrandLogo /><p>正在打开页面…</p></div>}>
-        {page === 'overview' && <OverviewPage {...shared} user={user} />}
-        {page === 'special-overview' && <SpecialTrainingDashboard project={project} from={from} to={to} onRecordsOpen={() => setPage('special-records')} />}
-        {page.startsWith('special-') && page !== 'special-overview' && <SpecialTestsPage {...shared} section={page as Exclude<SpecialPageKey, 'special-overview'>} onSectionChange={setPage} />}
-        {page === 'strength-overview' && <StrengthTrainingDashboard athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={setPage} onAthleteChange={setAthleteId} />}
-        {page.startsWith('strength-') && page !== 'strength-overview' && <TrainingPlanPage section={page as Exclude<StrengthPageKey, 'strength-overview'>} user={user} athletes={projectAthletes} athleteId={athleteId} from={from} to={to} onSectionChange={setPage} onChanged={() => setRefreshKey((key) => key + 1)} />}
-        {page === 'physiology-biochemistry' && <PhysiologyBiochemistryPage project={project} from={from} to={to} />}
+      <Suspense
+        fallback={
+          <div className="route-loading">
+            <BrandLogo />
+            <p>正在打开页面…</p>
+          </div>
+        }
+      >
+        {page === 'training-plans' && (
+          <UnifiedTrainingPlansPage
+            key={routeHash}
+            user={user}
+            athletes={athletes}
+            project={project}
+            from={from}
+            to={to}
+            initialKind={
+              new URLSearchParams(routeHash.split('?')[1]).get('type') ||
+              (routeHash.includes('special-schedule')
+                ? 'special'
+                : routeHash.includes('strength-plan')
+                  ? 'physical'
+                  : '')
+            }
+            onBack={(() => {
+              const source = new URLSearchParams(routeHash.split('?')[1]).get('source');
+              return source && pageKeys.includes(source as PageKey) && source !== 'training-plans'
+                ? () => changePage(source as PageKey)
+                : undefined;
+            })()}
+          />
+        )}
+        {page === 'overview' && <OverviewPage {...shared} user={user} filters={trainingFilters} />}
+        {page === 'special-overview' && (
+          <SpecialTrainingDashboard
+            filters={trainingFilters}
+            project={project}
+            teamId={teamId}
+            from={from}
+            to={to}
+            onPlanOpen={() => changePage('special-schedule')}
+            showCustomTestTrend={user.role !== 'OBS'}
+            teamTraining={canViewTrainingStats ? {
+              teamId: importedTeamId ?? teamId,
+              date: importedTeamId && importedDate && /^\d{4}-\d{2}-\d{2}$/.test(importedDate)
+                ? importedDate : undefined,
+              focus: focusTrainingStats,
+              onImport: user.role === 'OBS' ? undefined : () => changePage('data-import'),
+            } : undefined}
+          />
+        )}
+        {page.startsWith('special-') && page !== 'special-overview' && (
+          <SpecialTestsPage
+            filters={trainingFilters}
+            {...shared}
+            onPlanOpen={() => changePage('special-schedule')}
+            section={page as Exclude<SpecialPageKey, 'special-overview'>}
+            onSectionChange={changePage}
+          />
+        )}
+        {page === 'strength-overview' && (
+          <StrengthTrainingDashboard
+            filters={trainingFilters}
+            athletes={projectAthletes}
+            project={project}
+            teamId={teamId}
+            from={from}
+            to={to}
+            onNavigate={changePage}
+          />
+        )}
+        {page === 'strength-enode' && <EnodePage filters={trainingFilters} athletes={projectAthletes} athleteId={athleteId} project={project} from={from} to={to} onNavigate={changePage} />}
+        {page.startsWith('strength-') && page !== 'strength-overview' && page !== 'strength-enode' && (
+          <StrengthTrainingAnalysisPage
+            filters={trainingFilters}
+            onPlanOpen={() => changePage('strength-plan')}
+            section={page as Exclude<StrengthPageKey, 'strength-overview'>}
+            user={user}
+            athletes={projectAthletes}
+            athleteId={athleteId}
+            from={from}
+            to={to}
+            onSectionChange={changePage}
+            onChanged={() => setRefreshKey((key) => key + 1)}
+          />
+        )}
+        {page === 'physiology-biochemistry' && (
+          <PhysiologyBiochemistryPage filters={trainingFilters} project={project} from={from} to={to} />
+        )}
         {page === 'bluetooth' && <BluetoothConnectPage user={user} />}
-        {page === 'data-import' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} mode="import" onChanged={() => setRefreshKey((key) => key + 1)} />}
-        {page === 'data-import-history' && user.role !== 'ATL' && <DataImportPage user={user} project={project} athletes={projectAthletes} mode="history" onChanged={() => setRefreshKey((key) => key + 1)} />}
+        {page === 'data-import' && user.role !== 'ATL' && (
+          <DataImportPage
+            projects={shared.projects}
+            onProjectChange={shared.onProjectChange}
+            onViewEnode={() => changePage('strength-enode')}
+            onViewTeamTraining={(id, date) => {
+              const params = new URLSearchParams({ teamTraining: String(id), project });
+              if (date) params.set('date', date);
+              changePage('special-overview', `?${params}`);
+            }}
+            onNavigationGuardChange={setImportNavigationGuard}
+            user={user}
+            project={project}
+            athletes={projectAthletes}
+            onChanged={() => setRefreshKey((key) => key + 1)}
+          />
+        )}
+        {page === 'reports' && user.role !== 'ATL' && (
+          <ReportsPage key={`${project}:${teamId ?? ''}`} project={project} teamId={teamId} />
+        )}
         {page === 'data-management' && user.role !== 'ATL' && <DataManagementPage user={user} />}
-        {page === 'athletes' && user.role !== 'ATL' && <AthleteManagementPage user={user} initialAthletes={athletes} onChanged={() => setRefreshKey((key) => key + 1)} onOpenProfile={(athlete) => { if (isProject(athlete.project)) setProject(athlete.project); setAthleteId(athlete.id); setPage('personal'); }} />}
-        {page === 'personal' && <PersonalPage {...shared} user={user} onChanged={() => setRefreshKey((key) => key + 1)} />}
-        {page === 'coaches' && user.role !== 'ATL' && <CoachManagementPage user={user} athletes={projectAthletes} onChanged={() => setRefreshKey((key) => key + 1)} />}
-        {page === 'teams' && user.role !== 'ATL' && <TeamsPage />}
-        {page === 'regions' && user.role !== 'ATL' && <RegionAccessPage user={user} />}
-        {page === 'accounts' && user.role !== 'ATL' && <AccountsPage />}
+        {page === 'athletes' && user.role !== 'ATL' && (
+          <AthleteManagementPage
+            user={user}
+            initialAthletes={athletes}
+            onChanged={() => setRefreshKey((key) => key + 1)}
+            onOpenProfile={(athlete) => {
+              if (isProject(athlete.project)) setProject(athlete.project);
+              setAthleteId(athlete.id);
+              changePage('personal');
+            }}
+          />
+        )}
+        {page === 'personal' && (
+          <PersonalPage filters={trainingFilters} {...shared} user={user} onChanged={() => setRefreshKey((key) => key + 1)} />
+        )}
+        {page === 'coaches' && user.role !== 'ATL' && (
+          <CoachManagementPage
+            user={user}
+            athletes={projectAthletes}
+            onEditScope={(id) => changePage('regions', `?accountId=${id}`)}
+            onChanged={() => setRefreshKey((key) => key + 1)}
+          />
+        )}
+        {page === 'teams' && user.role !== 'ATL' && <TeamsPage onChanged={() => setRefreshKey((key) => key + 1)} />}
+        {page === 'regions' && canOpenSystemPages && (
+          <RegionAccessPage
+            user={user}
+            preferredAccountId={Number(trainingQuery.get('accountId')) || undefined}
+            onAccountDeleted={() => setRefreshKey((key) => key + 1)}
+          />
+        )}
+        {page === 'accounts' && canOpenSystemPages && <AccountsPage />}
+        {page === 'ai-management' && user.role === 'DMD' && <AiManagementPage />}
       </Suspense>
     </AppShell>
   );

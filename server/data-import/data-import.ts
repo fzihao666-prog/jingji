@@ -1,0 +1,5672 @@
+import { parseAthleteNumber } from '../../shared/athlete-number.ts';
+import { reactivateAthlete } from '../core/athlete-reactivation.ts';
+import { fmsFinalScore, fmsInputFields, type FmsInputKey, type FmsObservation } from '../../shared/fms-import.ts';
+import {
+  TRAINING_RECORD_SHEET, TRAINING_RECORD_FORMAT, TRAINING_SET_COLUMNS, trainingDetailHeader, trainingRecordHeaders,
+} from '../../shared/training-record-template.ts';
+import { readTrainingRecordDownload, type TrainingRecordDownload } from './test-template-store.ts';
+import {
+  readTestTemplateDownload, testTemplateTeamId, TEST_TEMPLATE_SHEET, TEST_TEMPLATE_META, TEST_TEMPLATE_FORMAT,
+  TEST_TEMPLATE_IDENTITY_HEADERS, type TestTemplateDownload,
+} from './test-template-store.ts';
+import { BASIC_PROFILE_HEADERS, BASIC_PROFILE_SHEET } from './basic-profile-workbook.ts';
+import { parseTrainingYears } from '../../shared/training-years.ts';
+import { saveSubmissionProvenance } from '../report/submission-provenance.ts';
+import { assertImportWorkbookSize } from './import-workbook-limits.ts';
+import { isIdentityField } from '../core/identity-removal.ts';
+import { COMPACT_ATHLETE_SHEET, COMPACT_ATHLETE_COLUMNS, compactAthleteHeaderKey } from '../../shared/compact-athlete-template.ts';
+import { trainingContext } from '../../shared/training-context.ts';
+import { ACTIVITY_LABELS, SPORT_RULES_VERSION } from '../../shared/sport-rules.ts';
+import { findTestSession, saveTestSession } from '../core/test-session-store.ts';
+import { normalizeProject } from '../../shared/projects.ts';
+import { importStatistics, type ImportStatistics } from '../../shared/import-statistics.js';
+import { IMPORT_BASE_METRICS as METRICS } from '../../shared/import-base-metrics.ts';
+import { assertImportRevision, advanceImportRevision, importRevision } from './data-import-revision.ts';
+import { resolveImportMetricName } from '../../shared/import-metric-choice.ts';
+import { readImportMetricDefinitions } from './import-metric-catalog.ts';
+import { IMPORT_TEMPLATE_VERSION, IMPORT_TEMPLATE_VERSION_NAME, templateHeaderKey } from '../../shared/import-template-fields.ts';
+import { TECHNICAL_LEVELS, normalizeTechnicalLevel } from '../../shared/athlete-technical-level.ts';
+import { importRecordPolicy, importReviewValuesEqual, reviewFields, reviewValues, writeReviewValues, databaseReviewRecords, reviewMetricKey, importReviewGroups, reviewTitle, type ReviewValue, importReviewKey, importFieldValues } from '../../shared/import-conflict-review.ts';
+import { BODY_TEMPLATE_FIELDS, FITNESS_TEMPLATE_METRICS, COMMON_FITNESS_TEMPLATE_METRICS, MAX_REPEATED_STRENGTH_SETS, EVALUATION_SCORE_METRICS, FMS_TEST_PROTOCOL, FMS_TEMPLATE_METRICS, IMPORT_SHEET_ALIASES, UNIFIED_IMPORT_HEADERS, canonicalImportMetricCode } from '../../shared/data-import-template.ts';
+import { createHash, randomUUID } from 'node:crypto';
+import * as XLSX from '@e965/xlsx';
+import { db } from '../core/db.ts';
+import { dataImportPersonKey, normalizeImportPersonName } from '../../shared/data-import-person.ts';
+import { normalizeImportFilename } from './import-filename.ts';
+import { validateRegistrationDemographics } from '../../shared/registration-demographics.ts';
+import {
+  inferStrengthBodyPosition,
+  inferStrengthCategory,
+  isStrengthIntensityZone,
+  isStrengthTrainingEnvironment,
+} from '../../shared/strength-training.ts';
+
+// 解析版本绑定项目规则；旧草稿须重解析，已入库回执仍保留。
+export const DATA_IMPORT_PARSER_VERSION = 'deterministic-v35-athlete-identity-' + SPORT_RULES_VERSION;
+
+export type ImportAthlete = {
+  id: number;
+  name: string;
+  project: string;
+  team: string;
+  gender: string;
+  birthDate?: string;
+  active?: boolean;
+};
+
+export type DataImportItemType =
+  | 'athlete_profile'
+  | 'wellness'
+  | 'training_session'
+  | 'training_set'
+  | 'test_measurement'
+  | 'body_measurement'
+  | 'injury_record'
+  | 'competitive_state'
+  | 'scoring_rule'
+  | 'invalid_row';
+export type DataImportQuality = 'valid' | 'warning' | 'error' | 'skipped';
+export type DataImportResolution = '' | 'skip' | 'update';
+
+export type DataImportConflictField = {
+  field: string;
+  label: string;
+  oldValue: string;
+  newValue: string;
+  /** 现值非空且与新值不同，提交时自动按本次导入更新 */
+  overwrites: boolean;
+};
+
+export type DataImportConflict = {
+  /** 业务键上已存在正式记录 */
+  exists: boolean;
+  entityType: string;
+  entityId: number | null;
+  /** 提供的字段与现值一致，无需写入 */
+  identical: boolean;
+  fields: DataImportConflictField[];
+};
+
+export type ParsedImportItem = {
+  itemType: DataImportItemType;
+  athleteId: number | null;
+  rawAthleteName: string;
+  eventDate: string;
+  sessionLabel: string;
+  testType: string;
+  metricCode: string;
+  metricLabel: string;
+  side: 'left' | 'right' | 'bilateral' | 'center';
+  valueNum: number | null;
+  unit: string;
+  exerciseName: string;
+  setIndex: number;
+  targetReps: number | null;
+  actualReps: number | null;
+  actualWeightKg: number | null;
+  intensityPercent: number | null;
+  payload: Record<string, unknown>;
+  sourceSheet: string;
+  sourceAddress: string;
+  rawValue: string;
+  quality: DataImportQuality;
+  messages: string[];
+  businessKey: string;
+  resolution: DataImportResolution;
+  conflict: DataImportConflict | null;
+};
+
+export type DataImportPreview = {
+  id: string;
+  revision: number;
+  filename: string;
+  project: string;
+  status: 'reviewing' | 'committed' | 'failed' | 'rolled_back';
+  parserVersion: string;
+  sheetCount: number;
+  itemCount: number;
+  validCount: number;
+  warningCount: number;
+  errorCount: number;
+  importedCount: number;
+  skippedCount: number;
+  createdAt: string;
+  committedAt: string | null;
+  summary: {
+    recognizedSheets: Array<{ name: string; type: string; items: number; note: string }>;
+    ignoredSheets: Array<{ name: string; reason: string }>;
+    unfilledRows?: number;
+    receipt?: ImportStatistics;
+    duplicateFile?: boolean;
+    team?: string;
+    revision?: number;
+  };
+  counts: {
+    newCount: number;
+    duplicateCount: number;
+    overwriteCount: number;
+    invalidCount: number;
+    personMatched: number;
+    personPending: number;
+    personAmbiguous: number;
+  };
+  athleteCandidates: DataImportAthleteCandidate[];
+  items: DataImportItemView[];
+};
+
+export type DataImportPersonSuggestion = {
+  id: number;
+  name: string;
+  team: string;
+  gender: string;
+  birthDate: string;
+};
+
+export type DataImportAthleteCandidateStatus = 'pending' | 'matched' | 'created';
+
+export type DataImportAthleteCandidate = {
+  id: number;
+  batchId: string;
+  normalizedName: string;
+  name: string;
+  project: string;
+  team: string;
+  gender: string;
+  region: string;
+  city: string;
+  county: string;
+  status: DataImportAthleteCandidateStatus;
+  matchedAthleteId: number | null;
+  createdAthleteId: number | null;
+  /** 身份歧义时的候选已有运动员，供人工选择 */
+  suggested: DataImportPersonSuggestion[];
+  /** 人员确认弹窗中已确认（仅保存映射草稿，不写正式表） */
+  confirmed: boolean;
+  /** 已移除：该人员及其关联业务记录不导入 */
+  excluded: boolean;
+  sourceSheet: string;
+  messages: string[];
+};
+
+export type DataImportItemView = Omit<ParsedImportItem, 'payload'> & {
+  id: number;
+  batchId: string;
+  payload: Record<string, unknown>;
+  athleteName: string;
+  athleteProject: string;
+  athleteTeam: string;
+  committedEntityType: string;
+  committedEntityId: number | null;
+};
+
+type Matrix = unknown[][];
+
+
+type MetricCode = keyof typeof METRICS;
+
+function text(value: unknown) {
+  if (value === null || value === undefined) return '';
+  if (value instanceof Date) return dateToIso(value);
+  return String(value).replace(/\s+/g, ' ').trim();
+}
+
+function normalizedText(value: unknown) {
+  return text(value)
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[\s_()（）/\\\-·]/g, '');
+}
+
+function normalizedName(value: unknown) {
+  return normalizeImportPersonName(text(value));
+}
+
+function numberValue(value: unknown): number | null {
+  if (value === null || value === undefined || value === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  const parsed = Number(
+    text(value)
+      .replace(/,/g, '')
+      .replace(/kg|cm|秒|次|年/gi, '')
+  );
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function dateToIso(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, '0');
+  const day = String(value.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
+function validIsoDate(value: string) {
+  // 严格校验真实存在的日期：2025-02-30、1900-02-29 等均拒绝。
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value);
+  if (!match) return false;
+  const year = Number(match[1]);
+  const month = Number(match[2]);
+  const day = Number(match[3]);
+  if (month < 1 || month > 12 || day < 1) return false;
+  const daysInMonth = new Date(Date.UTC(year, month, 0)).getUTCDate();
+  return day <= daysInMonth;
+}
+
+function isProvided(value: unknown) {
+  return value !== null && value !== undefined && value !== '';
+}
+
+function optionalNumber(value: unknown): number | null {
+  const parsed = numberValue(value);
+  return parsed === null ? null : parsed;
+}
+
+type SqlValue = string | number | bigint | null | Uint8Array;
+
+function sqlList(values: unknown[]): SqlValue[] {
+  return values.map((value) =>
+    value === null || value === undefined
+      ? null
+      : typeof value === 'string' ||
+          typeof value === 'number' ||
+          typeof value === 'bigint' ||
+          value instanceof Uint8Array
+        ? value
+        : String(value)
+  );
+}
+
+function workbookYear(filename: string) {
+  const matches = [...filename.matchAll(/(20\d{2})/g)].map((match) => Number(match[1]));
+  return matches.find((year) => year >= 2000 && year <= 2100) || new Date().getFullYear();
+}
+
+function parseDate(value: unknown, yearHint: number): string {
+  if (value instanceof Date && !Number.isNaN(value.getTime())) return dateToIso(value);
+  if (typeof value === 'number') {
+    const parsed = XLSX.SSF.parse_date_code(value);
+    if (parsed)
+      return `${parsed.y}-${String(parsed.m).padStart(2, '0')}-${String(parsed.d).padStart(2, '0')}`;
+  }
+  const raw = text(value).replace(/年|\//g, '-').replace(/月|\./g, '-').replace(/日/g, '');
+  let match = raw.match(/^(20\d{2})-(\d{1,2})-(\d{1,2})/);
+  if (match) return `${match[1]}-${match[2].padStart(2, '0')}-${match[3].padStart(2, '0')}`;
+  match = raw.match(/^(\d{1,2})-(\d{1,2})$/);
+  if (match) return `${yearHint}-${match[1].padStart(2, '0')}-${match[2].padStart(2, '0')}`;
+  return '';
+}
+
+function parseImportFullDate(value: unknown): string {
+  const raw = text(value).normalize('NFKC');
+  // 四位年份缺少月日，即使 Excel 将其保存成数字，也不能当作日期序号。
+  if (/^(?:19|20)\d{2}$/.test(raw) && !(value instanceof Date)) return '';
+  const parts = /^(\d{4})\s*[-/.]\s*(\d{1,2})\s*[-/.]\s*(\d{1,2})\s*\.?$/.exec(raw) ??
+    /^(\d{4})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日?$/.exec(raw) ??
+    /^(\d{4})(\d{2})(\d{2})$/.exec(raw);
+  const candidate = parts
+    ? `${parts[1]}-${parts[2].padStart(2, '0')}-${parts[3].padStart(2, '0')}`
+    : value instanceof Date || typeof value === 'number' ? parseDate(value, 0) : '';
+  return validIsoDate(candidate) ? candidate : '';
+}
+
+export function parseImportBirthDate(
+  value: unknown,
+  today = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date())
+): string {
+  const candidate = parseImportFullDate(value);
+  return validateRegistrationDemographics({ gender: '男', birthDate: candidate }, today).birthDate
+    ? ''
+    : candidate;
+}
+
+function dateFromName(value: string, yearHint: number) {
+  const compact = value.match(/(20\d{2})(\d{2})(\d{2})/);
+  if (compact) return `${compact[1]}-${compact[2]}-${compact[3]}`;
+  const chinese = value.match(/(20\d{2})年(\d{1,2})月(\d{1,2})日/);
+  if (chinese) return `${chinese[1]}-${chinese[2].padStart(2, '0')}-${chinese[3].padStart(2, '0')}`;
+  const short = value.match(/(\d{1,2})月(\d{1,2})日/);
+  if (short) return `${yearHint}-${short[1].padStart(2, '0')}-${short[2].padStart(2, '0')}`;
+  return '';
+}
+
+function cellAddress(row: number, column: number) {
+  return XLSX.utils.encode_cell({ r: row, c: column });
+}
+
+/**
+ * 别名匹配限定在调用方传入的可访问运动员集合内。
+ * 别名表查询只用于发现候选 id，最终结果必须落在 athletes 参数（accessibleAthleteIds 派生）里，
+ * 防止通过别名把导入数据自动关联到当前账号权限范围外的运动员。
+ */
+function athletesByAlias(
+  normalized: string,
+  project: string,
+  athletes: ImportAthlete[]
+): ImportAthlete[] {
+  const rows = db
+    .prepare(
+      `SELECT aa.athlete_id AS id FROM athlete_aliases aa JOIN athletes a ON a.id = aa.athlete_id
+       WHERE aa.normalized_alias = ? AND aa.project = ? AND a.active = 1`
+    )
+    .all(normalized, project) as Array<{ id: number }>;
+  const ids = new Set(rows.map((row) => row.id));
+  return athletes.filter((athlete) => athlete.project === project && ids.has(athlete.id));
+}
+
+function matchAthlete(name: string, project: string, athletes: ImportAthlete[]) {
+  // 解析期的粗匹配：仅在“项目 + 姓名”唯一时自动关联；
+  // 队伍冲突、同名多人等情况留给人员确认阶段的 resolvePerson 处理。
+  const normalized = normalizedName(name);
+  const direct = athletes.filter(
+    (athlete) => athlete.project === project && normalizedName(athlete.name) === normalized
+  );
+  if (direct.length === 1) return direct[0];
+  const alias = athletesByAlias(normalized, project, athletes);
+  return alias.length === 1 ? alias[0] : null;
+}
+
+export type PersonResolution =
+  | { kind: 'matched'; athlete: ImportAthlete; method: string }
+  | { kind: 'ambiguous'; suggested: DataImportPersonSuggestion[]; message: string }
+  | { kind: 'conflict'; suggested: DataImportPersonSuggestion[]; message: string }
+  | { kind: 'none' };
+
+function toSuggestion(athlete: ImportAthlete & { birthDate?: string }): DataImportPersonSuggestion {
+  return {
+    id: athlete.id,
+    name: athlete.name,
+    team: athlete.team,
+    gender: text(athlete.gender),
+    birthDate: athlete.birthDate || '',
+  };
+}
+
+const inactiveImportPersonMessage = '该运动员档案已停用。选择原档案并确认导入后，将恢复档案和历史数据，登录账号状态仍按原设置。';
+
+function activeTeamNameMatches(athletes: ImportAthlete[], project: string, team: string, name: string) {
+  const key = normalizedName(name);
+  return key && team ? athletes.filter(athlete =>
+    athlete.active !== false && athlete.project === project && text(athlete.team) === team && normalizedName(athlete.name) === key
+  ) : [];
+}
+
+// 存在编号时只按编号识别；旧表缺少编号时按原有范围匹配。
+function resolvePerson(
+  hint: {
+    name: string;
+    project: string;
+    team?: string;
+    birthDate?: string;
+    gender?: string;
+    athleteCode?: string;
+  },
+  athletes: ImportAthlete[]
+): PersonResolution {
+  const normalized = normalizedName(hint.name);
+  const pool = athletes.filter(
+    (athlete) =>
+      athlete.project === hint.project && normalizedName(athlete.name) === normalized
+  );
+  const team = text(hint.team);
+  const sameTeam = team ? pool.filter(athlete => text(athlete.team) === team) : [];
+  const code = text(hint.athleteCode);
+  if (code) {
+    const id = parseAthleteNumber(code);
+    const numbered = athletes.filter(athlete => athlete.id === id);
+    if (numbered.length > 1)
+      return { kind: 'conflict', suggested: numbered.map(toSuggestion), message: `系统运动员编号${code}重复，请人工确认` };
+    const [byCode] = numbered;
+    if (byCode && byCode.project === hint.project) {
+      const birthConflict = Boolean(hint.birthDate && byCode.birthDate && hint.birthDate !== byCode.birthDate);
+      const genderConflict = Boolean(hint.gender && byCode.gender && hint.gender !== byCode.gender);
+      if ((!normalized || normalizedName(byCode.name) === normalized) && (!team || byCode.team === team) && !birthConflict && !genderConflict)
+        return { kind: 'matched', athlete: byCode, method: '运动员编号' };
+      return {
+        kind: 'conflict',
+        suggested: [toSuggestion(byCode)],
+        message: `系统运动员编号${code}与本行姓名、队伍、性别或出生日期不一致，请人工确认`,
+      };
+    }
+    if (byCode)
+      return {
+        kind: 'conflict',
+        suggested: [],
+        message: `系统运动员编号${code}属于其他运动项目，请人工确认`,
+      };
+    return {
+      kind: 'conflict',
+      suggested: athletes.filter(athlete => athlete.project === hint.project && normalizedName(athlete.name) === normalized).map(toSuggestion),
+      message: `系统运动员编号${code}不存在或不在当前权限范围内，请人工确认`,
+    };
+  }
+  const withBirth = (list: ImportAthlete[]) =>
+    hint.birthDate && validIsoDate(hint.birthDate)
+      ? list.filter((athlete) => athlete.birthDate && athlete.birthDate === hint.birthDate)
+      : list;
+  if (team) {
+    if (sameTeam.length) {
+      const narrowed = hint.birthDate ? withBirth(sameTeam) : sameTeam;
+      if (sameTeam.length === 1 && (!sameTeam[0].birthDate || narrowed.length === 1))
+        return { kind: 'matched', athlete: sameTeam[0], method: '项目+队伍+姓名' };
+      if (narrowed.length === 1 && hint.birthDate && validIsoDate(hint.birthDate))
+        return { kind: 'matched', athlete: narrowed[0], method: '出生日期消歧' };
+      return {
+        kind: 'ambiguous',
+        suggested: sameTeam.map(toSuggestion),
+        message: `“${hint.name}”（${team}）的已有档案需核对，请选择要关联的人员`,
+      };
+    }
+    if (pool.length)
+      return {
+        kind: 'conflict',
+        suggested: pool.map(toSuggestion),
+        message: `文件中“${hint.name}”填写的所属队伍“${team}”与已有同名运动员不一致，请确认关联人员或新建档案`,
+      };
+    return { kind: 'none' };
+  }
+  if (pool.length === 1 && withBirth(pool).length === 1) return { kind: 'matched', athlete: pool[0], method: '项目+姓名' };
+  if (pool.length > 1) {
+    const narrowed = withBirth(pool);
+    if (narrowed.length === 1) return { kind: 'matched', athlete: narrowed[0], method: '出生日期消歧' };
+    return {
+      kind: 'ambiguous',
+      suggested: pool.map(toSuggestion),
+      message: `“${hint.name}”匹配到多名已有运动员（请结合队伍或出生日期选择）`,
+    };
+  }
+  const alias = athletesByAlias(normalized, hint.project, athletes);
+  if (alias.length === 1) return { kind: 'matched', athlete: alias[0], method: '历史别名' };
+  if (alias.length > 1)
+    return {
+      kind: 'ambiguous',
+      suggested: alias.map(toSuggestion),
+      message: `“${hint.name}”的别名匹配到多名已有运动员，请选择要关联的人员`,
+    };
+  return { kind: 'none' };
+}
+
+function metricFromLabel(value: unknown): MetricCode | null {
+  const label = normalizedText(value);
+  if (!label || /差值|评分|序号|备注|完成/.test(label)) return null;
+  if (/训练年限|年限/.test(label)) return 'training_years';
+  if (/身高|height/.test(label)) return 'height_cm';
+  if (/体重|weight/.test(label)) return 'weight_kg';
+  if (/臂展/.test(label)) return 'arm_span_cm';
+  if (/体前屈/.test(label)) return 'sit_reach_cm';
+  if (/仰卧支撑/.test(label)) return 'supine_support_sec';
+  if (/俯卧支撑|前平板支撑/.test(label)) return 'front_plank_sec';
+  if (/侧支撑/.test(label)) return 'side_plank_sec';
+  if (/单腿蹲/.test(label)) return 'single_leg_squat_reps';
+  if (/引体/.test(label)) return 'pull_ups_reps';
+  if (/深蹲|squat/.test(label)) return 'squat_kg';
+  if (/硬拉/.test(label)) return 'deadlift_kg';
+  if (/臀推/.test(label)) return 'hip_thrust_kg';
+  if (/卧推/.test(label)) return 'bench_press_kg';
+  if (/卧拉/.test(label)) return 'bench_pull_kg';
+  if (/高翻|高拉/.test(label)) return 'clean_kg';
+  if (/纵跳|垂直跳/.test(label)) return 'vertical_jump_cm';
+  return null;
+}
+
+function makeQuality(messages: string[], skipped = false): DataImportQuality {
+  if (skipped) return 'skipped';
+  if (messages.some((message) => message.startsWith('错误：'))) return 'error';
+  return messages.length ? 'warning' : 'valid';
+}
+
+function validateMetric(code: MetricCode, value: number, messages: string[]) {
+  const metric = METRICS[code];
+  if (value < metric.min || value > metric.max)
+    messages.push(
+      `警告：${metric.label}${value}${metric.unit}超出建议复核范围${metric.min}—${metric.max}${metric.unit}`
+    );
+}
+
+function itemBase(
+  input: Partial<ParsedImportItem> &
+    Pick<ParsedImportItem, 'itemType' | 'sourceSheet' | 'sourceAddress'>
+): ParsedImportItem {
+  return {
+    itemType: input.itemType,
+    athleteId: input.athleteId ?? null,
+    rawAthleteName: input.rawAthleteName || '',
+    eventDate: input.eventDate || '',
+    sessionLabel: input.sessionLabel || '',
+    testType: input.testType || '',
+    metricCode: input.metricCode || '',
+    metricLabel: input.metricLabel || '',
+    side: input.side || 'center',
+    valueNum: input.valueNum ?? null,
+    unit: input.unit || '',
+    exerciseName: input.exerciseName || '',
+    setIndex: input.setIndex || 1,
+    targetReps: input.targetReps ?? null,
+    actualReps: input.actualReps ?? null,
+    actualWeightKg: input.actualWeightKg ?? null,
+    intensityPercent: input.intensityPercent ?? null,
+    payload: input.payload || {},
+    sourceSheet: input.sourceSheet,
+    sourceAddress: input.sourceAddress,
+    rawValue: input.rawValue || '',
+    quality: input.quality || 'valid',
+    messages: input.messages || [],
+    businessKey: input.businessKey || '',
+    resolution: input.resolution || '',
+    conflict: input.conflict ?? null,
+  };
+}
+
+function testItem(input: {
+  athlete: ImportAthlete | null;
+  rawName: string;
+  date: string;
+  code: MetricCode;
+  side?: ParsedImportItem['side'];
+  value: number;
+  sheet: string;
+  address: string;
+  messages?: string[];
+}) {
+  const metric = METRICS[input.code];
+  const messages = [...(input.messages || [])];
+  if (!input.athlete) messages.push('警告：未匹配到已有运动员，提交时将创建无登录账号的待补全档案');
+  if (!validIsoDate(input.date)) messages.push('错误：缺少有效测试日期，请在预览中补充');
+  validateMetric(input.code, input.value, messages);
+  const body = input.code === 'height_cm' || input.code === 'weight_kg';
+  const side = input.side || 'center';
+  return itemBase({
+    itemType: body ? 'body_measurement' : 'test_measurement',
+    athleteId: input.athlete?.id || null,
+    rawAthleteName: input.rawName,
+    eventDate: input.date,
+    testType: '力量素质测试',
+    metricCode: input.code,
+    metricLabel: metric.label,
+    side,
+    valueNum: input.value,
+    unit: metric.unit,
+    sourceSheet: input.sheet,
+    sourceAddress: input.address,
+    rawValue: String(input.value),
+    quality: makeQuality(messages),
+    messages,
+    businessKey: `${input.athlete?.id || 0}|${input.date}|strength-test|${input.code}|${side}`,
+  });
+}
+
+function parseSummarySheet(
+  matrix: Matrix,
+  sheet: string,
+  project: string,
+  filename: string,
+  defaultDate: string,
+  athletes: ImportAthlete[]
+) {
+  const items: ParsedImportItem[] = [];
+  const year = workbookYear(filename);
+  const date = defaultDate || dateFromName(filename, year);
+  const mapping: Array<[number, MetricCode, ParsedImportItem['side']?]> = [
+    [4, 'height_cm'],
+    [5, 'weight_kg'],
+    [6, 'arm_span_cm'],
+    [7, 'sit_reach_cm'],
+    [8, 'supine_support_sec'],
+    [9, 'front_plank_sec'],
+    [10, 'side_plank_sec', 'left'],
+    [11, 'side_plank_sec', 'right'],
+    [12, 'single_leg_squat_reps', 'left'],
+    [13, 'single_leg_squat_reps', 'right'],
+    [14, 'pull_ups_reps'],
+    [15, 'squat_kg'],
+    [16, 'deadlift_kg'],
+    [17, 'hip_thrust_kg'],
+    [18, 'bench_press_kg'],
+    [19, 'bench_pull_kg'],
+    [20, 'clean_kg'],
+    [21, 'vertical_jump_cm'],
+  ];
+  for (let row = 4; row < matrix.length; row += 1) {
+    const rawName = text(matrix[row]?.[1]);
+    if (!rawName || /平均|合计|备注/.test(rawName)) continue;
+    const athlete = matchAthlete(rawName, project, athletes);
+    for (const [column, code, side] of mapping) {
+      const value = code === 'training_years' ? parseTrainingYears(matrix[row]?.[column]) : numberValue(matrix[row]?.[column]);
+      if (value === null) {
+        if (code === 'training_years' && text(matrix[row]?.[column])) {
+          items.push(itemBase({ itemType: 'invalid_row', sourceSheet: sheet,
+            sourceAddress: cellAddress(row, column), rawAthleteName: rawName,
+            rawValue: text(matrix[row]?.[column]), quality: 'error',
+            messages: ['错误：训练年限须填写年数或年月，如2.5、2年8个月'] }));
+        }
+        continue;
+      }
+      items.push(
+        testItem({
+          athlete,
+          rawName,
+          date,
+          code,
+          side,
+          value,
+          sheet,
+          address: cellAddress(row, column),
+        })
+      );
+    }
+  }
+  return items;
+}
+
+function headerDate(matrix: Matrix, column: number, year: number, fallback: string) {
+  for (let row = 1; row <= 4; row += 1) {
+    const parsed = parseDate(matrix[row]?.[column], year);
+    if (parsed) return parsed;
+  }
+  return fallback;
+}
+
+function parseComparisonSheet(
+  matrix: Matrix,
+  sheet: string,
+  project: string,
+  filename: string,
+  defaultDate: string,
+  athletes: ImportAthlete[]
+) {
+  const items: ParsedImportItem[] = [];
+  const year = workbookYear(filename);
+  let identityRow = matrix
+    .slice(0, 6)
+    .findIndex((row) => row?.some((value) => normalizedText(value) === '姓名'));
+  let nameColumn =
+    identityRow >= 0
+      ? matrix[identityRow].findIndex((value) => normalizedText(value) === '姓名')
+      : -1;
+  if (identityRow < 0 && (sheet === '女子' || sheet === '男子')) {
+    identityRow = 2;
+    nameColumn = 1;
+  }
+  if (identityRow < 0 || nameColumn < 0) return items;
+  const startRow = identityRow + 2;
+  const currentDates: string[] = [];
+  for (let row = 1; row <= 4; row += 1) {
+    for (const value of matrix[row] || []) {
+      const parsed = parseDate(value, year);
+      if (parsed) currentDates.push(parsed);
+    }
+  }
+  const inferredCurrentDate =
+    defaultDate || [...currentDates].sort().at(-1) || dateFromName(filename, year);
+  const columnMetrics = new Map<number, MetricCode>();
+  let activeMetric: MetricCode | null = null;
+  const maxColumns = Math.max(...matrix.slice(0, 5).map((row) => row?.length || 0), 0);
+  for (let column = 0; column < maxColumns; column += 1) {
+    const tokens = [matrix[1]?.[column], matrix[2]?.[column], matrix[3]?.[column]];
+    if (tokens.some((value) => /差值/.test(text(value)))) {
+      activeMetric = null;
+      continue;
+    }
+    const explicit = tokens.map(metricFromLabel).find(Boolean) as MetricCode | undefined;
+    if (explicit) activeMetric = explicit;
+    if (activeMetric) columnMetrics.set(column, activeMetric);
+  }
+  for (let row = startRow; row < matrix.length; row += 1) {
+    const rawName = text(matrix[row]?.[nameColumn]);
+    if (!rawName || /平均|合计|备注|评分/.test(rawName)) continue;
+    const athlete = matchAthlete(rawName, project, athletes);
+    for (const [column, code] of columnMetrics) {
+      if (column <= nameColumn + 4) continue;
+      const value = code === 'training_years' ? parseTrainingYears(matrix[row]?.[column]) : numberValue(matrix[row]?.[column]);
+      if (value === null) {
+        if (code === 'training_years' && text(matrix[row]?.[column])) {
+          items.push(itemBase({ itemType: 'invalid_row', sourceSheet: sheet,
+            sourceAddress: cellAddress(row, column), rawAthleteName: rawName,
+            rawValue: text(matrix[row]?.[column]), quality: 'error',
+            messages: ['错误：训练年限须填写年数或年月，如2.5、2年8个月'] }));
+        }
+        continue;
+      }
+      const labelTokens = [matrix[1]?.[column], matrix[2]?.[column], matrix[3]?.[column]]
+        .map(text)
+        .join('|');
+      if (/差值/.test(labelTokens)) continue;
+      let side: ParsedImportItem['side'] = 'center';
+      const sideToken = normalizedText(matrix[2]?.[column]) + normalizedText(matrix[3]?.[column]);
+      if (sideToken.includes('左')) side = 'left';
+      else if (sideToken.includes('右')) side = 'right';
+      const date = headerDate(matrix, column, year, inferredCurrentDate);
+      items.push(
+        testItem({
+          athlete,
+          rawName,
+          date,
+          code,
+          side,
+          value,
+          sheet,
+          address: cellAddress(row, column),
+        })
+      );
+    }
+  }
+  return items;
+}
+
+function parseIntensity(value: unknown, index: number) {
+  const values =
+    text(value)
+      .match(/\d+(?:\.\d+)?/g)
+      ?.map(Number) || [];
+  return values[index] ?? values[0] ?? null;
+}
+
+function parseTrainingBlocks(
+  matrix: Matrix,
+  sheet: string,
+  project: string,
+  filename: string,
+  athletes: ImportAthlete[]
+) {
+  const items: ParsedImportItem[] = [];
+  const year = workbookYear(filename);
+  const sheetDate = dateFromName(sheet, year);
+  const anchors: Array<{ row: number; column: number }> = [];
+  for (let row = 0; row < Math.min(8, matrix.length); row += 1) {
+    for (let column = 0; column < (matrix[row]?.length || 0); column += 1) {
+      if (normalizedText(matrix[row]?.[column]) === '姓名') anchors.push({ row, column });
+    }
+  }
+  for (let anchorIndex = 0; anchorIndex < anchors.length; anchorIndex += 1) {
+    const anchor = anchors[anchorIndex];
+    const next = anchors[anchorIndex + 1];
+    const blockEnd =
+      next && next.row === anchor.row
+        ? next.column
+        : matrix[anchor.row]?.length || anchor.column + 14;
+    const rawName = text(
+      matrix[anchor.row]?.slice(anchor.column + 1, blockEnd).find((value) => {
+        const normalized = normalizedText(value);
+        return normalized && normalized !== '性别' && normalized !== '男' && normalized !== '女';
+      })
+    );
+    if (!rawName) continue;
+    const athlete = matchAthlete(rawName, project, athletes);
+    const dateValues = (matrix[anchor.row + 2] || []).slice(
+      anchor.column,
+      Math.min(blockEnd, anchor.column + 4)
+    );
+    const internalDate = dateValues.map((value) => parseDate(value, year)).find(Boolean) || '';
+    const eventDate = internalDate || sheetDate;
+    const dateConflict = Boolean(internalDate && sheetDate && internalDate !== sheetDate);
+    const headerRow = anchor.row + 3;
+    for (let row = headerRow + 1; row < matrix.length; row += 1) {
+      const exerciseName = text(matrix[row]?.[anchor.column + 2]);
+      if (!exerciseName) {
+        if (row > headerRow + 16) break;
+        continue;
+      }
+      if (/总负荷|完成率|小计|合计|备注|姓名|动作/.test(exerciseName)) break;
+      const plannedReps = [5, 6, 7].map((offset) =>
+        numberValue(matrix[row]?.[anchor.column + offset])
+      );
+      const weights = [9, 10, 11].map((offset) =>
+        numberValue(matrix[row]?.[anchor.column + offset])
+      );
+      const completedTotal = numberValue(matrix[row]?.[anchor.column + 12]);
+      const available = weights
+        .map((weight, index) => ({ weight, index }))
+        .filter((entry) => entry.weight !== null);
+      if (!available.length) {
+        const messages = ['未记录完成重量，本行保留在暂存区但不会写入正式训练结果'];
+        if (!athlete)
+          messages.unshift('警告：未匹配到已有运动员，提交时将创建无登录账号的待补全档案');
+        items.push(
+          itemBase({
+            itemType: 'training_set',
+            athleteId: athlete?.id || null,
+            rawAthleteName: rawName,
+            eventDate,
+            sessionLabel: sheet,
+            exerciseName,
+            setIndex: 1,
+            targetReps: plannedReps[0],
+            sourceSheet: sheet,
+            sourceAddress: cellAddress(row, anchor.column + 2),
+            rawValue: exerciseName,
+            quality: makeQuality(messages, true),
+            messages,
+            payload: { completedTotal, sourcePattern: 'athlete-block' },
+          })
+        );
+        continue;
+      }
+      const expectedTotal = plannedReps.reduce<number>((sum, value) => sum + (value || 0), 0);
+      for (const { weight, index } of available) {
+        const messages: string[] = [];
+        if (!athlete) messages.push('警告：未匹配到已有运动员，提交时将创建无登录账号的待补全档案');
+        if (!validIsoDate(eventDate)) messages.push('错误：缺少有效训练日期，请在预览中补充');
+        if (dateConflict)
+          messages.push(
+            `警告：工作表名称日期${sheetDate}与单元格日期${internalDate}不一致，当前采用单元格日期`
+          );
+        if (completedTotal === null)
+          messages.push('警告：未逐组记录完成次数，暂按计划次数作为实际次数');
+        else if (expectedTotal && Math.abs(completedTotal - expectedTotal) > 0.01)
+          messages.push(`警告：完成总次数${completedTotal}与计划次数合计${expectedTotal}不一致`);
+        if ((weight || 0) <= 2) messages.push(`警告：完成重量${weight}kg疑似勾选值，请人工复核`);
+        const targetReps = plannedReps[index] ?? null;
+        const actualReps = targetReps;
+        const intensityPercent = parseIntensity(matrix[row]?.[anchor.column + 3], index);
+        const sourceAddress = cellAddress(row, anchor.column + 9 + index);
+        items.push(
+          itemBase({
+            itemType: 'training_set',
+            athleteId: athlete?.id || null,
+            rawAthleteName: rawName,
+            eventDate,
+            sessionLabel: sheet,
+            exerciseName,
+            setIndex: index + 1,
+            targetReps,
+            actualReps,
+            actualWeightKg: weight,
+            intensityPercent,
+            payload: {
+              completedTotal,
+              sourcePattern: 'athlete-block',
+              trainingCategory: inferStrengthCategory(exerciseName),
+              bodyPosition: inferStrengthBodyPosition(exerciseName),
+            },
+            sourceSheet: sheet,
+            sourceAddress,
+            rawValue: String(weight),
+            quality: makeQuality(messages),
+            messages,
+            businessKey: `${athlete?.id || 0}|${eventDate}|${sheet}|${exerciseName}|${index + 1}`,
+          })
+        );
+      }
+    }
+  }
+  return items;
+}
+
+function parseScoringSheet(matrix: Matrix, sheet: string, project: string, batchVersion: string) {
+  const items: ParsedImportItem[] = [];
+  const headerRow = matrix.findIndex((row) =>
+    row?.some((value) => normalizedText(value) === '评分')
+  );
+  if (headerRow < 0) return items;
+  const genderRow = headerRow + 1;
+  let activeMetric: MetricCode | null = null;
+  for (let column = 1; column < (matrix[headerRow]?.length || 0); column += 1) {
+    const explicit = metricFromLabel(matrix[headerRow]?.[column]);
+    if (explicit) activeMetric = explicit;
+    if (!activeMetric) continue;
+    const gender = text(matrix[genderRow]?.[column]);
+    if (gender !== '男' && gender !== '女') continue;
+    for (let row = genderRow + 1; row < matrix.length; row += 1) {
+      const score = numberValue(matrix[row]?.[0]);
+      const threshold = numberValue(matrix[row]?.[column]);
+      if (score === null || threshold === null) continue;
+      const metric = METRICS[activeMetric];
+      items.push(
+        itemBase({
+          itemType: 'scoring_rule',
+          metricCode: activeMetric,
+          metricLabel: metric.label,
+          valueNum: threshold,
+          unit: metric.unit,
+          payload: { project, gender, score, comparison: 'gte', ruleVersion: batchVersion },
+          sourceSheet: sheet,
+          sourceAddress: cellAddress(row, column),
+          rawValue: String(threshold),
+          quality: 'valid',
+          businessKey: `${project}|${gender}|${activeMetric}|${score}|${batchVersion}`,
+        })
+      );
+    }
+  }
+  return items;
+}
+
+const STANDARD_SHEETS = new Set([
+  BASIC_PROFILE_SHEET,
+  COMPACT_ATHLETE_SHEET,
+  ...UNIFIED_IMPORT_HEADERS.map(([name]) => name),
+  '运动员信息',
+  '竞技水平评估',
+  '身体测量',
+  '恢复状态',
+  '训练课次',
+  '力量训练组次',
+  '测试指标',
+  'FMS测试',
+  '冠军模型测试',
+  '伤病记录',
+  '竞技状态',
+]);
+
+function standardHeader(matrix: Matrix, compact = false) {
+  const rowIndex = matrix
+    .slice(0, 12)
+    .findIndex((row) => row?.some((value) => ['姓名', '系统运动员编号'].includes(normalizedText(templateHeaderKey(String(value ?? ''))))));
+  if (rowIndex < 0) return null;
+  const columns = new Map<string, number>();
+  const identityColumns = new Set<number>();
+  for (let column = 0; column < (matrix[rowIndex]?.length || 0); column += 1) {
+    const label = templateHeaderKey(String(matrix[rowIndex]?.[column] ?? ''));
+    if (isIdentityField(label)) {
+      identityColumns.add(column);
+      continue;
+    }
+    const key = normalizedText(compact ? compactAthleteHeaderKey(label) : label);
+    if (key) columns.set(key, column);
+  }
+  return { rowIndex, columns, identityColumns };
+}
+
+function standardValue(row: unknown[], columns: Map<string, number>, ...labels: string[]) {
+  for (const label of labels) {
+    const column = columns.get(normalizedText(label));
+    if (column !== undefined) return row[column];
+  }
+  return null;
+}
+
+function standardText(row: unknown[], columns: Map<string, number>, ...labels: string[]) {
+  return text(standardValue(row, columns, ...labels));
+}
+
+/** 标准模板与校对共用：空白保持缺失，非数字文本不得当作数值。 */
+function templateTimeValue(raw: unknown) {
+  const timer = typeof raw === 'string' ? /^(\d+):([0-5]\d(?:\.\d+)?)$/.exec(text(raw)) : null;
+  const value = timer ? 60 * Number(timer[1]) + Number(timer[2]) : standardNumberValue(raw);
+  return value !== null && Number.isFinite(value) ? value : null;
+}
+
+function standardNumberValue(value: unknown): number | null {
+  if (text(value) === '') return null;
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string' ||
+    !/^[+-]?(?:(?:\d+|\d{1,3}(?:,\d{3})+)(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(text(value)))
+    return null;
+  return numberValue(value);
+}
+
+function assertUniqueFmsObservations(items: (ParsedImportItem | DataImportItemView)[]) {
+  const seen = new Map<string, string>();
+  for (const item of items) {
+    if (!item.payload.fmsObservation || item.resolution === 'skip') continue;
+    const key = JSON.stringify([item.athleteId ?? dataImportPersonKey(item), item.eventDate, item.metricCode,
+      item.payload.protocol, item.payload.protocolVersion || '', item.payload.testContext || '', item.payload.attemptOrder ?? 1]);
+    const previous = seen.get(key);
+    if (previous) throw new Error(`同一次FMS的「${item.metricLabel}」重复填写（${previous}、${item.sourceSheet}!${item.sourceAddress}），请将左右和疼痛排查填在同一行。`);
+    seen.set(key, `${item.sourceSheet}!${item.sourceAddress}`);
+  }
+}
+
+function storedFmsObservation(sessionId: number, metricCode: string): FmsObservation | undefined {
+  const stored = db.prepare('SELECT observation_json AS observation FROM fms_import_observations WHERE test_session_id=? AND metric_code=?')
+    .get(sessionId, metricCode) as { observation: string } | undefined;
+  return stored && JSON.parse(stored.observation) as FmsObservation;
+}
+
+function readFmsObservation(entries: Array<{ key: FmsInputKey; raw: unknown }>) {
+  const observation: FmsObservation = {};
+  const errors: string[] = [];
+  for (const { key, raw } of entries) {
+    const value = text(raw);
+    if (!value) continue;
+    if (key === 'clearing' || key === 'clearingLeft' || key === 'clearingRight') {
+      if (value === '阴性' || value === '阳性') observation[key] = value;
+      else errors.push('疼痛排查须填写阴性或阳性');
+    } else {
+      const score = standardNumberValue(raw);
+      if (score === null || !Number.isInteger(score) || score < 0 || score > 3) errors.push('动作评分须填写0、1、2或3分');
+      else observation[key] = score;
+    }
+  }
+  return { observation, errors };
+}
+
+function parseTestTemplateSheet(
+  matrix: Matrix,
+  snapshot: TestTemplateDownload,
+  team: string,
+  athletes: ImportAthlete[],
+): ParsedImportItem[] {
+  const headers = [...TEST_TEMPLATE_IDENTITY_HEADERS, ...snapshot.columns.map(column => column.header)];
+  if (headers.some((label, index) => matrix[0]?.[index] !== label))
+    throw new Error('测试模板表头已变更，请使用原模板列并保留原顺序。');
+  const athletesById = new Map(athletes.map(athlete => [athlete.id, athlete]));
+  const items: ParsedImportItem[] = [];
+  for (let rowIndex = 1; rowIndex < matrix.length; rowIndex += 1) {
+    const row = matrix[rowIndex] ?? [];
+    if (row.slice(headers.length).some(value => text(value)))
+      throw new Error(`测试模板第 ${rowIndex + 1} 行包含未配置的列，请在模板预览中添加指标后下载。`);
+    if (!row.slice(TEST_TEMPLATE_IDENTITY_HEADERS.length).some(value => text(value))) continue;
+    const [id, name, teamCell, date] = row;
+    const athleteCode = text(id);
+    const athlete = athletesById.get(parseAthleteNumber(athleteCode) ?? 0);
+    const rawAthleteName = text(name) || athlete?.name || '';
+    const person = resolvePerson({ name: rawAthleteName, project: snapshot.project, team, athleteCode }, athletes);
+    const eventDate = typeof date === 'string' ? text(date) : parseDate(date, 0);
+    const invalid = !rawAthleteName ? '请填写运动员姓名'
+      : text(teamCell) && ![team, snapshot.teamName].includes(text(teamCell)) ? '所属队伍与所选队伍不一致'
+      : athleteCode && person.kind !== 'matched'
+        ? ('message' in person ? person.message : '无法在所选队伍中识别该编号，请人工确认') : '';
+    if (invalid) {
+      const sourceAddress = cellAddress(rowIndex, athleteCode ? 0 : 1);
+      items.push(itemBase({ itemType: 'invalid_row', rawAthleteName, sourceSheet: TEST_TEMPLATE_SHEET,
+        sourceAddress, rawValue: row.map(text).join(' | '), quality: 'error',
+        messages: [`错误：${TEST_TEMPLATE_SHEET}!${sourceAddress} ${invalid}`] }));
+      continue;
+    }
+    const fmsRows = new Map<string, { column: TestTemplateDownload['columns'][number]; index: number; entries: Array<{ key: FmsInputKey; raw: unknown }> }>();
+    snapshot.columns.forEach((column, index) => {
+      const columnIndex = index + TEST_TEMPLATE_IDENTITY_HEADERS.length;
+      const raw = row[columnIndex];
+      const rawValue = text(raw);
+      if (!rawValue) return;
+      if (column.fmsInput) {
+        const group = fmsRows.get(column.code) ?? { column, index: columnIndex, entries: [] };
+        group.entries.push({ key: column.fmsInput, raw });
+        fmsRows.set(column.code, group);
+        return;
+      }
+      const value = column.valueKind === 'time' ? templateTimeValue(raw) : standardNumberValue(raw);
+      items.push(itemBase({
+        itemType: 'test_measurement', eventDate, rawAthleteName,
+        sourceSheet: TEST_TEMPLATE_SHEET, sourceAddress: cellAddress(rowIndex, columnIndex),
+        testType: column.testType, metricCode: column.code, metricLabel: column.label, unit: column.unit,
+        valueNum: value !== null && Number.isFinite(value) ? value : null, rawValue,
+        payload: {
+          athleteCode: person.kind === 'matched' ? String(person.athlete.id) : athleteCode, team, projectCode: snapshot.project, protocol: column.protocol,
+          protocolVersion: column.protocolVersion, rawDate: text(date), dateAddress: cellAddress(rowIndex, 3),
+          testTemplateColumn: column,
+        },
+      }));
+    });
+    for (const { column, index, entries } of fmsRows.values()) {
+      const { observation, errors } = readFmsObservation(entries);
+      items.push(itemBase({
+        itemType: 'test_measurement', eventDate, rawAthleteName, sourceSheet: TEST_TEMPLATE_SHEET,
+        sourceAddress: cellAddress(rowIndex, index), testType: column.testType, metricCode: column.code,
+        metricLabel: column.label, unit: column.unit, side: 'center', valueNum: fmsFinalScore(column.code, observation),
+        rawValue: entries.map(entry => text(entry.raw)).join(' / '),
+        payload: { athleteCode: person.kind === 'matched' ? String(person.athlete.id) : athleteCode, team, projectCode: snapshot.project,
+          protocol: column.protocol, protocolVersion: column.protocolVersion, rawDate: text(date),
+          testTemplateColumn: column, fmsObservation: observation, fmsErrors: errors },
+      }));
+    }
+  }
+  return items;
+}
+
+/** 非空非法日期保留原文供校对；默认日期仅用于真正空白的单元格。 */
+function parseStandardDate(value: unknown, year: number): string {
+  const raw = text(value);
+  const full = parseImportFullDate(value);
+  if (full) return full;
+  const normalized = raw.normalize('NFKC');
+  const short = /^(\d{1,2})\s*[-/.]\s*(\d{1,2})$/.exec(normalized) ??
+    /^(\d{1,2})\s*月\s*(\d{1,2})\s*日?$/.exec(normalized);
+  if (!short) return raw;
+  return parseImportFullDate(`${year}-${short[1]}-${short[2]}`) || raw;
+}
+
+/** 模板枚举可读中文、数据库存规范代码；解析期即归一，冲突比较、校对与入库共用同一口径。 */
+const WELLNESS_STATUS_CODES: Record<string, string> = { 正常: 'normal', 休息: 'rest', 关注: 'attention', 警报: 'alert', 缺失: 'missing' };
+const TEST_SIDE_CODES: Record<string, string> = {
+  左: 'left', 右: 'right', 双侧: 'bilateral', 中央: 'center',
+};
+const INJURY_SIDE_CODES: Record<string, string> = { 未指定: 'unspecified', ...TEST_SIDE_CODES };
+const INJURY_STATUS_CODES: Record<string, string> = {
+  健康: 'healthy',
+  观察: 'observation',
+  限训: 'restricted',
+  康复: 'rehab',
+  停训: 'suspended',
+};
+const STATE_LEVEL_CODES: Record<string, string> = {
+  巅峰: 'peak',
+  良好: 'good',
+  建设: 'build',
+  调整: 'adjust',
+};
+function canonicalCode(value: unknown, codes: Record<string, string>, fallback: string) {
+  const raw = text(value);
+  return Object.hasOwn(codes, raw) ? codes[raw] : raw || fallback;
+}
+
+function canonicalEnumField(itemType: string, field: string, value: ReviewValue): ReviewValue {
+  if (itemType === 'wellness' && field === 'status') return canonicalCode(value, WELLNESS_STATUS_CODES, '');
+  if (itemType === 'injury_record' && field === 'side') return canonicalCode(value, INJURY_SIDE_CODES, 'unspecified');
+  if (itemType === 'injury_record' && field === 'status') return canonicalCode(value, INJURY_STATUS_CODES, 'observation');
+  if (itemType === 'competitive_state' && field === 'stateLevel') return canonicalCode(value, STATE_LEVEL_CODES, '');
+  return value;
+}
+function normalizeImportEnums(item: ParsedImportItem | DataImportItemView) {
+  if (item.itemType === 'wellness') {
+    item.payload.status = canonicalCode(item.payload.status, WELLNESS_STATUS_CODES, '');
+  } else if (item.itemType === 'injury_record') {
+    item.payload.side = canonicalCode(item.payload.side, INJURY_SIDE_CODES, 'unspecified');
+    item.payload.status = canonicalCode(item.payload.status, INJURY_STATUS_CODES, 'observation');
+  } else if (item.itemType === 'competitive_state') {
+    item.payload.stateLevel = canonicalCode(item.payload.stateLevel, STATE_LEVEL_CODES, '');
+  } else if (item.itemType === 'test_measurement') {
+    item.side = canonicalCode(item.side, TEST_SIDE_CODES, 'center') as ParsedImportItem['side'];
+  }
+}
+
+function parseStandardSheet(
+  matrix: Matrix,
+  rawSheet: string,
+  project: string,
+  filename: string,
+  defaultDate: string,
+  athletes: ImportAthlete[],
+  simplified = false,
+  fallbackDate = defaultDate || new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date()),
+  selectedTeam = ''
+) {
+  const basicProfile = rawSheet === BASIC_PROFILE_SHEET;
+  if (basicProfile && !selectedTeam) throw new Error('上传运动员基础档案前请选择项目和队伍。');
+  const sheet = basicProfile ? '运动员信息' : IMPORT_SHEET_ALIASES[rawSheet] || rawSheet;
+  const header = standardHeader(matrix, sheet === COMPACT_ATHLETE_SHEET);
+  if (!header) return [];
+  if (sheet === COMPACT_ATHLETE_SHEET) {
+    const knownHeaders = new Set<string>(COMPACT_ATHLETE_COLUMNS.map(field => normalizedText(field.key)));
+    for (const label of header.columns.keys()) {
+      if (!knownHeaders.has(label)) header.columns.delete(label);
+    }
+  }
+  if (basicProfile) {
+    const knownHeaders = new Set([...BASIC_PROFILE_HEADERS, '运动员编号', '编号', '运动项目', '所属队伍'].map(normalizedText));
+    for (const label of header.columns.keys()) {
+      if (!knownHeaders.has(label)) header.columns.delete(label);
+    }
+  }
+  const items: ParsedImportItem[] = [];
+  const metricCatalog = sheet === '测试指标' ? readImportMetricDefinitions(project) : [];
+  const year = workbookYear(filename);
+  const nameColumn = header.columns.get(normalizedText('姓名')) ?? 0;
+  const identityHeaders = new Set(['系统运动员编号', '运动员编号', '编号', '姓名', '所属队伍', '运动项目', '日期', '测量日期', '测试日期', '发生日期', '评估日期']);
+  const dateLabels = ['日期', '测量日期', '测试日期', '发生日期', '评估日期'];
+  if (basicProfile) {
+    identityHeaders.add('身体测量日期');
+    dateLabels.unshift('身体测量日期');
+  }
+  const knownProfileNames = new Set(basicProfile ? athletes.filter(athlete =>
+    athlete.active !== false && athlete.project === project && athlete.team === selectedTeam
+  ).map(athlete => normalizedName(athlete.name)) : []);
+  for (let rowIndex = header.rowIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
+    const rawRow = matrix[rowIndex] || [];
+    const row = header.identityColumns.size
+      ? rawRow.map((value, index) => header.identityColumns.has(index) ? '' : value)
+      : rawRow;
+    const athleteCode = standardText(row, header.columns, '系统运动员编号', '运动员编号', '编号');
+    const numberedId = parseAthleteNumber(athleteCode);
+    const numberedAthlete = athletes.find(athlete => athlete.id === numberedId);
+    const rawName = standardText(row, header.columns, '姓名') || numberedAthlete?.name || '';
+    const existingProfileName = knownProfileNames.has(normalizedName(rawName));
+    const hasBusiness = sheet === COMPACT_ATHLETE_SHEET
+      ? COMPACT_ATHLETE_COLUMNS.some(field =>
+          (field.kind === 'body' || field.kind === 'test') &&
+          text(standardValue(row, header.columns, field.key)) !== '')
+      : [...header.columns].some(([label, column]) => !identityHeaders.has(label) && text(row[column]) !== '');
+    if (sheet !== '运动员信息' && !hasBusiness) continue;
+    if (!basicProfile && simplified && sheet === '运动员信息' && !hasBusiness) {
+      const team = selectedTeam || standardText(row, header.columns, '所属队伍');
+      if (athleteCode && resolvePerson({ name: rawName, project, team, athleteCode }, athletes).kind === 'matched') continue;
+      if (!athleteCode && rawName && athletes.some(athlete =>
+        athlete.active !== false && athlete.project === project && (!team || athlete.team === team) &&
+        normalizedName(athlete.name) === normalizedName(rawName)
+      )) continue;
+    }
+    if (!basicProfile && /^示例/.test(rawName)) continue;
+    const sourceRow = {
+      rowIndex, columns: [...header.columns], values: row.map(value => typeof value === 'number' ? value : text(value)),
+      filename, defaultDate, simplified, fallbackDate,
+    };
+    if (basicProfile) {
+      const rowProject = standardText(row, header.columns, '运动项目');
+      const rowTeam = standardText(row, header.columns, '所属队伍');
+      const scopeErrors = [
+        rowProject && normalizeProject(rowProject) !== project ? '运动项目与当前选择不一致' : '',
+        rowTeam && rowTeam !== selectedTeam ? '所属队伍与当前选择不一致' : '',
+      ].filter(Boolean);
+      if (scopeErrors.length) {
+        items.push(itemBase({
+          itemType: 'invalid_row', rawAthleteName: rawName, payload: { sourceRow },
+          sourceSheet: rawSheet, sourceAddress: cellAddress(rowIndex, nameColumn),
+          quality: 'error', messages: scopeErrors.map(message => `错误：${message}，请核对上传范围与表格内容`),
+        }));
+        continue;
+      }
+      if (!hasBusiness && (athleteCode
+        ? resolvePerson({ name: rawName, project, team: selectedTeam, athleteCode }, athletes).kind === 'matched'
+        : existingProfileName && activeTeamNameMatches(athletes, project, selectedTeam!, rawName).length === 1)) continue;
+    }
+    const rowHasContent = row.some((value) => text(value) !== '');
+    if (!rawName) {
+      // 有内容但缺少姓名的行必须提示错误，不得静默丢弃业务数据。
+      if (rowHasContent)
+        items.push(
+          itemBase({
+            itemType: 'invalid_row',
+            payload: { sourceRow },
+            sourceSheet: rawSheet,
+            sourceAddress: cellAddress(rowIndex, nameColumn),
+            rawValue: row.map((value) => text(value)).filter(Boolean).slice(0, 6).join(' | '),
+            quality: 'error',
+            messages: [
+              `错误：${rawSheet}!${cellAddress(rowIndex, nameColumn)} 这行缺少姓名，请填写运动员姓名。`,
+            ],
+            businessKey: `invalid|${sheet}|${rowIndex}`,
+          })
+        );
+      continue;
+    }
+    const rowStart = items.length;
+    const numericErrors = new Map<string, { address: string; raw: string; message: string }>();
+    const readNumber = (label: string): number | null => {
+      const raw = standardValue(row, header.columns, label);
+      if (text(raw) === '') return null;
+      const isTrainingYears = label === '数值' &&
+        (standardText(row, header.columns, '指标代码') === 'training_years' ||
+          /^训练年限(?:[（(]年[）)])?$/.test(standardText(row, header.columns, '指标名称')));
+      const value = isTrainingYears ? parseTrainingYears(raw) : standardNumberValue(raw);
+      if (value === null) {
+        const address = cellAddress(rowIndex, header.columns.get(normalizedText(label)) ?? 0);
+        numericErrors.set(label, {
+          address,
+          raw: text(raw),
+          message: `错误：${rawSheet}!${address} ${label}“${text(raw)}”不是有效数字；请修正原文件后重新上传，或明确排除整行`,
+        });
+      }
+      return value;
+    };
+    const athlete = matchAthlete(rawName, project, athletes);
+    const rawDate = standardValue(row, header.columns, ...dateLabels);
+    const dateColumn = dateLabels.map(label => header.columns.get(normalizedText(label))).find(column => column !== undefined);
+    const rowDate = basicProfile
+      ? (parseImportFullDate(rawDate) || text(rawDate))
+      : text(rawDate) === '' ? fallbackDate : parseStandardDate(rawDate, year);
+    const messages: string[] = [];
+    const base = {
+      athleteId: athlete?.id || null,
+      rawAthleteName: rawName,
+      sourceSheet: rawSheet,
+      sourceAddress: cellAddress(rowIndex, nameColumn),
+      payload: {
+        sourceRow,
+        projectCode: normalizeProject(project), factProject: standardText(row, header.columns, '事实项目'), projectStatus: standardText(row, header.columns, '项目归属状态'), rulesVersion: SPORT_RULES_VERSION,
+        protocolVersion: standardText(row, header.columns, '协议版本'),
+        testContext: standardText(row, header.columns, '测试上下文'),
+        attemptOrder: readNumber('试次序号') ?? 1,
+        athleteCode: standardText(row, header.columns, '系统运动员编号', '运动员编号', '编号'),
+        team: standardText(row, header.columns, '所属队伍'),
+        templateVersion: simplified ? IMPORT_TEMPLATE_VERSION : '',
+        rawDate: text(rawDate),
+        dateSource: basicProfile || text(rawDate) ? 'row' : defaultDate ? 'selected' : 'legacy_today',
+        defaultedDate: basicProfile || text(rawDate) ? '' : rowDate,
+        dateAddress: cellAddress(rowIndex, dateColumn ?? nameColumn),
+        ...(simplified ? { fieldAddresses: Object.fromEntries([...header.columns].map(([label, column]) => [label, cellAddress(rowIndex, column)])) } : {}),
+      } as Record<string, unknown>,
+    };
+    const appendMetric = (headerName: string, metricCode: string, metricLabel: string, unit: string, type: string, protocol: string) => {
+      const value = readNumber(headerName);
+      if (value === null) return;
+      items.push(itemBase({ ...base, itemType: 'test_measurement', eventDate: rowDate,
+        testType: type, metricCode, metricLabel, valueNum: value, unit, side: 'center',
+        payload: { ...base.payload, protocol,
+          protocolRequired: rawSheet === '体能测试' && metricCode === 'asymmetry_index_pct',
+          note: standardText(row, header.columns, '备注') },
+        rawValue: String(value), messages: [], quality: 'valid',
+        businessKey: `${rawName}|${rowDate}|${type}|${metricCode}`,
+      }));
+    };
+    if (sheet !== '运动员信息' && !validIsoDate(rowDate))
+      messages.push('错误：缺少有效日期，请按YYYY-MM-DD填写');
+
+    if (sheet === COMPACT_ATHLETE_SHEET) {
+      const bodyFields: Record<string, number> = {};
+      for (const field of COMPACT_ATHLETE_COLUMNS) {
+        if (field.kind !== 'body' && field.kind !== 'test') continue;
+        const value = readNumber(field.key);
+        if (value === null) continue;
+        const limits = METRICS[field.code];
+        if (value < limits.min || value > limits.max || ('integer' in field && !Number.isInteger(value))) {
+          const address = cellAddress(rowIndex, header.columns.get(normalizedText(field.key)) ?? 0);
+          numericErrors.set(field.key, {
+            address, raw: String(value),
+            message: `错误：${field.key}须为${limits.min}至${limits.max}的${'integer' in field ? '整数' : '数值'}`,
+          });
+          continue;
+        }
+        if (field.kind === 'body') bodyFields[field.field] = value;
+        else appendMetric(field.key, field.code, limits.label, limits.unit,
+          field.protocol === '实测1RM' ? '力量素质测试' : '体能测试', field.protocol);
+      }
+      if (Object.keys(bodyFields).length) items.push(itemBase({
+        ...base, itemType: 'body_measurement', eventDate: rowDate,
+        metricCode: 'body_composition', metricLabel: '身体测量',
+        valueNum: bodyFields.weightKg ?? bodyFields.heightCm ?? null,
+        payload: { ...base.payload, ...bodyFields, note: standardText(row, header.columns, '备注') },
+        rawValue: JSON.stringify(bodyFields), messages: [...messages], quality: makeQuality(messages),
+        businessKey: `${rawName}|${rowDate}|body`,
+      }));
+    } else if (sheet === '运动员信息') {
+      const gender = standardText(row, header.columns, '性别');
+      const rawBirthDate = standardValue(row, header.columns, '出生日期');
+      const parsedBirthDate = parseImportBirthDate(rawBirthDate);
+      // 非法生日保留原始文本在校验中报错，避免修正后被静默丢失；合法时存规范值。
+      const birthDate = parsedBirthDate || text(rawBirthDate);
+      const rawTrainingYears = standardValue(row, header.columns, '训练年限');
+      const trainingYears = parseTrainingYears(rawTrainingYears);
+      const rawBestResultDate = standardValue(row, header.columns, '成绩日期');
+      const rawStartSportDate = standardValue(row, header.columns, '开始运动日期');
+      if (gender && !['男', '女'].includes(gender)) messages.push('错误：性别只能填写男或女');
+      const payload = {
+        ...base.payload,
+        project: basicProfile ? project : standardText(row, header.columns, '运动项目') || project,
+        team: standardText(row, header.columns, '所属队伍'),
+        gender,
+        birthDate,
+        region: standardText(row, header.columns, '省份'),
+        city: standardText(row, header.columns, '城市'),
+        county: standardText(row, header.columns, '区县'),
+        ethnicity: standardText(row, header.columns, '民族'),
+        phone: standardText(row, header.columns, '手机号'),
+        bloodType: standardText(row, header.columns, '血型'),
+        emergencyContact: standardText(row, header.columns, '紧急联系人'),
+        emergencyPhone: standardText(row, header.columns, '紧急电话'),
+        education: standardText(row, header.columns, '学历'),
+        technicalLevel: normalizeTechnicalLevel(standardValue(row, header.columns, '技术等级')),
+        position: standardText(row, header.columns, '位置号位'),
+        healthStatus: standardText(row, header.columns, '身体状态'),
+        bestResult: standardText(row, header.columns, basicProfile ? '最好竞技成绩' : '最好成绩'),
+        eventItem: standardText(row, header.columns, '具体小项'),
+        representativeUnit: standardText(row, header.columns, '代表单位'),
+        trainingYears: trainingYears !== null && Number.isFinite(trainingYears) ? trainingYears : text(rawTrainingYears),
+        bestResultEvent: standardText(row, header.columns, '对应赛事'),
+        bestResultDate: parseImportFullDate(rawBestResultDate) || text(rawBestResultDate),
+        nativePlace: standardText(row, header.columns, '籍贯'),
+        homeAddress: standardText(row, header.columns, '家庭住址'),
+        athleteStatus: standardText(row, header.columns, '训练状态'),
+        startSportDate: (basicProfile ? parseImportFullDate(rawStartSportDate) : parseDate(rawStartSportDate, year)) || text(rawStartSportDate),
+        trainingVenue: standardText(row, header.columns, '训练场地'),
+        currentEvent: standardText(row, header.columns, '备战赛事'),
+        trainingPhase: standardText(row, header.columns, '备战阶段'),
+        campPeriod: standardText(row, header.columns, '集训时间'),
+        originPlace: standardText(row, header.columns, '输送地'),
+        originUnit: standardText(row, header.columns, '输送单位'),
+        originCoach: standardText(row, header.columns, '输送教练'),
+        specialties: standardText(row, header.columns, '优势项'),
+        notes: standardText(row, header.columns, '备注'),
+      };
+      const hasProfileData = [payload.gender, payload.birthDate, payload.nativePlace,
+        payload.education, payload.originUnit, payload.bestResult, payload.notes, payload.eventItem,
+        payload.representativeUnit, payload.trainingYears, payload.bestResultEvent, payload.bestResultDate,
+        payload.technicalLevel, payload.startSportDate].some(isProvided);
+      if (!basicProfile || !existingProfileName || hasProfileData ||
+          (athleteCode && resolvePerson({ name: rawName, project, team: selectedTeam, athleteCode }, athletes).kind !== 'matched')) items.push(
+        itemBase({
+          ...base,
+          itemType: 'athlete_profile',
+          payload,
+          rawValue: rawName,
+          quality: makeQuality(messages),
+          messages,
+          businessKey: `${normalizedName(rawName)}|profile`,
+        })
+      );
+      if (!basicProfile) continue;
+
+      const rawStrength = standardText(row, header.columns, '最大力量');
+      const strengthProject = standardText(row, header.columns, '最大力量项目');
+      const findStrengthMetric = (action: string) => COMMON_FITNESS_TEMPLATE_METRICS.find(([label, , , , , protocol]) =>
+        protocol === '实测1RM' && label.split('1RM')[0] === action.normalize('NFKC').trim().replace(/1RM$/i, '').trim());
+      const appendStrength = (metric: NonNullable<ReturnType<typeof findStrengthMetric>>, value: number, date: string, address: string, rawValue: string, explicitDate: boolean) => {
+        const [, metricCode, metricLabel, unit, testType, protocol] = metric;
+        items.push(itemBase({
+          ...base, sourceAddress: address, itemType: 'test_measurement', eventDate: date,
+          metricCode, metricLabel, valueNum: value, unit, testType, side: 'center', rawValue,
+          payload: { ...base.payload, birthDate, protocol, rawDate: explicitDate ? date : '', dateAddress: address,
+            dateSource: explicitDate ? 'row' : defaultDate ? 'selected' : 'legacy_today', defaultedDate: explicitDate ? '' : date },
+          quality: 'valid',
+        }));
+      };
+      if (rawStrength && header.columns.has(normalizedText('最大力量项目'))) {
+        const metric = findStrengthMetric(strengthProject);
+        const value = standardNumberValue(rawStrength.normalize('NFKC').replace(/\s*(?:kg|公斤|千克)$/i, ''));
+        const invalidField = metric ? '最大力量' : '最大力量项目';
+        const address = cellAddress(rowIndex, header.columns.get(normalizedText(invalidField)) ?? nameColumn);
+        if (!metric || value === null || value <= 0) {
+          numericErrors.set(invalidField, { address, raw: metric ? rawStrength : strengthProject,
+            message: `错误：${rawSheet}!${address} ${metric ? '最大力量须填写实测公斤数，例如 95' : '请选择最大力量项目：深蹲、卧推、卧拉、硬拉或高翻'}` });
+        } else {
+          appendStrength(metric, value, fallbackDate, address, rawStrength, false);
+        }
+      } else if (rawStrength) {
+        // 兼容此前下载的单列格式，继续保留其中的实际测试日期。
+        const address = cellAddress(rowIndex, header.columns.get(normalizedText('最大力量')) ?? nameColumn);
+        const entries = rawStrength.normalize('NFKC').split(/[;\n]+/).map(entry => entry.trim()).filter(Boolean);
+        const badStrength = () => numericErrors.set('最大力量', { address, raw: rawStrength,
+          message: `错误：${rawSheet}!${address} 最大力量须填实测日期、动作和正数重量，例：2026-11-20 深蹲 95kg` });
+        if (!entries.length) badStrength();
+        for (const entry of entries) {
+          const match = /^(\d{4}-\d{2}-\d{2})\s+([^\d]+?)(?:1RM)?\s*[:：]?\s*(\d+(?:\.\d+)?)\s*kg$/i.exec(entry);
+          const metric = match && findStrengthMetric(match[2]);
+          const value = match ? standardNumberValue(match[3]) : null;
+          if (!match || !validIsoDate(match[1]) || !metric || value === null || value <= 0) {
+            badStrength();
+            break;
+          }
+          appendStrength(metric, value, match[1], address, entry, true);
+        }
+      }
+      const heightCm = readNumber('身高cm');
+      const weightKg = readNumber('体重kg');
+      if (heightCm !== null || weightKg !== null) items.push(itemBase({
+        ...base, itemType: 'body_measurement', eventDate: rowDate,
+        metricCode: 'body_composition', metricLabel: '身体测量', valueNum: weightKg ?? heightCm,
+        payload: { ...base.payload, birthDate, heightCm, weightKg },
+        rawValue: JSON.stringify({ heightCm, weightKg }),
+        quality: 'valid',
+      }));
+    }
+
+    if (sheet === '竞技水平评估') {
+      const technicalLevel = normalizeTechnicalLevel(
+        standardValue(row, header.columns, '技术等级')
+      );
+      const bestResult = standardText(row, header.columns, '最好成绩');
+      // 等级、最好成绩属于档案资料，无需附带按日期的评估记录。
+      if (technicalLevel || bestResult) {
+        items.push(itemBase({
+          ...base,
+          itemType: 'athlete_profile',
+          payload: { ...base.payload, technicalLevel, bestResult },
+          rawValue: technicalLevel || bestResult,
+          quality: 'valid',
+          messages: [],
+          businessKey: `${athlete?.id || normalizedName(rawName)}|competitive-profile`,
+        }));
+      }
+      const assessmentLabels = ['竞技总分', '竞技状态', '专项耐力', '力量爆发', '技术效率',
+        '负荷适应', '恢复能力', '比赛能力'];
+      const hasAssessment = text(rawDate) !== '' || assessmentLabels.some(
+        label => text(standardValue(row, header.columns, label)) !== ''
+      );
+      if (!hasAssessment) continue;
+      const overallScore = readNumber('竞技总分');
+      const stateLevel = canonicalCode(standardText(row, header.columns, '竞技状态'), STATE_LEVEL_CODES, '');
+      const payload = {
+        ...base.payload,
+        overallScore,
+        stateLevel,
+        enduranceScore: readNumber('专项耐力'),
+        powerScore: readNumber('力量爆发'),
+        techniqueScore: readNumber('技术效率'),
+        loadAdaptationScore: readNumber('负荷适应'),
+        recoveryScore: readNumber('恢复能力'),
+        competitionScore: readNumber('比赛能力'),
+        note: standardText(row, header.columns, '备注'),
+      };
+      items.push(
+        itemBase({
+          ...base,
+          itemType: 'competitive_state',
+          eventDate: rowDate,
+          metricLabel: '竞技状态',
+          valueNum: overallScore,
+          unit: '分',
+          payload,
+          rawValue: String(overallScore ?? ''),
+          quality: makeQuality(messages),
+          messages,
+          businessKey: `${athlete?.id || 0}|${rowDate}|competitive`,
+        })
+      );
+    } else if (sheet === '身体测量' || sheet === '冠军模型测试') {
+      const fields: Record<string, number | null> = {};
+      for (const [headerName, key] of BODY_TEMPLATE_FIELDS) {
+        if (key !== 'armSpanCm') fields[key] = readNumber(headerName);
+      }
+      const armSpan = readNumber('臂展cm');
+      const hasBody = Object.values(fields).some(value => value !== null);
+      if (hasBody) items.push(itemBase({ ...base, itemType: 'body_measurement', eventDate: rowDate,
+        metricCode: 'body_composition', metricLabel: '身体测量', valueNum: fields.weightKg ?? fields.heightCm ?? null,
+        payload: { ...base.payload, ...fields, note: standardText(row, header.columns, '备注') },
+        rawValue: JSON.stringify(fields), messages: [...messages], quality: makeQuality(messages),
+        businessKey: `${rawName}|${rowDate}|body`,
+      }));
+      if (armSpan !== null) appendMetric('臂展cm', 'arm_span_cm', '臂展', 'cm', '身体测量', standardText(row, header.columns, '测试协议'));
+      if (sheet === '身体测量' && !hasBody && armSpan === null)
+        items.push(itemBase({ ...base, itemType: 'body_measurement', eventDate: rowDate,
+          metricCode: 'body_composition', payload: base.payload, quality: 'error', messages: ['错误：身体测量至少填写一个数值'],
+        }));
+      if (sheet === '冠军模型测试') {
+        const protocol = standardText(row, header.columns, '测试协议');
+        for (const [headerName, code, label, unit] of [...FITNESS_TEMPLATE_METRICS, ...EVALUATION_SCORE_METRICS])
+          appendMetric(headerName, code, label, unit, '体能测试', protocol);
+      }
+    } else if (sheet === '恢复状态') {
+      const payload = {
+        ...base.payload,
+        sleepHours: readNumber('睡眠小时'),
+        sleepQuality: readNumber('睡眠质量'),
+        morningPulse: readNumber('晨脉'),
+        weightKg: readNumber('体重kg'),
+        fatigueIndex: readNumber('疲劳'),
+        sorenessIndex: readNumber('肌肉酸痛'),
+        moodIndex: readNumber('情绪'),
+        // 空白状态不伪造取值；入库时仅在文件明确填写时写入。
+        status: canonicalCode(standardText(row, header.columns, '状态'), WELLNESS_STATUS_CODES, ''),
+        note: standardText(row, header.columns, '备注'),
+      };
+      items.push(
+        itemBase({
+          ...base,
+          itemType: 'wellness',
+          eventDate: rowDate,
+          metricLabel: '每日恢复',
+          valueNum: payload.sleepHours ?? null,
+          payload,
+          rawValue: JSON.stringify(payload),
+          quality: makeQuality(messages),
+          messages,
+          businessKey: `${athlete?.id || 0}|${rowDate}|wellness`,
+        })
+      );
+    } else if (sheet === '训练课次') {
+      const durationCell = standardValue(row, header.columns, '时长分钟');
+      const distanceCell = standardValue(row, header.columns, '距离千米');
+      const durationReported = text(durationCell) !== '';
+      const distanceReported = text(distanceCell) !== '';
+      const duration = readNumber('时长分钟');
+      const distance = readNumber('距离千米');
+      if (!durationReported && !distanceReported)
+        messages.push('错误：时长分钟、距离千米至少填写一项；留空不等于 0。');
+      if (durationReported && (duration === null || duration < 0 || duration > 1440))
+        messages.push('错误：时长分钟须为 0—1440 的数字。');
+      if (distanceReported && (distance === null || distance < 0 || distance > 500))
+        messages.push('错误：距离千米须为 0—500 的数字。');
+      const rpe = readNumber('RPE');
+      const payload = {
+        ...base.payload,
+        sessionOrder: readNumber('课次序号') ?? 1,
+        sessionOrderProvided: text(standardValue(row, header.columns, '课次序号')) !== '',
+        startTime: normalizedSessionTime(standardValue(row, header.columns, '开始时间')),
+        trainingType: standardText(row, header.columns, '训练类型'),
+        structureType: standardText(row, header.columns, '训练阶段'),
+        intensityZone: standardText(row, header.columns, '强度区间'),
+        intensitySystem: standardText(row, header.columns, '强度体系'),
+        activityCode: Object.entries(ACTIVITY_LABELS).find(([, label]) => label === standardText(row, header.columns, '训练活动'))?.[0] || standardText(row, header.columns, '训练活动'),
+        content: standardText(row, header.columns, '训练内容'),
+        durationMin: duration,
+        distanceKm: distance,
+        durationReported,
+        distanceReported,
+        rpe,
+        // 空白 SRPE/SMVL 保持未提供；仅在文件明确填写时写入，避免伪造 0 值。
+        srpe: readNumber('SRPE') ?? (rpe === null || duration === null ? null : rpe * duration),
+        srpeCalculated: text(standardValue(row, header.columns, 'SRPE')) === '',
+        smvl: readNumber('SMVL'),
+        averageHeartRate: readNumber('平均心率'),
+        maxHeartRate: readNumber('最大心率'),
+        averagePowerW: readNumber('平均功率W'),
+        strokeRateSpm: readNumber('桨频SPM'),
+        cadenceRpm: readNumber('踏频rpm'),
+      };
+      items.push(
+        itemBase({
+          ...base,
+          itemType: 'training_session',
+          eventDate: rowDate,
+          sessionLabel: payload.content,
+          valueNum: duration,
+          unit: 'min',
+          payload,
+          rawValue: JSON.stringify(payload),
+          quality: makeQuality(messages),
+          messages,
+          businessKey: `${athlete?.id || 0}|${rowDate}|session|${payload.sessionOrder}`,
+        })
+      );
+    } else if (sheet === '力量训练组次') {
+      const exerciseName = standardText(row, header.columns, '动作');
+      const actualReps = readNumber('实际次数');
+      const actualWeightKg = readNumber('实际重量kg');
+      if (!exerciseName) messages.push('错误：训练动作不能为空');
+      if (actualReps === null || actualWeightKg === null)
+        messages.push('错误：实际次数和实际重量不能为空');
+      const rawSetCount = standardValue(row, header.columns, '组数');
+      const count = readNumber('组数') ?? 1;
+      const rawSetIndex = standardValue(row, header.columns, '组序');
+      const startingSet = readNumber('组序') ?? 1;
+      const canRepeat = Number.isSafeInteger(count) && count >= 1 && count <= MAX_REPEATED_STRENGTH_SETS &&
+        Number.isSafeInteger(startingSet + count - 1) && startingSet >= 1;
+      if (!Number.isSafeInteger(count) || count < 1 || count > MAX_REPEATED_STRENGTH_SETS)
+        messages.push(`错误：组数须为1至${MAX_REPEATED_STRENGTH_SETS}的整数`);
+      if (!Number.isSafeInteger(startingSet) || startingSet < 1 || !Number.isSafeInteger(startingSet + count - 1))
+        messages.push('错误：组序须为有效正整数，展开后也须在范围内');
+      if (canRepeat && count > 1 && items.length + count > 400_000)
+        throw new Error('力量训练组次展开后超过工作表处理上限，请拆分文件。');
+      for (let offset = 0; offset < (canRepeat ? count : 1); offset += 1) {
+        const setIndex = startingSet + offset;
+        items.push(
+          itemBase({
+            ...base,
+            itemType: 'training_set',
+            eventDate: rowDate,
+            sessionLabel: standardText(row, header.columns, '课次名称') || '力量训练',
+            exerciseName,
+            setIndex,
+            targetReps: readNumber('计划次数'),
+            actualReps,
+            actualWeightKg,
+            intensityPercent: readNumber('强度百分比'),
+            payload: {
+              ...base.payload,
+              sessionOrder: readNumber('课次序号'),
+              setIndexProvided: Boolean(text(rawSetIndex) || text(rawSetCount)),
+              exerciseCode: standardText(row, header.columns, '动作代码'),
+              plannedWeightKg: readNumber('计划重量kg'),
+              completed: ({ '已完成': 1, '未完成': 0, '是': 1, '否': 0 } as Record<string, number>)[standardText(row, header.columns, '完成状态')] ?? readNumber('完成状态'),
+              trainingEnvironment: standardText(row, header.columns, '训练环境'),
+              durationMin: readNumber('组次时长分钟'),
+              distanceKm: readNumber('组次距离千米'),
+              intensityZone: standardText(row, header.columns, '强度区间'),
+              rpe: readNumber('RPE'),
+              trainingCategory:
+                standardText(row, header.columns, '类别') || inferStrengthCategory(exerciseName),
+              bodyPosition:
+                standardText(row, header.columns, '身体部位') ||
+                inferStrengthBodyPosition(exerciseName),
+              note: standardText(row, header.columns, '备注'),
+            },
+            rawValue: `${actualWeightKg ?? ''}kg×${actualReps ?? ''}`,
+            quality: makeQuality(messages),
+            messages,
+            businessKey: `${athlete?.id || 0}|${rowDate}|${exerciseName}|${setIndex}`,
+          })
+        );
+      }
+    } else if (sheet === 'FMS测试') {
+      const fmsItems = FMS_TEMPLATE_METRICS.flatMap(([headerName, metricCode, metricLabel]) => {
+        const inputs = fmsInputFields(metricCode, headerName);
+        const detailed = inputs.some(field => field.header !== headerName && header.columns.has(normalizedText(field.header)));
+        const entries = inputs.map(field => ({ key: field.key, raw: standardValue(row, header.columns, field.header) }));
+        const hasDetail = detailed && entries.some(entry => text(entry.raw));
+        const fms = hasDetail ? readFmsObservation(entries) : undefined;
+        const valueNum = fms ? fmsFinalScore(metricCode, fms.observation) : readNumber(headerName);
+        if (valueNum === null && !fms) return [];
+        const metricMessages = [...messages];
+        if (valueNum !== null && (!Number.isInteger(valueNum) || valueNum < 0 || valueNum > 3))
+          metricMessages.push(`错误：${metricLabel}须填写0、1、2或3分`);
+        return [
+          itemBase({
+            ...base,
+            itemType: 'test_measurement',
+            eventDate: rowDate,
+            testType: 'FMS测试',
+            metricCode,
+            metricLabel,
+            valueNum,
+            unit: '分',
+            side: 'center',
+            payload: {
+              ...base.payload,
+              protocol: FMS_TEST_PROTOCOL,
+              ...(fms ? { fmsObservation: fms.observation, fmsErrors: fms.errors } : {}),
+              note: standardText(row, header.columns, '备注'),
+            },
+            rawValue: String(valueNum),
+            quality: makeQuality(metricMessages),
+            messages: metricMessages,
+            businessKey: `${athlete?.id || 0}|${rowDate}|fms|${metricCode}`,
+          }),
+        ];
+      });
+      if (!fmsItems.length) {
+        messages.push('错误：FMS七项至少填写一项得分');
+        items.push(
+          itemBase({
+            ...base,
+            itemType: 'test_measurement',
+            eventDate: rowDate,
+            testType: 'FMS测试',
+            metricCode: 'fms_deep_squat',
+            metricLabel: '深蹲',
+            valueNum: null,
+            unit: '分',
+            payload: { ...base.payload, protocol: FMS_TEST_PROTOCOL },
+            rawValue: '',
+            quality: makeQuality(messages),
+            messages,
+            businessKey: `${athlete?.id || 0}|${rowDate}|fms|empty`,
+          })
+        );
+      } else {
+        if (fmsItems.filter(item => item.valueNum !== null).length < FMS_TEMPLATE_METRICS.length)
+          fmsItems.forEach((item) => {
+            item.messages.push('警告：建议一次录齐FMS七项，以便生成完整21分分析');
+            item.quality = makeQuality(item.messages);
+          });
+        items.push(...fmsItems);
+      }
+    } else if (sheet === '体能测试') {
+      const protocol = standardText(row, header.columns, '测试协议');
+      for (const [headerName, code, label, unit] of FITNESS_TEMPLATE_METRICS)
+        appendMetric(headerName, code, label, unit, '体能测试', protocol);
+      for (const [headerName, code, label, unit, type, method] of COMMON_FITNESS_TEMPLATE_METRICS)
+        appendMetric(headerName, code, label, unit, type, method);
+      if (items.length === rowStart && !numericErrors.size)
+        items.push(itemBase({ ...base, itemType: 'invalid_row', eventDate: rowDate, quality: 'error',
+          messages: ['错误：体能测试至少填写一项实测数值'], rawValue: row.map(text).join(' | ') }));
+    } else if (sheet === '测试指标') {
+      const explicitTestType = standardText(row, header.columns, '测试类型');
+      const rawCode = standardText(row, header.columns, '指标代码');
+      // 明确指定测试类型的逐项记录保留原指标代码，兼容历史事实，不改写其归属。
+      const selected = rawCode ? undefined : resolveImportMetricName(standardText(row, header.columns, '指标名称'), standardText(row, header.columns, '单位'), metricCatalog);
+      const metricCode = rawCode ? (explicitTestType ? rawCode : canonicalImportMetricCode(rawCode)) : selected?.metric?.code || '';
+      const valueNum = readNumber('数值');
+      const metricDefinition = db.prepare('SELECT unit FROM metric_definitions WHERE code = ? AND active = 1').get(metricCode) as { unit: string } | undefined;
+      const providedUnit = standardText(row, header.columns, '单位');
+      const metricUnit = providedUnit || metricDefinition?.unit || '';
+      const durationMin = readNumber('测试时长分钟');
+      if (selected?.error) messages.push(selected.error);
+      if (valueNum === null) messages.push('错误：测试数值不能为空');
+      if (durationMin !== null && durationMin <= 0) messages.push('错误：测试时长分钟须大于0');
+      const sideText = standardText(row, header.columns, '侧别');
+      const side = canonicalCode(sideText, TEST_SIDE_CODES, 'center') as ParsedImportItem['side'];
+      if (!['left', 'right', 'bilateral', 'center'].includes(side))
+        messages.push('错误：测试侧别只能使用center、left、right或bilateral');
+      const bodyField = BODY_TEMPLATE_FIELDS.find(([, , code]) => code === metricCode);
+      if (!explicitTestType && bodyField && bodyField[1] !== 'armSpanCm' && side === 'center') {
+        items.push(itemBase({ ...base, itemType: 'body_measurement', eventDate: rowDate,
+          metricCode: 'body_composition', metricLabel: '身体测量', valueNum,
+          payload: { ...base.payload, [bodyField[1]]: valueNum, note: standardText(row, header.columns, '备注'),
+            unitConflict: standardText(row, header.columns, '单位') && standardText(row, header.columns, '单位') !== bodyField[4]
+              ? `错误：${rawSheet}!${base.sourceAddress} 单位须为${bodyField[4]}，不能自动换算` : '' },
+          rawValue: String(valueNum ?? ''), messages, quality: makeQuality(messages),
+          businessKey: `${rawName}|${rowDate}|body`,
+        }));
+      } else items.push(
+        itemBase({
+          ...base,
+          itemType: 'test_measurement',
+          eventDate: rowDate,
+          testType: explicitTestType || (metricCode === 'arm_span_cm' && side === 'center' ? '身体测量' : '专项测试'),
+          metricCode,
+          metricLabel: selected?.metric?.label || standardText(row, header.columns, '指标名称') || metricCode,
+          valueNum,
+          unit: metricUnit,
+          side,
+          payload: {
+            ...base.payload,
+            metricSelectionError: selected?.error || '',
+            protocol: standardText(row, header.columns, '协议'),
+            durationMin,
+            targetValue: readNumber('目标值'),
+            unitConflict: providedUnit && metricDefinition?.unit && providedUnit !== metricDefinition.unit ? `错误：单位须为${metricDefinition.unit}，不能静默换算` : '',
+            note: standardText(row, header.columns, '备注'),
+          },
+          rawValue: String(valueNum ?? ''),
+          quality: makeQuality(messages),
+          messages,
+          businessKey: `${athlete?.id || 0}|${rowDate}|${metricCode}|${side}`,
+        })
+      );
+    } else if (sheet === '伤病记录') {
+      const payload = {
+        ...base.payload,
+        injuryName: standardText(row, header.columns, '伤病名称'),
+        bodyPart: standardText(row, header.columns, '部位'),
+        side: canonicalCode(standardText(row, header.columns, '侧别'), INJURY_SIDE_CODES, 'unspecified'),
+        status: canonicalCode(standardText(row, header.columns, '状态'), INJURY_STATUS_CODES, 'observation'),
+        // 空白疼痛评分保持未提供（不伪造 0）；写入时仅在明确填写时落库。
+        painScore: readNumber('疼痛评分'),
+        restrictions: standardText(row, header.columns, '训练限制'),
+        rehabPlan: standardText(row, header.columns, '康复计划'),
+        reviewDate: parseDate(standardValue(row, header.columns, '复查日期'), year),
+        note: standardText(row, header.columns, '备注'),
+      };
+      items.push(
+        itemBase({
+          ...base,
+          itemType: 'injury_record',
+          eventDate: rowDate,
+          metricLabel: payload.injuryName,
+          valueNum: payload.painScore ?? null,
+          payload,
+          rawValue: payload.injuryName,
+          quality: makeQuality(messages),
+          messages,
+          businessKey: `${athlete?.id || 0}|${rowDate}|injury|${payload.injuryName}`,
+        })
+      );
+    } else if (sheet === '竞技状态') {
+      const protocol = standardText(row, header.columns, '评估协议');
+      for (const [headerName, code, label, unit] of EVALUATION_SCORE_METRICS) {
+        appendMetric(headerName, code, label, unit, '竞技评估', protocol);
+        if (text(standardValue(row, header.columns, headerName)) && !protocol && !numericErrors.size) {
+          const item = items.at(-1);
+          if (item) item.payload.protocolRequired = true;
+        }
+      }
+      const stateHeaders = ['总分', '等级', '专项耐力', '力量爆发', '技术效率', '负荷适应', '恢复能力', '比赛能力'];
+      const hasState = stateHeaders.some(label => text(standardValue(row, header.columns, label)) !== '');
+      if (hasState) {
+      const overallScore = readNumber('总分');
+      const payload = {
+        ...base.payload,
+        overallScore,
+        // 空白等级保持未提供；入库新增时才落到默认档位。
+        stateLevel: canonicalCode(standardText(row, header.columns, '等级'), STATE_LEVEL_CODES, ''),
+        enduranceScore: readNumber('专项耐力'),
+        powerScore: readNumber('力量爆发'),
+        techniqueScore: readNumber('技术效率'),
+        loadAdaptationScore: readNumber('负荷适应'),
+        recoveryScore: readNumber('恢复能力'),
+        competitionScore: readNumber('比赛能力'),
+        note: standardText(row, header.columns, '备注'),
+      };
+      items.push(
+        itemBase({
+          ...base,
+          itemType: 'competitive_state',
+          eventDate: rowDate,
+          metricLabel: '竞技状态',
+          valueNum: overallScore,
+          unit: '分',
+          payload,
+          rawValue: String(overallScore ?? ''),
+          quality: makeQuality(messages),
+          messages,
+          businessKey: `${athlete?.id || 0}|${rowDate}|competitive`,
+        })
+      );
+      }
+    }
+    if (numericErrors.size) {
+      const errors = [...numericErrors.entries()];
+      items.splice(rowStart);
+      items.push(itemBase({
+        ...base,
+        itemType: 'invalid_row',
+        eventDate: rowDate,
+        sourceAddress: errors[0][1].address,
+        metricLabel: errors.map(([label]) => label).join('、'),
+        rawValue: errors.map(([label, error]) => `${label}=${error.raw}`).join('；'),
+        quality: 'error',
+        messages: errors.map(([, error]) => error.message),
+        businessKey: `invalid|${sheet}|${rowIndex}`,
+      }));
+    }
+  }
+  return items;
+}
+
+type ImportStrengthSession = { id: number; sessionOrder: number; label: string };
+function importStrengthSessions(item: ParsedImportItem | DataImportItemView): ImportStrengthSession[] {
+  if (!item.athleteId) return [];
+  const order = optionalNumber(item.payload.sessionOrder);
+  const sessions = db.prepare(`SELECT ts.id, ts.project_code, ts.session_order AS sessionOrder, ts.content AS label FROM training_sessions ts
+    WHERE ts.athlete_id = ? AND ts.session_date = ? AND ${order !== null ? 'ts.session_order = ?' : `(ts.training_type = '力量训练' OR EXISTS (SELECT 1 FROM strength_result_sets srs WHERE srs.training_session_id = ts.id)) AND ts.content = ?`}
+    ORDER BY ts.session_order`).all(item.athleteId, item.eventDate, order ?? item.sessionLabel) as Array<ImportStrengthSession & { project_code: string | null }>;
+  return sessions.filter(session => importSnapshotMatches(item, session));
+}
+function findImportStrengthSession(item: ParsedImportItem | DataImportItemView) {
+  const candidates = importStrengthSessions(item);
+  if (candidates.length > 1) throw new Error('同日存在同名力量课，请先选择课次序号');
+  return candidates[0];
+}
+function resolveImportStrengthSessions(items: Array<ParsedImportItem | DataImportItemView>) {
+  const key = (item: ParsedImportItem | DataImportItemView, label: string) => JSON.stringify([item.athleteId ?? dataImportPersonKey(item), item.eventDate, label]);
+  const staged = new Map<string, ImportStrengthSession[]>();
+  for (const session of items) {
+    if (session.itemType !== 'training_session' || session.resolution === 'skip') continue;
+    const label = text(session.payload.content);
+    const identity = key(session, label);
+    const entries = staged.get(identity) || [];
+    entries.push({ id: 0, sessionOrder: optionalNumber(session.payload.sessionOrder) ?? 1, label });
+    staged.set(identity, entries);
+  }
+  const resolved = new Map<string, Map<number, ImportStrengthSession>>();
+  for (const item of items) {
+    if (item.itemType !== 'training_set' || item.resolution === 'skip') continue;
+    delete item.payload.sessionChoices;
+    if (item.payload.sessionOrderInferred) {
+      delete item.payload.sessionOrder;
+      delete item.payload.sessionOrderInferred;
+    }
+    if (isProvided(item.payload.sessionOrder)) continue;
+    const identity = key(item, item.sessionLabel);
+    let candidates = resolved.get(identity);
+    if (!candidates) {
+      candidates = new Map([...importStrengthSessions(item), ...(staged.get(identity) || [])].map(session => [session.sessionOrder, session]));
+      resolved.set(identity, candidates);
+    }
+    if (candidates.size === 1) {
+      item.payload.sessionOrder = [...candidates.keys()][0];
+      item.payload.sessionOrderInferred = true;
+    }
+    else if (candidates.size > 1) item.payload.sessionChoices = [...candidates.values()];
+  }
+  const sessionIdentity = (item: ParsedImportItem | DataImportItemView) => JSON.stringify([item.athleteId ?? dataImportPersonKey(item), item.eventDate, optionalNumber(item.payload.sessionOrder) ?? 1]);
+  const withSets = new Set(items.filter(item => item.itemType === 'training_set' && item.resolution !== 'skip' && isProvided(item.payload.sessionOrder)).map(sessionIdentity));
+  for (const session of items) {
+    if (session.itemType !== 'training_session') continue;
+    if (withSets.has(sessionIdentity(session))) session.payload.hasStrengthSets = true;
+    else delete session.payload.hasStrengthSets;
+  }
+
+}
+
+function normalizedSessionTime(value: unknown) {
+  const raw = text(value);
+  if (!raw) return '';
+  const fraction = Number(raw);
+  if (Number.isFinite(fraction) && fraction >= 0 && fraction < 1) {
+    const minutes = Math.min(1439, Math.round(fraction * 1440));
+    return `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+  }
+  const match = /^(\d{1,2}):(\d{2})(?::\d{2})?$/.exec(raw);
+  if (match && Number(match[1]) < 24 && Number(match[2]) < 60) {
+    return `${match[1].padStart(2, '0')}:${match[2]}`;
+  }
+  return raw;
+}
+
+function assignImportSessionOrders(items: Array<ParsedImportItem | DataImportItemView>) {
+  const groups = new Map<string, Array<ParsedImportItem | DataImportItemView>>();
+  for (const item of items) {
+    if (item.itemType !== 'training_session' || !Object.hasOwn(item.payload, 'sessionOrderProvided')) continue;
+    delete item.payload.missingSessionOrder;
+    if (item.resolution === 'skip' || item.quality === 'skipped') continue;
+    const key = JSON.stringify([item.athleteId ?? dataImportPersonKey(item), item.eventDate]);
+    const group = groups.get(key) ?? [];
+    group.push(item);
+    groups.set(key, group);
+  }
+  for (const group of groups.values()) {
+    const first = group[0];
+    const stored = first.athleteId
+      ? db.prepare('SELECT session_order, start_time, project_code FROM training_sessions WHERE athlete_id = ? AND session_date = ?')
+          .all(first.athleteId, first.eventDate) as Array<{ session_order: number; start_time: string | null; project_code: string | null }>
+      : [];
+    const reserved = new Set(stored.map(row => row.session_order));
+    const byTime = new Map<string, Set<number>>();
+    const addTime = (time: string, order: number) => {
+      if (!/^\d{2}:\d{2}$/.test(time)) return;
+      const orders = byTime.get(time) ?? new Set<number>();
+      orders.add(order);
+      byTime.set(time, orders);
+    };
+    const compatible = stored.filter(row => importSnapshotMatches(first, row));
+    for (const row of compatible) addTime(normalizedSessionTime(row.start_time), row.session_order);
+    for (const item of group) {
+      if (!item.payload.sessionOrderProvided) continue;
+      const order = Number(item.payload.sessionOrder);
+      reserved.add(order);
+      addTime(normalizedSessionTime(item.payload.startTime), order);
+    }
+    const separatelyConfirmed = group.filter(item => !item.payload.sessionOrderProvided && item.payload.separateTrainingSession === true);
+    const inferred = group.filter(item => !item.payload.sessionOrderProvided && item.payload.separateTrainingSession !== true)
+      .sort((a, b) => normalizedSessionTime(a.payload.startTime).localeCompare(normalizedSessionTime(b.payload.startTime)));
+    let untimedOrder: number | undefined;
+    const hasTimedRows = group.some(item => /^\d{2}:\d{2}$/.test(normalizedSessionTime(item.payload.startTime)));
+    for (const item of inferred) {
+      const time = normalizedSessionTime(item.payload.startTime);
+      const hasTime = /^\d{2}:\d{2}$/.test(time);
+      const matches = byTime.get(time);
+      if ((matches?.size ?? 0) > 1 || (!hasTime && (compatible.length > 1 || (group.length - separatelyConfirmed.length > 1 &&
+          (item.payload.templateVersion === IMPORT_TEMPLATE_VERSION || hasTimedRows))))) {
+        item.payload.missingSessionOrder = true;
+        item.payload.sessionOrder = 1;
+        continue;
+      }
+      const existing = matches?.values().next().value ??
+        (!hasTime ? untimedOrder ?? (compatible.length === 1 ? compatible[0].session_order : undefined) : undefined);
+      let order = existing ?? 1;
+      if (existing === undefined) {
+        while (reserved.has(order)) order += 1;
+      }
+      item.payload.sessionOrder = order;
+      reserved.add(order);
+      addTime(time, order);
+      if (!hasTime) untimedOrder = order;
+    }
+    for (const item of separatelyConfirmed) {
+      let order = 1;
+      while (reserved.has(order)) order += 1;
+      item.payload.sessionOrder = order;
+      reserved.add(order);
+    }
+  }
+}
+
+function validateTemplateOrders(items: Array<ParsedImportItem | DataImportItemView>) {
+  const groups = new Map<string, Array<ParsedImportItem | DataImportItemView>>();
+  for (const item of items) {
+    delete item.payload.missingSetIndex;
+    if (item.resolution === 'skip' || item.quality === 'skipped') continue;
+    if (item.payload.templateVersion !== IMPORT_TEMPLATE_VERSION || item.itemType !== 'training_set') continue;
+    const key = JSON.stringify([item.itemType, item.athleteId ?? dataImportPersonKey(item), item.eventDate, item.itemType === 'training_set' ? [item.payload.sessionOrder, item.sessionLabel, item.exerciseName] : '']);
+    const group = groups.get(key) || []; group.push(item); groups.set(key, group);
+  }
+  for (const group of groups.values()) {
+    if (group.length < 2) continue;
+    for (const item of group) {
+      if (item.itemType === 'training_set' && !item.payload.setIndexProvided) item.payload.missingSetIndex = true;
+    }
+  }
+}
+
+/** 相同及互补事实自动合并；不同值继续使用统一字段审查。 */
+function refreshImportConflicts(items: Array<ParsedImportItem | DataImportItemView>) {
+  for (const item of items) normalizeImportEnums(item);
+  assignImportSessionOrders(items);
+  validateTemplateOrders(items);
+  resolveImportStrengthSessions(items);
+  for (const item of items) {
+    delete item.payload.valueImportConflicts;
+    delete item.payload.valueReviewPending;
+  }
+  const active = items.filter(item => item.resolution !== 'skip' && item.quality !== 'skipped');
+  // 解析期尚无暂存行号，使用稳定的临时序号参与统一分组。
+  const indexed = active.map((item, index) => ({ ...item, id: 'id' in item ? item.id : -(index + 1) }));
+  const originals = new Map(indexed.map((item, index) => [item.id, active[index]]));
+  const grouped = importReviewGroups(indexed);
+  for (const group of grouped) {
+    if (group.length < 2) continue;
+    const decision = group.find(item => item.payload.valueReviewDecision)?.payload.valueReviewDecision as { sources: Array<{ id: number }> } | undefined;
+    if (decision && group.every(item => decision.sources.some(source => source.id === item.id))) continue;
+    const conflicts: string[] = [];
+    for (const [, field, , label, unit] of reviewFields(group)) {
+      if (importFieldValues(group, field).length < 2) continue;
+      const values = group.filter(item => reviewValues(item, group)[field] !== undefined);
+      conflicts.push(`错误：${reviewTitle(group[0])}${group[0].eventDate ? `在${group[0].eventDate}` : ''}的${label}冲突：${values.map(item => `${item.sourceSheet}!${item.sourceAddress} = ${reviewValues(item, group)[field]}${unit}`).join('；')}。请在集中审查中选择最终值或填写真实日期后分别保留`);
+    }
+    for (const item of group) {
+      if (conflicts.length) item.payload.valueImportConflicts = conflicts;
+    }
+    if (!conflicts.length && !group.some(item => item.payload.unitConflict || item.payload.valueReviewDecision || item.payload.sessionChoices || item.payload.missingSessionOrder || item.payload.missingSetIndex)) {
+      const values: Record<string, ReviewValue> = {};
+      for (const [, field] of reviewFields(group)) {
+        const available = importFieldValues(group, field);
+        if (available.length === 1) values[field] = available[0];
+      }
+      const sources = group.flatMap(item => Array.isArray(item.payload.valueAutoMergeSources)
+        ? item.payload.valueAutoMergeSources
+        : [{ sourceSheet: item.sourceSheet, sourceAddress: item.sourceAddress, values: reviewValues(item, group) }]);
+      const representatives = new Set<string>();
+      for (const entry of group) {
+        const item = originals.get(entry.id)!;
+        const key = item.itemType === 'test_measurement' ? reviewMetricKey(entry) : 'record';
+        if (representatives.has(key)) {
+          item.resolution = 'skip';
+          item.quality = 'skipped';
+          item.payload.valueAutoMerged = true;
+        } else {
+          representatives.add(key);
+          const explicitSrpe = group.some(source => source.itemType === 'training_session' && source.payload.srpeCalculated === false && isProvided(source.payload.srpe));
+          writeReviewValues(entry, values, group);
+          if (explicitSrpe) entry.payload.srpeCalculated = false;
+          const { id: _reviewId, ...merged } = entry;
+          Object.assign(item, merged);
+          item.payload.valueAutoMergeSources = sources;
+        }
+      }
+    }
+  }
+}
+
+type TrainingRecordDetail = { template?: string; order: number; field: string; unit: string; number: number | null; text: string | null };
+
+function parseTrainingRecordSheet(matrix: Matrix, template: TrainingRecordDownload, filename: string, athletes: ImportAthlete[], team: string) {
+  const headers = trainingRecordHeaders(template);
+  if (headers.some((header, index) => matrix[0]?.[index] !== header))
+    throw new Error('训练记录模板表头已变更，请保留原列和列序。');
+  const sessionHeaders = ['运动员编号','姓名','日期','课次序号','训练内容','开始时间','训练类型','时长分钟','距离千米','RPE'];
+  const setHeaders = ['运动员编号','姓名','日期','课次序号','课次名称', ...TRAINING_SET_COLUMNS];
+  const sessions: Matrix = [sessionHeaders];
+  const sets: Matrix = [setHeaders];
+  const dayOrders = new Map<string, Map<string, number>>();
+  const groupsWithDetails = new Set<string>();
+  const groupPerRow = new Map<number, string>();
+  const detailsPerRow = new Map<number, TrainingRecordDetail[]>();
+  const starts = new Map<string, string>();
+  const usedDetails = new Set<string>();
+
+  for (let index = 1; index < matrix.length; index++) {
+    const row = matrix[index] ?? [];
+    if (row.slice(headers.length).some(value => text(value)))
+      throw new Error(`训练记录第 ${index + 1} 行包含模板外的列。`);
+    if (!row.slice(2).some(value => text(value))) continue;
+    const read = (header: string) => row[headers.indexOf(header)];
+    const person = resolvePerson({ name: text(row[1]), project: template.project, team, athleteCode: text(row[0]) }, athletes);
+    const athlete = person.kind === 'matched' ? person.athlete : undefined;
+    const date = typeof row[2] === 'string' ? text(row[2]) : parseDate(row[2], 0);
+    const name = text(row[3]);
+    const fail = (message: string): never => { throw new Error(`训练记录第 ${index + 1} 行：${message}`); };
+    if (!athlete) fail('message' in person ? person.message : '无法在所选队伍中唯一匹配该姓名，请核对队员名单。');
+    if (!validIsoDate(date) || !name || name.length > 120) fail('请填写有效的日期和课次名称。');
+    const dayKey = JSON.stringify([athlete!.id, date]);
+    let orders = dayOrders.get(dayKey);
+    if (!orders) {
+      const rows = db.prepare(`SELECT s.content,s.session_order AS sessionOrder,s.start_time AS startTime FROM training_sessions s
+        JOIN training_record_session_scope scope ON scope.session_id=s.id
+        WHERE s.athlete_id=? AND s.session_date=? AND s.project_code=? AND s.project_status='confirmed' AND scope.team_id=?
+        ORDER BY s.session_order`).all(athlete!.id, date, template.project, template.teamId) as Array<{ content: string; sessionOrder: number; startTime: string | null }>;
+      orders = new Map();
+      for (const stored of rows) {
+        orders.set(stored.content, orders.has(stored.content) ? 0 : stored.sessionOrder);
+        if (stored.startTime) starts.set(JSON.stringify([dayKey, stored.content]), stored.startTime);
+      }
+      dayOrders.set(dayKey, orders);
+    }
+    let order = orders.get(name);
+    if (order === 0) fail('已有多个同名课次，请使用唯一的课次名称或在旧模板中填写课次序号。');
+    if (order === undefined) {
+      const storedMax = db.prepare('SELECT MAX(session_order) AS highest FROM training_sessions WHERE athlete_id=? AND session_date=?')
+        .get(athlete!.id, date) as { highest: number | null };
+      order = Math.max(storedMax.highest ?? 0, ...orders.values(), 0) + 1;
+      orders.set(name, order);
+    }
+    const groupKey = JSON.stringify([dayKey, name]);
+    const start = normalizedSessionTime(read('开始时间'));
+    if (start && starts.has(groupKey) && start !== starts.get(groupKey))
+      fail('同一课次填写了不同开始时间，请核对课次名称。');
+    if (start) starts.set(groupKey, start);
+    const common = [String(athlete!.id), athlete!.name, date, order, name];
+    sessions[index] = [...common, start, ...sessionHeaders.slice(6).map(read)];
+    if (TRAINING_SET_COLUMNS.some(column => text(read(column)))) {
+      if (!text(read('组序')) && !text(read('明细序号'))) fail('填写力量组次时须提供组序或明细序号。');
+      sets[index] = [...common, ...TRAINING_SET_COLUMNS.map(column => column === '组序' ? (text(read(column)) ? read(column) : read('明细序号')) : read(column))];
+    }
+    const fields = template.fields.map((field, fieldIndex) => ({ field, source: template.fieldSources?.[fieldIndex], raw: read(trainingDetailHeader(field)) }))
+      .filter(({ raw }) => text(raw));
+    if (fields.length) {
+      const details: TrainingRecordDetail[] = [];
+      const detailOrders = new Map<string, number>();
+      for (const { field, source, raw } of fields) {
+        const name = source?.project ?? template.name;
+        let detailOrder = detailOrders.get(name);
+        if (detailOrder === undefined) {
+          const sequenceName = template.compactIdentity ? (source?.sequence ?? '段序') : '明细序号';
+          const sequence = sequenceName ? read(sequenceName) : undefined;
+          const orderValue = text(sequence) ? standardNumberValue(sequence) : 1;
+          if (orderValue === null || !Number.isSafeInteger(orderValue) || orderValue < 1)
+            fail(`「${sequenceName}」须为正整数。`);
+          detailOrder = orderValue!;
+          const detailKey = JSON.stringify([groupKey, name, detailOrder]);
+          if (usedDetails.has(detailKey)) fail(`同一课次的「${name}」有重复明细。逐组或逐段记录时，请加入相应序号列并为每行填写不同序号。`);
+          usedDetails.add(detailKey);
+          detailOrders.set(name, detailOrder);
+        }
+        const numeric = field.kind === 'time' ? templateTimeValue(raw)
+          : field.kind === 'number' ? standardNumberValue(raw) : null;
+        if (field.kind === 'time' && (numeric === null || numeric < 0))
+          fail(`「${field.name}」须填写非负秒数或分:秒（如 6:42.5）。`);
+        if (field.kind === 'number' && numeric === null) fail(`「${field.name}」须为数字。`);
+        details.push({ template: source?.project, order: detailOrder!, field: source?.name ?? field.name, unit: field.unit, number: numeric, text: field.kind === 'text' ? text(raw) : null });
+      }
+      groupsWithDetails.add(groupKey);
+      detailsPerRow.set(index, details);
+    }
+    groupPerRow.set(index, groupKey);
+  }
+  const parsed = [
+    ...parseStandardSheet(sessions, '训练课次', template.project, filename, '', athletes, false, undefined, team),
+    ...parseStandardSheet(sets, '力量训练组次', template.project, filename, '', athletes, false, undefined, team),
+  ];
+  for (const item of parsed) {
+    const row = XLSX.utils.decode_cell(item.sourceAddress).r;
+    item.sourceSheet = TRAINING_RECORD_SHEET;
+    delete item.payload.sourceRow;
+    if (item.itemType === 'training_session') {
+      item.payload.trainingRecordRowDetails = detailsPerRow.get(row) ?? [];
+      item.payload.trainingRecordHasDetails = groupsWithDetails.has(groupPerRow.get(row) ?? '');
+      item.payload.trainingRecordName = template.name;
+      item.payload.trainingRecordTeamId = template.teamId;
+    }
+  }
+  return parsed;
+}
+
+function consolidateImportFacts(items: ParsedImportItem[]) {
+  for (const item of items) {
+    if (item.itemType === 'body_measurement' && item.metricCode !== 'body_composition') {
+      const field = item.metricCode === 'height_cm' ? 'heightCm' : item.metricCode === 'weight_kg' ? 'weightKg' : null;
+      if (field) { item.payload[field] = item.valueNum; item.metricCode = 'body_composition'; item.metricLabel = '身体测量'; }
+    }
+  }
+  // 所有可审查记录保留原始行，不在解析期丢弃冲突来源。
+  refreshImportConflicts(items);
+  return items;
+}
+
+function matrixForSheet(workbook: XLSX.WorkBook, sheetName: string, range: XLSX.Range | undefined): Matrix {
+  const sheet = workbook.Sheets[sheetName];
+  const matrix = XLSX.utils.sheet_to_json(sheet, {
+    header: 1,
+    range,
+    raw: true,
+    defval: null,
+    blankrows: true,
+  }) as Matrix;
+  if ((IMPORT_SHEET_ALIASES[sheetName] || sheetName) === '训练课次') {
+    const header = standardHeader(matrix);
+    const column = header?.columns.get('开始时间');
+    if (header && column !== undefined) {
+      for (let row = header.rowIndex + 1; row < matrix.length; row += 1) {
+        const cell = sheet[cellAddress(row + (range?.s.r ?? 0), column + (range?.s.c ?? 0))];
+        // Excel 的时间是墙上时钟读数，使用单元格显示值避免历史时区偏移。
+        if (cell?.t === 'd' && cell.w) matrix[row][column] = cell.w;
+      }
+    }
+  }
+  if (sheetName === BASIC_PROFILE_SHEET || (IMPORT_SHEET_ALIASES[sheetName] || sheetName) === '运动员信息') {
+    const header = standardHeader(matrix);
+    const column = header?.columns.get(sheetName === BASIC_PROFILE_SHEET ? '最好竞技成绩' : '最好成绩');
+    if (header && column !== undefined) {
+      for (let row = header.rowIndex + 1; row < matrix.length; row += 1) {
+        const cell = sheet[cellAddress(row + (range?.s.r ?? 0), column + (range?.s.c ?? 0))];
+        // Excel 耗时可能被读取成日期，档案成绩保留原有显示值和小数精度。
+        if ((cell?.t === 'd' || cell?.t === 'n') && /^\d+:\d{2}(?::\d{2})?(?:[.,]\d+)?$/.test(cell.w ?? '')) {
+          matrix[row][column] = cell.w;
+        }
+      }
+    }
+  }
+  return matrix;
+}
+
+function summarizeItems(items: ParsedImportItem[]) {
+  return {
+    itemCount: items.length,
+    validCount: items.filter((item) => item.quality === 'valid').length,
+    warningCount: items.filter((item) => item.quality === 'warning').length,
+    errorCount: items.filter((item) => item.quality === 'error').length,
+  };
+}
+
+function insertItems(batchId: string, items: ParsedImportItem[]) {
+  const statement = db.prepare(`
+    INSERT INTO data_import_items (
+      batch_id, item_type, athlete_id, raw_athlete_name, event_date, session_label, test_type,
+      metric_code, metric_label, side, value_num, unit, exercise_name, set_index, target_reps,
+      actual_reps, actual_weight_kg, intensity_percent, payload_json, source_sheet, source_address,
+      raw_value, quality, messages_json, business_key, resolution, conflict_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `);
+  for (const item of items)
+    statement.run(
+      batchId,
+      item.itemType,
+      item.athleteId,
+      item.rawAthleteName,
+      item.eventDate,
+      item.sessionLabel,
+      item.testType,
+      item.metricCode,
+      item.metricLabel,
+      item.side,
+      item.valueNum,
+      item.unit,
+      item.exerciseName,
+      item.setIndex,
+      item.targetReps,
+      item.actualReps,
+      item.actualWeightKg,
+      item.intensityPercent,
+      JSON.stringify(item.payload),
+      item.sourceSheet,
+      item.sourceAddress,
+      item.rawValue,
+      item.quality,
+      JSON.stringify(item.messages),
+      item.businessKey,
+      item.resolution,
+      JSON.stringify(item.conflict ?? {})
+    );
+}
+
+function formatConflictValue(value: unknown) {
+  if (value === null || value === undefined || value === '') return '';
+  return String(value);
+}
+
+function conflictField(
+  field: string,
+  label: string,
+  oldValue: unknown,
+  newValue: unknown
+): DataImportConflictField | null {
+  const oldText = formatConflictValue(oldValue);
+  const newText = formatConflictValue(newValue);
+  if (newText === '') return null; // 空白=未提供，不构成覆盖
+  return {
+    field,
+    label,
+    oldValue: oldText,
+    newValue: newText,
+    overwrites: oldText !== '' && !importReviewValuesEqual(oldValue, newValue) && oldText !== newText,
+  };
+}
+
+/** 数据库比较与文件比较使用相同字段定义，只在这里适配数据库列名。 */
+function databaseConflictFields(item: DataImportItemView, row: Record<string, unknown>) {
+  const values = reviewValues(item);
+  return reviewFields([item]).flatMap(([, field, , label]) => {
+    const column = field.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+    if (!(field in row) && !(column in row)) return [];
+    const conflict = conflictField(field, label, field in row ? row[field] : row[column], values[field]);
+    return conflict ? [conflict] : [];
+  });
+}
+
+/**
+ * 预览期重复与覆盖检测：按正式业务唯一键查找已有记录，
+ * 仅比较文件明确提供的字段；空白字段不参与覆盖判定。
+ */
+function detectItemConflict(item: DataImportItemView): DataImportConflict {
+  const p = item.payload || {};
+  const empty: DataImportConflict = {
+    exists: false,
+    entityType: '',
+    entityId: null,
+    identical: false,
+    fields: [],
+  };
+  if (item.itemType === 'invalid_row') return empty;
+  if (!item.athleteId && item.itemType !== 'scoring_rule') return empty;
+  const push = (list: Array<DataImportConflictField | null>) =>
+    list.filter((entry): entry is DataImportConflictField => entry !== null);
+  if (item.itemType === 'athlete_profile') {
+    const athlete = db
+      .prepare(
+        `SELECT ap.*, a.gender, a.birth_date AS birthDate, COALESCE(pt.name, '') AS team,
+          ap.technical_level AS technicalLevel, ap.best_result AS bestResult,
+          COALESCE(ao.province, '') AS region, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county
+        FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id
+        LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id
+        LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
+        WHERE a.id = ?`
+      )
+      .get(item.athleteId) as Record<string, unknown> | undefined;
+    if (!athlete) return empty;
+    const fields = databaseConflictFields(item, athlete);
+    return {
+      exists: true,
+      entityType: 'athlete',
+      entityId: item.athleteId,
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
+      fields,
+    };
+  }
+  if (item.itemType === 'wellness') {
+    const existing = db
+      .prepare('SELECT * FROM daily_wellness WHERE athlete_id=? AND wellness_date=?')
+      .get(item.athleteId, item.eventDate) as Record<string, unknown> | undefined;
+    if (!existing) return empty;
+    const fields = databaseConflictFields(item, existing);
+    return {
+      exists: true,
+      entityType: 'daily_wellness',
+      entityId: Number(existing.id),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
+      fields,
+    };
+  }
+  if (item.itemType === 'training_session') {
+    const order = Math.max(1, Math.round(optionalNumber(p.sessionOrder) || 1));
+    const existing = db
+      .prepare(
+        "SELECT ts.*, (SELECT value_num FROM training_session_metrics WHERE training_session_id=ts.id AND metric_code='cadenceRpm') AS cadenceRpm FROM training_sessions ts WHERE athlete_id=? AND session_date=? AND session_order=?"
+      )
+      .get(item.athleteId, item.eventDate, order) as Record<string, unknown> | undefined;
+    if (!existing || !importSnapshotMatches(item, existing)) return empty;
+    const fields = databaseConflictFields(item, existing);
+    return {
+      exists: true,
+      entityType: 'training_session',
+      entityId: Number(existing.id),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
+      fields,
+    };
+  }
+  if (item.itemType === 'training_set') {
+    const session = Array.isArray(p.sessionChoices) ? undefined : findImportStrengthSession(item);
+    const existing = session
+      ? (db
+          .prepare(
+            'SELECT * FROM strength_result_sets WHERE training_session_id = ? AND exercise_name = ? AND set_index = ?'
+          )
+          .get(session.id, item.exerciseName, item.setIndex) as
+          | Record<string, unknown>
+          | undefined)
+      : undefined;
+    if (!existing) return empty;
+    const fields = databaseConflictFields(item, { ...existing });
+    return {
+      exists: true,
+      entityType: 'strength_result_set',
+      entityId: Number(existing.id),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
+      fields,
+    };
+  }
+  if (item.itemType === 'test_measurement') {
+    const session = findTestSession(db, importedTestIdentity(item));
+    const existing = session
+      ? (db
+          .prepare(
+            'SELECT * FROM test_measurements WHERE test_session_id = ? AND metric_code = ? AND side = ?'
+          )
+          .get(session.id, item.metricCode, item.side) as Record<string, unknown> | undefined)
+      : undefined;
+    if (!session) return empty;
+    const raw = p.fmsObservation as FmsObservation | undefined;
+    const previousRaw = raw ? storedFmsObservation(session.id, item.metricCode) : undefined;
+    const rawFields = raw ? fmsInputFields(item.metricCode, item.metricLabel).map(({ key, header }) =>
+      conflictField(`fmsObservation.${key}`, header, previousRaw?.[key], raw[key])) : [];
+    const fields = push([
+      ...(existing ? [conflictField('valueNum', item.metricLabel || item.metricCode, existing.value_num, item.valueNum), conflictField('targetValue', '目标值', existing.target_value, p.targetValue), conflictField('unit', '单位', existing.unit, item.unit), conflictField('note', '备注', existing.note, p.note)] : []),
+      ...rawFields,
+      conflictField('protocol', '测试协议', session.protocol, p.protocol),
+      conflictField('durationMin', '测试时长分钟', session.durationMin, p.durationMin),
+    ]);
+    if (!existing && !previousRaw && !fields.some(field => field.overwrites)) return empty;
+    return {
+      exists: true,
+      entityType: existing ? 'test_measurement' : 'test_session',
+      entityId: Number(existing?.id ?? session.id),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
+      fields,
+    };
+  }
+  if (item.itemType === 'body_measurement') {
+    const existing = db
+      .prepare('SELECT * FROM athlete_body_measurements WHERE athlete_id = ? AND measurement_date = ?')
+      .get(item.athleteId, item.eventDate) as Record<string, unknown> | undefined;
+    if (!existing) return empty;
+    if (item.metricCode === 'body_composition') {
+      const fields = databaseConflictFields(item, existing);
+      return {
+        exists: true,
+        entityType: 'athlete_body_measurement',
+        entityId: Number(existing.id),
+        identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
+        fields,
+      };
+    }
+    const column = item.metricCode === 'height_cm' ? 'height_cm' : 'weight_kg';
+    const label = item.metricCode === 'height_cm' ? '身高' : '体重';
+    const fields = push([conflictField(item.metricCode, label, existing[column], item.valueNum)]);
+    return {
+      exists: true,
+      entityType: 'athlete_body_measurement',
+      entityId: Number(existing.id),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
+      fields,
+    };
+  }
+  if (item.itemType === 'injury_record') {
+    const existing = db
+      .prepare('SELECT * FROM injury_records WHERE athlete_id=? AND onset_date=? AND injury_name=?')
+      .get(item.athleteId, item.eventDate, text(p.injuryName)) as Record<string, unknown> | undefined;
+    if (!existing) return empty;
+    const fields = databaseConflictFields(item, { ...existing });
+    return {
+      exists: true,
+      entityType: 'injury_record',
+      entityId: Number(existing.id),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
+      fields,
+    };
+  }
+  if (item.itemType === 'competitive_state') {
+    const existing = db
+      .prepare('SELECT * FROM competitive_state_assessments WHERE athlete_id=? AND assessment_date=?')
+      .get(item.athleteId, item.eventDate) as Record<string, unknown> | undefined;
+    if (!existing) return empty;
+    const fields = databaseConflictFields(item, existing);
+    return {
+      exists: true,
+      entityType: 'competitive_state_assessment',
+      entityId: Number(existing.id),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
+      fields,
+    };
+  }
+  if (item.itemType === 'scoring_rule') {
+    const project = text(p.project);
+    const gender = text(p.gender);
+    const score = optionalNumber(p.score);
+    const ruleVersion = text(p.ruleVersion);
+    const existing = db
+      .prepare(
+        `SELECT id, threshold_value AS thresholdValue, comparison FROM metric_scoring_rules WHERE project = ? AND gender = ? AND metric_code = ? AND score = ? AND rule_version = ?`
+      )
+      .get(project, gender, item.metricCode, score, ruleVersion) as
+      | Record<string, unknown>
+      | undefined;
+    if (!existing) return empty;
+    const fields = databaseConflictFields(item, { ...existing, valueNum: existing.thresholdValue });
+    return {
+      exists: true,
+      entityType: 'metric_scoring_rule',
+      entityId: Number(existing.id),
+      identical: fields.every((field) => !field.overwrites && field.oldValue !== ''),
+      fields,
+    };
+  }
+  return empty;
+}
+
+type PersonRecord = {
+  key: string;
+  name: string;
+  sourceSheet: string;
+  gender: string;
+  team: string;
+  birthDate: string;
+  athleteCode: string;
+  region: string;
+  city: string;
+  county: string;
+  matchedAthleteId: number | null;
+  suggested: DataImportPersonSuggestion[];
+  messages: string[];
+  matched: boolean;
+  readyToCreate?: boolean;
+};
+
+function collectPersons(items: ParsedImportItem[]): Map<string, PersonRecord> {
+  const persons = new Map<string, PersonRecord>();
+  for (const item of items) {
+    if (item.itemType === 'scoring_rule' || item.itemType === 'invalid_row') continue;
+    const name = normalizedName(item.rawAthleteName);
+    if (!name) continue;
+    const payload = item.payload || {};
+    const code = text(payload.athleteCode);
+    const team = text(payload.team);
+    const birth = text(payload.birthDate);
+    const key = code
+      ? JSON.stringify(['code', String(parseAthleteNumber(code) ?? code), name])
+      : team || birth
+        ? JSON.stringify(['person', name, team, birth])
+        : name;
+    item.payload = { ...payload, personKey: key };
+    const genderFromSheet = /女子|女队/.test(item.sourceSheet)
+      ? '女'
+      : /男子|男队/.test(item.sourceSheet)
+        ? '男'
+        : '';
+    const current = persons.get(key);
+    const person: PersonRecord = current || {
+      key,
+      name: item.rawAthleteName,
+      sourceSheet: item.sourceSheet,
+      gender: '',
+      team: '',
+      birthDate: '',
+      athleteCode: '',
+      region: '',
+      city: '',
+      county: '',
+      matchedAthleteId: null,
+      suggested: [],
+      messages: [],
+      matched: false,
+    };
+    if (item.sourceSheet === BASIC_PROFILE_SHEET) person.sourceSheet = BASIC_PROFILE_SHEET;
+    person.gender = person.gender || text(payload.gender) || genderFromSheet;
+    person.team = person.team || text(payload.team);
+    person.birthDate = person.birthDate || text(payload.birthDate);
+    person.athleteCode = person.athleteCode || text(payload.athleteCode);
+    person.region = person.region || text(payload.region);
+    person.city = person.city || text(payload.city);
+    person.county = person.county || text(payload.county);
+    persons.set(key, person);
+  }
+  // 只有姓名的业务表可复用文件中唯一且无冲突的身份；多队伍、多个编号不得按姓名合并。
+  const byName = new Map<string, PersonRecord[]>();
+  for (const person of persons.values()) {
+    const name = normalizedName(person.name);
+    byName.set(name, [...(byName.get(name) || []), person]);
+  }
+  for (const [name, group] of byName) {
+    const bare = persons.get(name);
+    const qualified = group.filter(person => person.key !== name);
+    if (!bare || qualified.length !== 1) continue;
+    const target = qualified[0];
+    if (bare.gender && target.gender && bare.gender !== target.gender) continue;
+    for (const field of ['gender', 'region', 'city', 'county'] as const)
+      target[field] = target[field] || bare[field];
+    for (const item of items) {
+      if (item.itemType === 'scoring_rule' || item.itemType === 'invalid_row') continue;
+      if (dataImportPersonKey(item) === bare.key)
+        item.payload = { ...item.payload, personKey: target.key };
+    }
+    persons.delete(bare.key);
+  }
+  return persons;
+}
+
+export function analyzeDataImport(input: {
+  buffer: Buffer;
+  filename: string;
+  mimetype: string;
+  project: string;
+  defaultDate?: string;
+  defaultArea?: { region: string; city: string; county: string };
+  userId: number;
+  athletes: ImportAthlete[];
+  allowedTeams?: Set<string>;
+  team?: string;
+  /** 重复上传时选择“重新解析文件”，按当前参数解析成功后原子替换旧草稿 */
+  reparse?: boolean;
+  expectedRevision?: number;
+  authorizeBatch?: (batchId: string) => void;
+}) {
+  input = { ...input, filename: normalizeImportFilename(input.filename) };
+  if (!/\.(xls|xlsx)$/i.test(input.filename))
+    throw new Error('统一数据导入当前支持 XLS 和 XLSX 文件。');
+  if (input.defaultDate && !validIsoDate(input.defaultDate))
+    throw new Error('默认日期格式应为 YYYY-MM-DD。');
+  const team = input.team || '';
+  if (team && !input.allowedTeams?.has(team)) throw new Error('当前账号无权向所选队伍导入。');
+  const originalHash = createHash('sha256').update(input.buffer).digest('hex');
+  const scopedHash = createHash('sha256').update(team ? JSON.stringify([input.userId, input.project, team, originalHash]) : `import-v2:${input.userId}:${input.project}:${originalHash}`).digest('hex');
+  const legacyHash = team ? scopedHash : originalHash;
+  let fileHash = scopedHash;
+  const existing = db.prepare(`SELECT id, file_hash AS fileHash, parser_version AS parserVersion, status,
+    summary_json AS summaryJson FROM data_import_batches
+    WHERE created_by=? AND project=? AND (file_hash=? OR file_hash LIKE ? OR file_hash=? OR file_hash LIKE ?)
+    ORDER BY rowid DESC LIMIT 1`).get(input.userId, input.project, scopedHash, `${scopedHash}:%`, legacyHash, `${legacyHash}:%`) as
+    { id: string; fileHash: string; parserVersion: string; status: string; summaryJson: string } | undefined;
+  if (existing) input.authorizeBatch?.(existing.id);
+  const replacing = existing && existing.status !== 'committed' ? existing : undefined;
+  if (existing?.status === 'committed') fileHash = `${scopedHash}:${randomUUID()}`;
+  else if (replacing) {
+    if (replacing.parserVersion === DATA_IMPORT_PARSER_VERSION && !input.reparse)
+      return getDataImportBatch(replacing.id, input.userId, true);
+    assertImportRevision(replacing.id, input.userId, input.expectedRevision);
+    fileHash = replacing.fileHash;
+  }
+  assertImportWorkbookSize(input.buffer);
+  const workbook = XLSX.read(input.buffer, {
+    type: 'buffer',
+    cellDates: true,
+    cellFormula: true,
+    cellNF: false,
+    cellStyles: false,
+  });
+  if (workbook.SheetNames.length > 100) throw new Error('工作表数量超过100张，已拒绝解析。');
+  let testTemplate: TestTemplateDownload | undefined;
+  const templateMeta = workbook.Sheets[TEST_TEMPLATE_META];
+  const hasTemplateMarker = templateMeta?.A1?.v === TEST_TEMPLATE_FORMAT;
+  let trainingTemplate: TrainingRecordDownload | undefined;
+  let trainingTemplateId = '';
+  if (templateMeta?.A1?.v === TRAINING_RECORD_FORMAT || workbook.SheetNames.includes(TRAINING_RECORD_SHEET) && templateMeta) {
+    trainingTemplateId = text(templateMeta?.A2?.v);
+    if (templateMeta?.A1?.v === TRAINING_RECORD_FORMAT && /^[a-f0-9-]{36}$/.test(trainingTemplateId))
+      trainingTemplate = readTrainingRecordDownload(db, trainingTemplateId);
+    if (!trainingTemplate || !workbook.Sheets[TRAINING_RECORD_SHEET] || workbook.SheetNames.length !== 2)
+      throw new Error('训练记录模板识别信息缺失，请重新下载。');
+    if (trainingTemplate.project !== input.project || trainingTemplate.teamId !== testTemplateTeamId(db, input.project, team))
+      throw new Error('训练记录模板的项目或队伍与当前选择不一致。');
+    const ids = new Set(db.prepare('SELECT id FROM athletes WHERE project=? AND team_id=? AND active=1')
+      .all(input.project, trainingTemplate.teamId).map(row => Number(row.id)));
+    input.athletes = input.athletes.filter(athlete => ids.has(athlete.id)).map(athlete => ({ ...athlete, team }));
+  }
+  if (workbook.SheetNames.includes(TEST_TEMPLATE_SHEET) || hasTemplateMarker) {
+    const templateId = text(templateMeta?.A2?.v);
+    if (hasTemplateMarker && /^[a-f0-9-]{36}$/.test(templateId)) testTemplate = readTestTemplateDownload(db, templateId);
+    if (!testTemplate || !workbook.Sheets[TEST_TEMPLATE_SHEET] || workbook.SheetNames.length !== 2)
+      throw new Error('测试模板识别信息缺失或无效，请重新下载测试成绩模板。');
+    if (testTemplate.project !== input.project || testTemplate.teamId !== testTemplateTeamId(db, input.project, team))
+      throw new Error('模板的项目或队伍与当前选择不一致，请切换到模板所属项目和队伍。');
+    const roster = new Set((db.prepare('SELECT id FROM athletes WHERE project=? AND team_id=?').all(input.project, testTemplate.teamId) as { id: number }[]).map(athlete => athlete.id));
+    input.athletes = input.athletes.filter(athlete => roster.has(athlete.id)).map(athlete => ({ ...athlete, team }));
+  }
+  const items: ParsedImportItem[] = [];
+  const recognizedSheets: Array<{ name: string; type: string; items: number; note: string }> = [];
+  const ignoredSheets: Array<{ name: string; reason: string }> = [];
+  let unfilledRows = 0;
+  const batchId = replacing?.id || randomUUID();
+  const batchVersion = `IMPORT-${new Date().toISOString().slice(0, 10)}-${batchId.slice(0, 8)}`;
+  let cellCount = 0;
+  for (const sheetName of workbook.SheetNames) {
+    const reference = workbook.Sheets[sheetName]?.['!ref'];
+    const range = reference ? XLSX.utils.decode_range(reference) : undefined;
+    if (range) {
+      const { s, e } = range;
+      const rows = e.r - s.r + 1;
+      const columns = e.c - s.c + 1;
+      const cells = rows * columns;
+      if (s.r < 0 || s.c < 0 || e.r >= 1_048_576 || e.c >= 16_384 ||
+          !Number.isSafeInteger(cells) || rows < 1 || columns < 1 || cells > 400_000)
+        throw new Error(`工作表“${sheetName}”单元格范围无效或过大，已拒绝解析。`);
+      cellCount += cells;
+      if (cellCount > 1_000_000) throw new Error('工作簿单元格范围合计超过 100 万，已拒绝解析。');
+    }
+    if ((testTemplate || trainingTemplate) && sheetName === TEST_TEMPLATE_META) continue;
+    const matrix = matrixForSheet(workbook, sheetName, range);
+    const firstRows = matrix.slice(0, 6).flat().map(text).join('|');
+    let parsed: ParsedImportItem[] = [];
+    let type = '';
+    let note = '';
+    if (trainingTemplate && sheetName === TRAINING_RECORD_SHEET) {
+      if (!range || range.s.r !== 0 || range.s.c !== 0) throw new Error('训练记录模板表头须从 A1 开始。');
+      parsed = parseTrainingRecordSheet(matrix, trainingTemplate, input.filename, input.athletes, team);
+      type = '可配置训练记录';
+      note = '同一课次的多行按现有课次规则归并';
+    } else if (testTemplate && sheetName === TEST_TEMPLATE_SHEET) {
+      if (!range || range.s.r !== 0 || range.s.c !== 0) throw new Error('测试模板表头须从 A1 开始。');
+      parsed = parseTestTemplateSheet(matrix, testTemplate, team, input.athletes);
+      const filledRows = new Set(parsed.map(item => XLSX.utils.decode_cell(item.sourceAddress).r));
+      unfilledRows += matrix.slice(1).filter((row, index) => (text(row[0]) || text(row[1])) && !filledRows.has(index + 1)).length;
+      type = '动态测试成绩';
+      note = '按下载时保存的列映射识别指标和协议';
+    } else if (STANDARD_SHEETS.has(sheetName)) {
+      parsed = parseStandardSheet(
+        matrix,
+        sheetName,
+        input.project,
+        input.filename,
+        input.defaultDate || '',
+        input.athletes,
+        sheetName === COMPACT_ATHLETE_SHEET || (workbook.Workbook?.Names?.some(name => name.Name === IMPORT_TEMPLATE_VERSION_NAME) === true
+          && workbook.Sheets['填写说明']?.B1?.v === IMPORT_TEMPLATE_VERSION)
+          || matrix.slice(0, 12).some(row => row.some(value => /\n(?:必填|条件必填|选填|系统预填)(?:：[^\n]*)?(?:｜|\n)/.test(String(value ?? '')))),
+        undefined,
+        team
+      );
+      type = `统一模板·${sheetName}`;
+      note = '按稳定字段名识别模板，支持字段说明及列重排';
+    } else if (/个人档案/.test(sheetName)) {
+      ignoredSheets.push({ name: sheetName, reason: '公式与图表展示页，不作为原始数据导入' });
+      continue;
+    } else if (
+      /国家赛艇队体能训练负荷统计表/.test(firstRows) ||
+      (firstRows.includes('姓名') && firstRows.includes('完成负荷'))
+    ) {
+      parsed = parseTrainingBlocks(
+        matrix,
+        sheetName,
+        input.project,
+        input.filename,
+        input.athletes
+      );
+      type = '运动员训练执行记录';
+      note = '按重复运动员小表拆分为课次和组次';
+    } else if (/评分标准/.test(firstRows) || sheetName.includes('评分')) {
+      parsed = parseScoringSheet(matrix, sheetName, input.project, batchVersion);
+      type = '力量评分规则';
+      note = '按性别、指标和分值保存为版本化规则';
+    } else if (
+      (sheetName === '女子' || sheetName === '男子') &&
+      firstRows.includes('身体形态') &&
+      firstRows.includes('基础力量')
+    ) {
+      parsed = parseSummarySheet(
+        matrix,
+        sheetName,
+        input.project,
+        input.filename,
+        input.defaultDate || '',
+        input.athletes
+      );
+      type = '力量素质汇总';
+      note = '身体测量和力量指标分别进入正式表';
+    } else if (
+      (firstRows.includes('姓名') ||
+        ((sheetName === '女子' || sheetName === '男子') && firstRows.includes('差值'))) &&
+      (firstRows.includes('差值') ||
+        firstRows.includes('2025') ||
+        firstRows.includes('2.13') ||
+        sheetName === '数据源')
+    ) {
+      parsed = parseComparisonSheet(
+        matrix,
+        sheetName,
+        input.project,
+        input.filename,
+        input.defaultDate || '',
+        input.athletes
+      );
+      type = '历史测试对比';
+      note = '仅提取各日期原始值，忽略差值公式';
+    }
+    if (STANDARD_SHEETS.has(sheetName) && sheetName !== COMPACT_ATHLETE_SHEET) {
+      const header = standardHeader(matrix);
+      if (header) {
+        const represented = new Set(parsed.map(item => XLSX.utils.decode_cell(item.sourceAddress).r));
+        unfilledRows += matrix.slice(header.rowIndex + 1).filter((row, offset) => {
+          const identity = ['姓名', '系统运动员编号', '运动员编号', '编号'].map(label => standardText(row, header.columns, label)).find(Boolean) || '';
+          return Boolean(identity) && !/^示例/.test(identity) && !represented.has(header.rowIndex + 1 + offset);
+        }).length;
+      }
+    }
+    if (parsed.length) {
+      items.push(...parsed);
+      recognizedSheets.push({ name: sheetName, type, items: parsed.length, note });
+    } else {
+      const reason = STANDARD_SHEETS.has(sheetName) && standardHeader(matrix)
+        ? '未填写业务数据（仅有表头或预填人员信息）'
+        : !firstRows.replace(/\|/g, '') ? '空白工作表' : '未识别为支持的数据模板';
+      ignoredSheets.push({ name: sheetName, reason });
+    }
+  }
+  if (!items.length) throw new Error('未填写业务数据或未识别到支持的数据模板，请填写实际记录后重新上传。');
+  // ---- 运动员识别与人员映射（先人员、后数据）----
+  const matchingAthletes = team ? input.athletes.filter(athlete => athlete.team === team) : input.athletes;
+  if (team) {
+    for (const item of items) {
+      if (item.itemType === 'invalid_row' || item.itemType === 'scoring_rule') continue;
+      item.payload.team = team;
+    }
+  }
+  const persons = collectPersons(items);
+  // 仅复用同账号、同项目、同一文件最近一次已提交的真实关联，草稿不能作为身份依据。
+  const previous = db.prepare(`SELECT id FROM data_import_batches
+    WHERE (file_hash = ? OR file_hash LIKE ? OR file_hash = ? OR file_hash LIKE ?) AND project = ? AND created_by = ? AND status = 'committed'
+    ORDER BY rowid DESC LIMIT 1`).get(scopedHash, `${scopedHash}:%`, legacyHash, `${legacyHash}:%`, input.project, input.userId) as { id: string } | undefined;
+  const priorIds = new Map<string, Set<number>>();
+  if (previous) {
+    const priorItems = db.prepare(`SELECT raw_athlete_name AS name, payload_json AS payload, athlete_id AS athleteId
+      FROM data_import_items WHERE batch_id = ? AND athlete_id IS NOT NULL AND committed_entity_id IS NOT NULL`)
+      .all(previous.id) as Array<{ name: string; payload: string; athleteId: number }>;
+    for (const prior of priorItems) {
+      const key = dataImportPersonKey({ rawAthleteName: prior.name, payload: JSON.parse(prior.payload) as Record<string, unknown> });
+      const ids = priorIds.get(key) || new Set<number>();
+      ids.add(prior.athleteId);
+      priorIds.set(key, ids);
+    }
+  }
+  const identitiesByCode = new Map<string, { names: Set<string>; births: Set<string>; genders: Set<string> }>();
+  for (const item of items) {
+    const rawCode = text(item.payload.athleteCode);
+    const code = String(parseAthleteNumber(rawCode) ?? rawCode);
+    if (!code || item.itemType === 'invalid_row' || item.itemType === 'scoring_rule') continue;
+    const identity = identitiesByCode.get(code) ?? { names: new Set<string>(), births: new Set<string>(), genders: new Set<string>() };
+    const birth = text(item.payload.birthDate);
+    const gender = text(item.payload.gender);
+    identity.names.add(normalizedName(item.rawAthleteName));
+    if (birth) identity.births.add(birth);
+    if (gender) identity.genders.add(gender);
+    identitiesByCode.set(code, identity);
+  }
+  const allowedTeams = input.allowedTeams;
+  for (const person of persons.values()) {
+    const prior = priorIds.get(person.key);
+    const priorId = prior?.size === 1 ? [...prior][0] : null;
+    const priorAthlete = matchingAthletes.find(athlete => athlete.id === priorId && athlete.project === input.project);
+    const identity = identitiesByCode.get(String(parseAthleteNumber(person.athleteCode) ?? person.athleteCode));
+    const duplicateConflict = identity && [identity.names, identity.births, identity.genders].some(values => values.size > 1);
+    const implicitTeam = !person.athleteCode && allowedTeams?.size === 1 ? [...allowedTeams][0] : '';
+    const resolution: PersonResolution = duplicateConflict
+      ? { kind: 'conflict', suggested: [], message: `系统运动员编号${person.athleteCode}在文件中对应多组身份资料，请人工确认` }
+      : priorAthlete && !person.athleteCode
+      ? { kind: 'matched', athlete: priorAthlete, method: '同文件已提交关联' }
+      : resolvePerson(
+      {
+        name: person.name,
+        project: input.project,
+        team: person.team || (implicitTeam &&
+          activeTeamNameMatches(matchingAthletes, input.project, implicitTeam, person.name).length
+          ? implicitTeam : undefined),
+        birthDate: person.birthDate,
+        gender: person.gender,
+        athleteCode: person.athleteCode,
+      },
+      person.athleteCode ? input.athletes : matchingAthletes
+    );
+    if (resolution.kind === 'matched' && resolution.athlete.active === false) {
+      person.suggested = [toSuggestion(resolution.athlete)];
+      person.team = person.team || resolution.athlete.team;
+      person.messages.push(inactiveImportPersonMessage);
+    } else if (resolution.kind === 'matched') {
+      person.matched = true;
+      person.matchedAthleteId = resolution.athlete.id;
+      person.team = resolution.athlete.team;
+      person.gender = person.gender || text(resolution.athlete.gender);
+    } else if (resolution.kind === 'ambiguous' || resolution.kind === 'conflict') {
+      person.suggested = resolution.suggested.filter(athlete => !team || athlete.team === team);
+      person.messages.push(resolution.message);
+    } else {
+      person.messages.push('待建档：仅需姓名与所属队伍即可最小建档，其他资料可稍后在运动员档案中补充');
+    }
+    // 队伍自动带入：文件队伍合法时采纳；仅有一个可管理队伍时默认选择；冲突时提示人工确认。
+    const teamOutOfScope = !person.matched && Boolean(person.team) && allowedTeams && !allowedTeams.has(person.team);
+    if (teamOutOfScope) {
+      person.messages.push(
+        `文件中填写的所属队伍“${person.team}”不在当前账号权限范围内，请重新选择`
+      );
+      person.team = '';
+    }
+    if (!teamOutOfScope && !person.matched && !person.team && allowedTeams && allowedTeams.size === 1) {
+      person.team = [...allowedTeams][0];
+    }
+    if (!person.matched && !person.team)
+      person.messages.push('请在名单中选择所属队伍');
+    person.readyToCreate = resolution.kind === 'none' && priorId === null && person.name.length <= 40 && Boolean(allowedTeams?.has(person.team));
+  }
+  const personOf = (item: ParsedImportItem) => {
+    if (item.itemType === 'scoring_rule' || item.itemType === 'invalid_row') return null;
+    return persons.get(dataImportPersonKey(item)) || null;
+  };
+  for (const item of items) {
+    const person = personOf(item);
+    if (!person) continue;
+    item.athleteId = person.matched ? person.matchedAthleteId : null;
+    if (item.itemType === 'athlete_profile' && person.team && !text(item.payload.team))
+      item.payload = { ...item.payload, team: person.team };
+  }
+  assertUniqueFmsObservations(items);
+  const mergedItems = consolidateImportFacts(items);
+  items.splice(0, items.length, ...mergedItems);
+  // ---- 统一校验（与校对、提交同一规则）----
+  const candidateNames = new Set(persons.keys());
+  // 权限集合只来自当前账号可访问的运动员列表，不从解析/匹配结果反推，防止越权 id 通过校验。
+  const allowedAthleteIds = new Set(input.athletes.map((athlete) => athlete.id));
+  for (const item of items) {
+    if (item.itemType === 'invalid_row') {
+      item.quality = 'error';
+      continue;
+    }
+    item.messages = validateImportItem(item, { allowedAthletes: allowedAthleteIds, candidateNames });
+    item.quality = makeQuality(item.messages, item.resolution === 'skip');
+    item.conflict = item.quality === 'skipped' ? null : detectItemConflict(item as DataImportItemView);
+  }
+  const counts = summarizeItems(items);
+  const summary = { recognizedSheets, ignoredSheets, unfilledRows, ...(team ? { team } : {}), ...(testTemplate ? { testTemplateId: testTemplate.id } : {}), ...(trainingTemplateId ? { trainingTemplateId } : {}), accessTeams: [...(input.allowedTeams || [])], revision: replacing ? importRevision(JSON.parse(replacing.summaryJson)) + 1 : 0 };
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    if (replacing) {
+      input.authorizeBatch?.(replacing.id);
+      const current = assertImportRevision(replacing.id, input.userId, input.expectedRevision ?? importRevision(JSON.parse(replacing.summaryJson)));
+      if (current.status !== 'reviewing') throw new Error('批次已提交，不能重新解析替换。');
+      db.prepare('DELETE FROM data_import_batches WHERE id=? AND created_by=?').run(replacing.id, input.userId);
+    }
+    db.prepare(
+      `
+      INSERT INTO data_import_batches (
+        id, file_hash, source_filename, source_mimetype, file_size, project, parser_version, status,
+        sheet_count, item_count, valid_count, warning_count, error_count, summary_json, created_by
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, 'reviewing', ?, ?, ?, ?, ?, ?, ?)
+    `
+    ).run(
+      batchId,
+      fileHash,
+      input.filename,
+      input.mimetype,
+      input.buffer.length,
+      input.project,
+      DATA_IMPORT_PARSER_VERSION,
+      workbook.SheetNames.length,
+      counts.itemCount,
+      counts.validCount,
+      counts.warningCount,
+      counts.errorCount,
+      JSON.stringify(summary),
+      input.userId
+    );
+    insertItems(batchId, items);
+    const insertCandidate = db.prepare(`INSERT INTO data_import_athlete_candidates (
+      batch_id, normalized_name, name, project, team, gender, region, city, county,
+      status, matched_athlete_id, suggested_json, confirmed, source_sheet, messages_json
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+    for (const [key, person] of persons) {
+      insertCandidate.run(
+        batchId,
+        key,
+        person.name,
+        input.project,
+        person.team,
+        person.gender,
+        person.region || text(input.defaultArea?.region) || '未设置',
+        person.city || text(input.defaultArea?.city) || '未设置',
+        person.county || text(input.defaultArea?.county) || '未设置',
+        person.matched ? 'matched' : 'pending',
+        person.matchedAthleteId,
+        JSON.stringify(person.suggested),
+        person.matched || person.readyToCreate ? 1 : 0,
+        person.sourceSheet,
+        JSON.stringify(
+          person.messages.length
+            ? person.messages
+            : ['将创建无登录账号的运动员档案，出生日期、联系方式等资料可稍后补充']
+        )
+      );
+    }
+    input.authorizeBatch?.(batchId);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  return getDataImportBatch(batchId, input.userId);
+}
+
+function mapItem(row: Record<string, unknown>): DataImportItemView {
+  const payload = JSON.parse(text(row.payloadJson) || '{}') as Record<string, unknown>;
+  let rawValue = text(row.rawValue);
+  // 旧草稿的源行列号用于校对，清除敏感单元格时保留其他列的原位置。
+  const source = payload.sourceRow as { columns?: [string, number][]; values?: unknown[] } | undefined;
+  if (Array.isArray(source?.columns) && Array.isArray(source.values)) {
+    const values = source.values;
+    source.columns = source.columns.filter(([label, index]) => {
+      if (!isIdentityField(label)) return true;
+      const value = text(values[index]);
+      if (value) rawValue = rawValue.replaceAll(value, '[已清除敏感信息]');
+      values[index] = '';
+      return false;
+    });
+  }
+  return {
+    id: Number(row.id),
+    batchId: text(row.batchId),
+    itemType: row.itemType as DataImportItemType,
+    athleteId: row.athleteId === null ? null : Number(row.athleteId),
+    rawAthleteName: text(row.rawAthleteName),
+    athleteName: text(row.athleteName),
+    athleteProject: text(row.athleteProject),
+    athleteTeam: text(row.athleteTeam),
+    eventDate: text(row.eventDate),
+    sessionLabel: text(row.sessionLabel),
+    testType: text(row.testType),
+    metricCode: text(row.metricCode),
+    metricLabel: text(row.metricLabel),
+    side: row.side as DataImportItemView['side'],
+    valueNum: row.valueNum === null ? null : Number(row.valueNum),
+    unit: text(row.unit),
+    exerciseName: text(row.exerciseName),
+    setIndex: Number(row.setIndex),
+    targetReps: row.targetReps === null ? null : Number(row.targetReps),
+    actualReps: row.actualReps === null ? null : Number(row.actualReps),
+    actualWeightKg: row.actualWeightKg === null ? null : Number(row.actualWeightKg),
+    intensityPercent: row.intensityPercent === null ? null : Number(row.intensityPercent),
+    payload,
+    sourceSheet: text(row.sourceSheet),
+    sourceAddress: text(row.sourceAddress),
+    rawValue,
+    quality: row.quality as DataImportQuality,
+    messages: (JSON.parse(text(row.messagesJson) || '[]') as string[]).filter(message =>
+      !message.startsWith('提示：原日期缺失，已使用解析当天的北京时间日期 ')
+    ),
+    businessKey: text(row.businessKey),
+    resolution: (text(row.resolution) || '') as DataImportResolution,
+    conflict: (() => {
+      const parsed = JSON.parse(text(row.conflictJson) || 'null') as DataImportConflict | null;
+      return parsed && parsed.exists !== undefined ? parsed : null;
+    })(),
+    committedEntityType: text(row.committedEntityType),
+    committedEntityId: row.committedEntityId === null ? null : Number(row.committedEntityId),
+  };
+}
+
+function computeCounts(
+  items: DataImportItemView[],
+  athleteCandidates: DataImportAthleteCandidate[]
+): DataImportPreview['counts'] {
+  const excluded = new Set(athleteCandidates.filter(person => person.excluded).map(person => person.normalizedName));
+  const active = items.filter(item => item.quality !== 'skipped' && item.quality !== 'error' && item.resolution !== 'skip' && !item.payload.valueAutoMerged && item.itemType !== 'invalid_row' && !excluded.has(dataImportPersonKey(item)));
+  return {
+    newCount: importStatistics(items, new Set(athleteCandidates.filter(person => person.excluded).map(person => person.normalizedName))).newCount,
+    duplicateCount: active.filter((item) => item.conflict?.exists).length,
+    overwriteCount: active.filter(item => item.conflict?.fields.some(field => field.overwrites)).length,
+    invalidCount: items.filter(
+      (item) => item.resolution !== 'skip' && item.quality !== 'skipped' && (item.itemType === 'invalid_row' || item.quality === 'error')
+    ).length,
+    personMatched: athleteCandidates.filter((candidate) => candidate.status === 'matched').length,
+    personPending: athleteCandidates.filter(
+      (candidate) =>
+        candidate.status === 'pending' && !candidate.excluded && !candidate.suggested.length
+    ).length,
+    personAmbiguous: athleteCandidates.filter(
+      (candidate) =>
+        candidate.status === 'pending' && !candidate.excluded && candidate.suggested.length > 0
+    ).length,
+  };
+}
+
+export function getDataImportBatch(
+  batchId: string,
+  userId: number,
+  duplicateFile = false,
+  reviewTargetId?: number
+): DataImportPreview {
+  const row = db
+    .prepare(
+      `
+    SELECT id, source_filename AS filename, project, status, parser_version AS parserVersion,
+      sheet_count AS sheetCount, item_count AS itemCount, valid_count AS validCount,
+      warning_count AS warningCount, error_count AS errorCount, imported_count AS importedCount,
+      skipped_count AS skippedCount, summary_json AS summaryJson, created_at AS createdAt,
+      committed_at AS committedAt, created_by AS createdBy
+    FROM data_import_batches WHERE id = ?
+  `
+    )
+    .get(batchId) as Record<string, unknown> | undefined;
+  if (!row || Number(row.createdBy) !== userId)
+    throw new Error('未找到该导入批次，或当前账号无权访问。');
+  const itemRows = db
+    .prepare(
+      `
+    SELECT di.id, di.batch_id AS batchId, di.item_type AS itemType, di.athlete_id AS athleteId,
+      di.raw_athlete_name AS rawAthleteName, di.event_date AS eventDate, di.session_label AS sessionLabel,
+      di.test_type AS testType, di.metric_code AS metricCode, di.metric_label AS metricLabel, di.side,
+      di.value_num AS valueNum, di.unit, di.exercise_name AS exerciseName, di.set_index AS setIndex,
+      di.target_reps AS targetReps, di.actual_reps AS actualReps, di.actual_weight_kg AS actualWeightKg,
+      di.intensity_percent AS intensityPercent, di.payload_json AS payloadJson, di.source_sheet AS sourceSheet,
+      di.source_address AS sourceAddress, di.raw_value AS rawValue, di.quality, di.messages_json AS messagesJson,
+      di.business_key AS businessKey, di.resolution, di.conflict_json AS conflictJson,
+      di.committed_entity_type AS committedEntityType,
+      di.committed_entity_id AS committedEntityId, a.name AS athleteName, a.project AS athleteProject, a.team AS athleteTeam
+    FROM data_import_items di LEFT JOIN athletes a ON a.id = di.athlete_id
+    WHERE di.batch_id = ? ${reviewTargetId === undefined ? '' : `AND EXISTS (
+      SELECT 1 FROM data_import_items target WHERE target.id = ? AND target.batch_id = di.batch_id
+        AND target.item_type = di.item_type
+        AND (target.item_type = 'scoring_rule' OR (
+          (target.athlete_id IS NOT NULL AND target.athlete_id = di.athlete_id OR target.athlete_id IS NULL AND di.athlete_id IS NULL AND (json_extract(target.payload_json, '$.personKey') IS NULL OR json_extract(di.payload_json, '$.personKey') IS NULL OR json_extract(target.payload_json, '$.personKey') = json_extract(di.payload_json, '$.personKey')))
+          AND (target.item_type = 'athlete_profile' OR target.event_date = di.event_date)
+        ))
+    )`} ORDER BY CASE di.quality WHEN 'error' THEN 1 WHEN 'warning' THEN 2 WHEN 'valid' THEN 3 ELSE 4 END,
+      di.source_sheet, di.source_address, di.id
+  `
+    )
+    .all(...(reviewTargetId === undefined ? [batchId] : [batchId, reviewTargetId])) as Record<string, unknown>[];
+  const candidateRows = db
+    .prepare(
+      `SELECT id, batch_id AS batchId, normalized_name AS normalizedName,
+    name, project, team, gender, region, city, county, status,
+    matched_athlete_id AS matchedAthleteId, created_athlete_id AS createdAthleteId,
+    suggested_json AS suggestedJson, confirmed, excluded,
+    source_sheet AS sourceSheet, messages_json AS messagesJson
+    FROM data_import_athlete_candidates WHERE batch_id = ? ORDER BY
+      CASE status WHEN 'pending' THEN 0 ELSE 1 END, excluded, name, id`
+    )
+    .all(batchId) as Record<string, unknown>[];
+  const summary = JSON.parse(text(row.summaryJson) || '{}') as DataImportPreview['summary'] & { accessTeams?: unknown };
+  delete summary.accessTeams;
+  if (duplicateFile) summary.duplicateFile = true;
+  let items = itemRows.map(mapItem);
+  if (reviewTargetId !== undefined) {
+    const target = items.find(item => item.id === reviewTargetId);
+    if (!target) throw new Error('未找到该组导入记录');
+    const key = importReviewKey(target);
+    items = items.filter(item => importReviewKey(item) === key);
+  }
+  // 兼容当前解析器已保存的待确认草稿；读取时即时整理，正式写入仍走提交校验与事务。
+  if (row.status === 'reviewing') {
+    refreshImportConflicts(items);
+    for (const item of items) {
+      if (!item.payload.valueAutoMergeSources && !item.payload.valueAutoMerged) continue;
+      item.messages = item.messages.filter(message => !message.includes('存在重复业务数据，请在集中审查卡片'));
+      item.quality = makeQuality(item.messages, item.resolution === 'skip');
+      item.conflict = item.quality === 'skipped' ? null : detectItemConflict(item);
+    }
+  }
+  const athleteCandidates: DataImportAthleteCandidate[] = candidateRows.map((candidate) => ({
+    id: Number(candidate.id),
+    batchId: text(candidate.batchId),
+    normalizedName: text(candidate.normalizedName),
+    name: text(candidate.name),
+    project: text(candidate.project),
+    team: text(candidate.team),
+    gender: text(candidate.gender),
+    region: text(candidate.region),
+    city: text(candidate.city),
+    county: text(candidate.county),
+    status: candidate.status as DataImportAthleteCandidate['status'],
+    matchedAthleteId:
+      candidate.matchedAthleteId === null ? null : Number(candidate.matchedAthleteId),
+    createdAthleteId:
+      candidate.createdAthleteId === null ? null : Number(candidate.createdAthleteId),
+    suggested: JSON.parse(text(candidate.suggestedJson) || '[]') as DataImportPersonSuggestion[],
+    confirmed: Number(candidate.confirmed) === 1,
+    excluded: Number(candidate.excluded) === 1,
+    sourceSheet: text(candidate.sourceSheet),
+    messages: JSON.parse(text(candidate.messagesJson) || '[]') as string[],
+  }));
+  return {
+    id: text(row.id),
+    revision: importRevision(summary),
+    filename: normalizeImportFilename(text(row.filename)),
+    project: text(row.project),
+    status: row.status as DataImportPreview['status'],
+    parserVersion: text(row.parserVersion),
+    sheetCount: Number(row.sheetCount),
+    itemCount: Number(row.itemCount),
+    validCount: reviewTargetId === undefined ? items.filter(item => item.quality === 'valid').length : Number(row.validCount),
+    warningCount: reviewTargetId === undefined ? items.filter(item => item.quality === 'warning').length : Number(row.warningCount),
+    errorCount: reviewTargetId === undefined ? items.filter(item => item.quality === 'error').length : Number(row.errorCount),
+    importedCount: Number(row.importedCount),
+    skippedCount: Number(row.skippedCount),
+    createdAt: text(row.createdAt),
+    committedAt: row.committedAt ? text(row.committedAt) : null,
+    summary,
+    counts: computeCounts(items, athleteCandidates),
+    athleteCandidates,
+    items,
+  };
+}
+
+export function listDataImportBatches(project: string, userId: number, canView: (id: string) => boolean) {
+  const rows = db
+    .prepare(
+      `
+    SELECT id, source_filename AS filename, project, status, parser_version AS parserVersion,
+      item_count AS itemCount, valid_count AS validCount, warning_count AS warningCount,
+      error_count AS errorCount, imported_count AS importedCount, skipped_count AS skippedCount,
+      created_at AS createdAt, committed_at AS committedAt
+    FROM data_import_batches WHERE project = ? AND created_by = ? ORDER BY created_at DESC, rowid DESC
+  `
+    )
+    .iterate(project, userId);
+  const visible = [];
+  for (const row of rows) {
+    if (!canView(text(row.id))) continue;
+    visible.push(row);
+    if (visible.length === 30) break;
+  }
+  return visible.map((row) => ({
+    id: text(row.id),
+    filename: normalizeImportFilename(text(row.filename)),
+    project: text(row.project),
+    status: text(row.status),
+    parserVersion: text(row.parserVersion),
+    itemCount: Number(row.itemCount),
+    validCount: Number(row.validCount),
+    warningCount: Number(row.warningCount),
+    errorCount: Number(row.errorCount),
+    importedCount: Number(row.importedCount),
+    skippedCount: Number(row.skippedCount),
+    createdAt: text(row.createdAt),
+    committedAt: row.committedAt ? text(row.committedAt) : null,
+  }));
+}
+
+const BODY_COMPOSITION_FIELDS: Array<readonly [string, string]> = BODY_TEMPLATE_FIELDS
+  .filter(([, key]) => key !== 'armSpanCm')
+  .map(([, key, , label]) => [key, label] as const);
+
+const WELLNESS_NUMBER_FIELDS = [
+  'sleepHours',
+  'sleepQuality',
+  'morningPulse',
+  'weightKg',
+  'fatigueIndex',
+  'sorenessIndex',
+  'moodIndex',
+] as const;
+
+const WELLNESS_STATUSES = ['', 'normal', 'attention', 'alert', 'rest', 'missing'];
+
+const INJURY_SIDES = Object.values(INJURY_SIDE_CODES);
+const INJURY_STATUSES = Object.values(INJURY_STATUS_CODES);
+const STATE_LEVELS = [...Object.values(STATE_LEVEL_CODES), ''];
+
+const NUMERIC_PAYLOAD_FIELDS: Partial<Record<DataImportItemType, readonly string[]>> = {
+  wellness: WELLNESS_NUMBER_FIELDS,
+  training_session: ['sessionOrder', 'durationMin', 'distanceKm', 'rpe', 'srpe', 'smvl',
+    'averageHeartRate', 'maxHeartRate', 'averagePowerW', 'strokeRateSpm', 'cadenceRpm'],
+  training_set: ['rpe', 'sessionOrder', 'plannedWeightKg', 'completed', 'durationMin', 'distanceKm'],
+  test_measurement: ['durationMin', 'targetValue'],
+  body_measurement: BODY_COMPOSITION_FIELDS.map(([key]) => key),
+  injury_record: ['painScore'],
+  competitive_state: ['overallScore', 'enduranceScore', 'powerScore', 'techniqueScore',
+    'loadAdaptationScore', 'recoveryScore', 'competitionScore'],
+};
+
+function importProject(item: ParsedImportItem | DataImportItemView) {
+  const athlete = db.prepare('SELECT project FROM athletes WHERE id=?').get(item.athleteId || 0) as { project: string } | undefined;
+  return normalizeProject(athlete?.project || item.payload.projectCode);
+}
+function importSnapshotMatches(item: ParsedImportItem | DataImportItemView, record: Record<string, unknown>) {
+  return !record.project_code || normalizeProject(record.project_code) === importProject(item);
+}
+
+/** 空白导入字段保留现值；预检和事务写入验证同一合并后的训练语义。 */
+function importTrainingContext(item: DataImportItemView | ParsedImportItem, stored?: Record<string, unknown>) {
+  const p = item.payload;
+  const athlete = db.prepare('SELECT project FROM athletes WHERE id=?').get(item.athleteId || 0) as { project: string } | undefined;
+  const current = stored ?? db.prepare("SELECT ts.*, (SELECT value_num FROM training_session_metrics WHERE training_session_id=ts.id AND metric_code='cadenceRpm') AS cadenceRpm FROM training_sessions ts WHERE athlete_id=? AND session_date=? AND session_order=?")
+    .get(item.athleteId || 0, item.eventDate, Number(p.sessionOrder) || 1) as Record<string, unknown> | undefined;
+  if (current && !importSnapshotMatches(item, current)) throw new Error('正式课次的项目归属不匹配，不能通过导入修改。');
+  return trainingContext(athlete?.project || text(p.projectCode), {
+    trainingType: text(p.trainingType) || text(current?.training_type),
+    activityCode: text(p.activityCode) || text(current?.activity_code),
+    intensitySystem: text(p.intensitySystem) || text(current?.intensity_system),
+    intensityZone: text(p.intensityZone) || text(current?.intensity_zone),
+    rulesVersion: text(p.rulesVersion),
+    averagePowerW: optionalNumber(p.averagePowerW) ?? optionalNumber(current?.average_power_w),
+    cadenceRpm: optionalNumber(p.cadenceRpm) ?? optionalNumber(current?.cadenceRpm),
+    strokeRateSpm: optionalNumber(p.strokeRateSpm) ?? optionalNumber(current?.stroke_rate_spm),
+  });
+}
+
+/**
+ * 统一业务校验：解析预览、校对修改与最终提交共用同一规则，
+ * 保证“预览通过即可提交、预览报错必须修正”，不一致即视为缺陷。
+ */
+function validateImportItem(
+  item: DataImportItemView | ParsedImportItem,
+  ctx: { allowedAthletes: Set<number>; candidateNames: Set<string> }
+): string[] {
+  normalizeImportEnums(item);
+  const messages: string[] = [];
+  if (item.itemType === 'invalid_row') {
+    // 无法解析的非空行：保留原始行错误说明，始终阻断提交，直至用户排除或修正。
+    return item.messages.filter((message) => message.startsWith('错误：'));
+  }
+  const payload = item.payload || {};
+  if (isProvided(payload.projectStatus) && text(payload.projectStatus) !== 'confirmed') messages.push('错误：该历史事实项目归属待核实，请先核实归属后重新导出，不能直接回导。');
+  if (isProvided(payload.factProject) && normalizeProject(payload.factProject) !== importProject(item)) messages.push('错误：事实项目与当前授权项目不匹配，不能通过导入修改归属。');
+  if (['training_session', 'training_set'].includes(item.itemType) && item.athleteId) {
+    const order = optionalNumber(payload.sessionOrder);
+    const rows = db.prepare('SELECT project_code FROM training_sessions WHERE athlete_id=? AND session_date=? AND (? IS NULL OR session_order=?)').all(item.athleteId, item.eventDate, order, order) as Array<Record<string, unknown>>;
+    if (rows.some(row => !importSnapshotMatches(item, row))) messages.push('错误：正式课次的项目归属不匹配，请核实后处理，不能通过导入覆盖。');
+  }
+  if (payload.dateSource === 'selected' && item.eventDate === payload.defaultedDate)
+    messages.push(`提示：日期使用上传页所选统一日期${item.eventDate}`);
+  if (payload.missingSessionOrder) messages.push('错误：同人同日课次无法区分，请在集中审查确认同一课次，或补充不同的实际开始时间');
+  if (payload.missingSetIndex) messages.push('错误：同动作有多组，请在原文件补充不同组序后重新上传');
+  if (payload.valueReviewPending) messages.push('错误：存在重复业务数据，请在集中审查卡片确认最终值或填写真实日期后分别保留');
+  if (Array.isArray(payload.valueImportConflicts))
+    messages.push(...payload.valueImportConflicts.filter((value): value is string => typeof value === 'string').map(value => item.itemType === 'training_session' ? `${value}；若为同日不同课次，请补充不同的实际开始时间` : value));
+  if (Array.isArray(payload.importConflicts))
+    messages.push(...payload.importConflicts.filter((value): value is string => typeof value === 'string').map(value => item.itemType === 'training_session' ? `${value}；若为同日不同课次，请补充不同的实际开始时间` : value));
+  if (payload.protocolRequired && !text(payload.protocol))
+    messages.push(item.testType === '竞技评估' ? '错误：人工评分必须填写评估协议' : '错误：不对称指数必须填写测试协议或测试方法');
+  if (typeof payload.unitConflict === 'string' && payload.unitConflict) messages.push(payload.unitConflict);
+  for (const field of NUMERIC_PAYLOAD_FIELDS[item.itemType] || []) {
+    if (isProvided(payload[field]) && standardNumberValue(payload[field]) === null)
+      messages.push(`错误：${field}“${text(payload[field])}”必须是有效数字`);
+  }
+  if (item.itemType !== 'scoring_rule') {
+    if (item.athleteId && !ctx.allowedAthletes.has(item.athleteId))
+      messages.push('错误：所选运动员不在当前权限范围内');
+    else if (!item.athleteId && !ctx.candidateNames.has(dataImportPersonKey(item)))
+      messages.push(text(item.rawAthleteName)
+        ? `错误：姓名“${text(item.rawAthleteName)}”未关联到本次导入的运动员，请核对姓名和队伍。`
+        : '错误：姓名未填写，请补填运动员姓名。');
+    if (item.itemType !== 'athlete_profile' && !validIsoDate(item.eventDate)) {
+      const location = `${item.sourceSheet}!${text(payload.dateAddress) || item.sourceAddress}`;
+      if (item.sourceSheet === BASIC_PROFILE_SHEET)
+        messages.push(`错误：${location} 身体测量日期无效或缺失，请填写实际测量日期，例如2026-11-23、2026/11/23或2026.11.23`);
+      else
+        messages.push(`错误：${location} 日期“${text(payload.rawDate) || item.eventDate}”无效或缺失，请按YYYY-MM-DD填写；默认日期仅补空白`);
+    }
+  }
+  if (item.itemType === 'athlete_profile') {
+    const source = payload.sourceRow as { rowIndex?: number; columns?: [string, number][] } | undefined;
+    const profileError = (label: string, reason: string) => {
+      const column = source?.columns?.find(([header]) => header === normalizedText(label))?.[1];
+      const address = column !== undefined && source?.rowIndex !== undefined
+        ? `${item.sourceSheet}!${cellAddress(source.rowIndex, column)} `
+        : '';
+      messages.push(`错误：${address}${label}${reason}`);
+    };
+    if (item.athleteId && text(payload.team)) {
+      const current = db.prepare(`SELECT COALESCE(pt.name, a.team, '') AS team FROM athletes a
+        LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.id = ?`).get(item.athleteId) as { team: string } | undefined;
+      if (current && current.team !== text(payload.team))
+        messages.push(`警告：文件队伍“${text(payload.team)}”与档案不一致，保留已有队伍“${current.team}”，导入不执行调队`);
+    }
+    const gender = text(payload.gender);
+    if (gender && !['男', '女'].includes(gender)) messages.push('错误：性别只能填写男或女');
+    const birthDate = text(payload.birthDate);
+    if (birthDate && (!validIsoDate(birthDate) ||
+        (item.sourceSheet === BASIC_PROFILE_SHEET && !parseImportBirthDate(birthDate))))
+      profileError('出生日期', '请填写完整的年月日，且不能晚于今天');
+    if (isProvided(payload.trainingYears)) {
+      const years = parseTrainingYears(payload.trainingYears);
+      if (years === null || !Number.isFinite(years))
+        messages.push('错误：训练年限须填写非负年数或年月，如3.5、3年6个月');
+      else payload.trainingYears = years;
+    }
+    if (isProvided(payload.bestResultDate) && !validIsoDate(text(payload.bestResultDate)))
+      profileError('成绩日期', '请填写实际日期，例如 2024/2/29');
+    for (const [field, label] of [['eventItem', '具体小项'], ['representativeUnit', '代表单位'], ['bestResultEvent', '对应赛事']])
+      if (text(payload[field]).length > 120) messages.push(`错误：${label}不能超过120个字符`);
+    if (isProvided(payload.startSportDate) && !validIsoDate(text(payload.startSportDate)))
+      profileError('开始运动日期', '请填写实际日期，例如 2024/2/29');
+    const technicalLevel = text(payload.technicalLevel);
+    if (
+      technicalLevel &&
+      !TECHNICAL_LEVELS.includes(technicalLevel as (typeof TECHNICAL_LEVELS)[number])
+    )
+      messages.push(
+        '错误：技术等级须为未定级、国际级运动健将、运动健将、一级运动员、二级运动员或三级运动员'
+      );
+  } else if (item.itemType === 'wellness') {
+    for (const field of WELLNESS_NUMBER_FIELDS) {
+      const value = payload[field];
+      if (isProvided(value) && numberValue(value) === null)
+        messages.push('错误：恢复状态数值字段必须是数字');
+    }
+    if (payload.templateVersion === IMPORT_TEMPLATE_VERSION && !WELLNESS_NUMBER_FIELDS.some(field => isProvided(payload[field])) && !text(payload.status))
+      messages.push('错误：每日恢复至少填写一项实际数值或明确状态，不能仅填写备注');
+    const status = text(payload.status);
+    if (!WELLNESS_STATUSES.includes(status))
+      messages.push('错误：恢复状态不在允许范围内');
+    if (payload.templateVersion === IMPORT_TEMPLATE_VERSION) {
+      // 复用现行恢复日报的采集量表和单位边界，不增加科学判定阈值。
+      for (const [field, label, min, max] of [
+        ['sleepHours', '睡眠小时', 0, 24], ['sleepQuality', '睡眠质量', 0, 10],
+        ['morningPulse', '晨脉', 25, 250], ['weightKg', '体重kg', 20, 250],
+        ['fatigueIndex', '疲劳', 0, 10], ['sorenessIndex', '肌肉酸痛', 0, 10], ['moodIndex', '情绪', 0, 10],
+      ] as const) {
+        const value = optionalNumber(payload[field]);
+        if (value !== null && (value < min || value > max)) messages.push(`错误：${label}须在${min}—${max}之间`);
+      }
+    }
+  } else if (item.itemType === 'training_session') {
+    try {
+      importTrainingContext(item);
+    } catch (error) { messages.push(`错误：${error instanceof Error ? error.message : '训练活动无效'}`); }
+    if (optionalNumber(payload.cadenceRpm) !== null && Number(payload.cadenceRpm) < 0) messages.push('错误：踏频不能小于0');
+    if (payload.srpeCalculated) {
+      const duration = optionalNumber(payload.durationMin);
+      const rpe = optionalNumber(payload.rpe);
+      payload.srpe = duration === null || rpe === null ? null : duration * rpe;
+    }
+    const rpe = optionalNumber(payload.rpe);
+    if (rpe === null) messages.push('提示：未提供RPE，无法计算SRPE；训练记录仍可导入');
+    else if (rpe < 0 || rpe > 10) messages.push('错误：RPE须在0—10之间');
+    const order = optionalNumber(payload.sessionOrder);
+    if (order === null || !Number.isInteger(order) || order < 1) messages.push('错误：课次序号须为正整数');
+    const durationReported = Boolean(payload.durationReported) || isProvided(payload.durationMin);
+    const distanceReported = Boolean(payload.distanceReported) || isProvided(payload.distanceKm);
+    if (!durationReported && !distanceReported && !payload.hasStrengthSets && !(payload.trainingRecordHasDetails))
+      messages.push('错误：时长分钟、距离千米至少填写一项；留空不等于 0。');
+    const duration = optionalNumber(payload.durationMin);
+    if (durationReported && (duration === null || duration < 0 || duration > 1440))
+      messages.push('错误：时长分钟须为 0—1440 的数字。');
+    const distance = optionalNumber(payload.distanceKm);
+    if (distanceReported && (distance === null || distance < 0 || distance > 500))
+      messages.push('错误：距离千米须为 0—500 的数字。');
+  } else if (item.itemType === 'training_set') {
+    if (!item.exerciseName) messages.push('错误：训练动作不能为空');
+    if (item.actualReps === null || !Number.isSafeInteger(item.actualReps) || item.actualReps < 0)
+      messages.push('错误：实际次数须为非负整数');
+    if (item.actualWeightKg === null || item.actualWeightKg < 0)
+      messages.push('错误：实际重量不能为空且不能小于0');
+
+    const order = optionalNumber(payload.sessionOrder);
+    if (isProvided(payload.sessionOrder) && (order === null || !Number.isInteger(order) || order < 1)) messages.push('错误：课次序号须为正整数');
+    if (Array.isArray(payload.sessionChoices) && payload.sessionChoices.length > 1) messages.push('错误：同日存在多个同名力量课，请选择所属课次序号');
+    for (const field of ['plannedWeightKg', 'durationMin', 'distanceKm']) {
+      const value = optionalNumber(payload[field]);
+      if (value !== null && value < 0) messages.push('错误：计划重量、组次时长和距离不能小于0');
+    }
+    if (text(payload.trainingEnvironment) && !isStrengthTrainingEnvironment(text(payload.trainingEnvironment))) messages.push('错误：训练环境不在允许范围内');
+    if (text(payload.intensityZone) && !isStrengthIntensityZone(text(payload.intensityZone))) messages.push('错误：强度区间不在允许范围内');
+    const completed = optionalNumber(payload.completed);
+    if (completed !== null && ![0, 1].includes(completed)) messages.push('错误：完成状态须为已完成、未完成或0、1');
+  } else if (item.itemType === 'test_measurement') {
+    const templateColumn = payload.testTemplateColumn as TestTemplateDownload['columns'][number] | undefined;
+    if (!templateColumn && item.metricCode && !readImportMetricDefinitions(text(payload.projectCode) || text((db.prepare('SELECT project FROM athletes WHERE id=?').get(item.athleteId || 0) as { project: string } | undefined)?.project)).some(metric => metric.code === item.metricCode)) messages.push('错误：测试项目不适用于当前运动项目');
+    const attempt = optionalNumber(payload.attemptOrder);
+    if (isProvided(payload.attemptOrder) && (attempt === null || !Number.isInteger(attempt) || attempt < 1)) messages.push('错误：试次序号须为正整数');
+    const metricDefinition = db.prepare('SELECT unit, active FROM metric_definitions WHERE code=?').get(item.metricCode) as { unit: string; active: number } | undefined;
+    if (templateColumn) {
+      if (!metricDefinition || item.metricCode !== templateColumn.code || item.unit !== templateColumn.unit
+          || text(payload.protocol) !== templateColumn.protocol || text(payload.protocolVersion) !== templateColumn.protocolVersion
+          || text(payload.testContext) || (attempt ?? 1) !== 1 || item.side !== 'center')
+        messages.push('错误：测试指标和协议必须与下载模板一致。');
+      if (templateColumn.valueKind === 'time' && item.valueNum !== null && item.valueNum < 0)
+        messages.push('错误：计时成绩须填写非负秒数或分:秒。');
+    } else if (item.metricCode && !metricDefinition?.active) messages.push('错误：测试项目未配置或已停用，请联系指标字典管理员确认');
+    else if (metricDefinition && item.unit !== metricDefinition.unit) messages.push(`错误：测试项目单位已变更或不匹配，应为${metricDefinition.unit}，请重新校验`);
+    if (payload.metricSelectionError) messages.push(String(payload.metricSelectionError));
+    if (!item.metricCode && !payload.metricSelectionError) messages.push('错误：请选择测试项目');
+    if (!templateColumn && !item.unit && !payload.metricSelectionError) {
+      const definition = db.prepare('SELECT unit FROM metric_definitions WHERE code = ? AND active = 1').get(item.metricCode) as { unit: string } | undefined;
+      if (!definition || definition.unit !== '') messages.push('错误：指标单位无法由字典确定，请填写单位');
+    }
+    if (payload.fmsObservation && item.testType === 'FMS测试') {
+      if (Array.isArray(payload.fmsErrors))
+        for (const error of payload.fmsErrors) messages.push(`错误：${item.metricLabel} ${error}`);
+      item.valueNum = fmsFinalScore(item.metricCode, payload.fmsObservation as FmsObservation);
+      if (item.valueNum === null) messages.push('警告：仅保存已填写的FMS原始结果，该项暂不计分');
+    } else if (item.valueNum === null || !Number.isFinite(item.valueNum))
+      messages.push(templateColumn
+        ? `错误：${item.sourceSheet}!${item.sourceAddress} “${item.rawValue}”不是有效的${templateColumn.valueKind === 'time' ? '秒数或分:秒' : '数值'}`
+        : '错误：测试值不能为空');
+    if (item.sourceSheet === COMPACT_ATHLETE_SHEET && item.metricCode === 'pull_ups_reps' && item.valueNum !== null && !Number.isInteger(item.valueNum))
+      messages.push('错误：引体向上须填写整数次数');
+    if (item.testType === 'FMS测试' && item.valueNum !== null) {
+      if (!Number.isInteger(item.valueNum) || item.valueNum < 0 || item.valueNum > 3)
+        messages.push('错误：FMS各项须填写0、1、2或3分');
+    }
+    const durationMin = optionalNumber(payload.durationMin);
+    if (durationMin !== null && durationMin <= 0) messages.push('错误：测试时长分钟须大于0');
+    if (!['left', 'right', 'bilateral', 'center'].includes(item.side))
+      messages.push('错误：测试侧别只能使用center、left、right或bilateral');
+    if (item.valueNum !== null && item.metricCode in METRICS)
+      validateMetric(item.metricCode as MetricCode, item.valueNum, messages);
+  } else if (item.itemType === 'body_measurement') {
+    if (item.metricCode === 'body_composition') {
+      if (!BODY_COMPOSITION_FIELDS.some(([key]) => isProvided(payload[key])))
+        messages.push('错误：身体测量至少填写一个数值');
+      if (item.sourceSheet === BASIC_PROFILE_SHEET) {
+        const height = optionalNumber(payload.heightCm);
+        const weight = optionalNumber(payload.weightKg);
+        if (height !== null) validateMetric('height_cm', height, messages);
+        if (weight !== null) validateMetric('weight_kg', weight, messages);
+      }
+      for (const [key, label] of BODY_COMPOSITION_FIELDS) {
+        const value = payload[key];
+        if (isProvided(value) && numberValue(value) === null)
+          messages.push(`错误：${label}必须是数字`);
+      }
+    } else if (item.valueNum === null || !Number.isFinite(item.valueNum)) {
+      messages.push('错误：测试值不能为空');
+    } else if (item.metricCode in METRICS) {
+      validateMetric(item.metricCode as MetricCode, item.valueNum, messages);
+    }
+  } else if (item.itemType === 'injury_record') {
+    if (!text(payload.injuryName) || !text(payload.bodyPart))
+      messages.push('错误：伤病名称和部位不能为空');
+    if (!INJURY_SIDES.includes(text(payload.side))) messages.push('错误：伤病侧别不在允许范围内');
+    if (!INJURY_STATUSES.includes(text(payload.status)))
+      messages.push('错误：伤病状态不在允许范围内');
+    const painScore = optionalNumber(payload.painScore);
+    if (painScore !== null && (painScore < 0 || painScore > 10))
+      messages.push('错误：疼痛评分须在0—10之间');
+  } else if (item.itemType === 'competitive_state') {
+    const overallScore = optionalNumber(payload.overallScore);
+    if (overallScore === null || overallScore < 0 || overallScore > 100)
+      messages.push('错误：新增或补录竞技状态须提供0—100的原始总分；单项一般耐力/核心力量评分可独立填写，不编造总分');
+    if (!STATE_LEVELS.includes(text(payload.stateLevel)))
+      messages.push('错误：竞技状态等级不在允许范围内');
+    for (const [label, key] of [
+      ['专项耐力', 'enduranceScore'],
+      ['力量爆发', 'powerScore'],
+      ['技术效率', 'techniqueScore'],
+      ['负荷适应', 'loadAdaptationScore'],
+      ['恢复能力', 'recoveryScore'],
+      ['比赛能力', 'competitionScore'],
+    ] as const) {
+      const score = optionalNumber(payload[key]);
+      if (score !== null && (score < 0 || score > 100))
+        messages.push(`错误：${label}须在0—100之间`);
+    }
+  } else if (item.itemType === 'scoring_rule') {
+    if (item.valueNum === null || !Number.isFinite(item.valueNum))
+      messages.push('错误：评分阈值不能为空');
+  }
+  if (payload.templateVersion === IMPORT_TEMPLATE_VERSION && payload.fieldAddresses && typeof payload.fieldAddresses === 'object') {
+    const addresses = Object.entries(payload.fieldAddresses);
+    return messages.map(message => {
+      if (!message.startsWith('错误：') || message.includes(`${item.sourceSheet}!`)) return message;
+      const address = addresses.find(([label]) => normalizedText(message).includes(label))?.[1];
+      return `错误：${item.sourceSheet}!${typeof address === 'string' ? address : item.sourceAddress} ${message.slice(3)}`;
+    });
+  }
+  return messages;
+}
+
+function revalidateItem(
+  item: DataImportItemView,
+  allowedAthletes: Set<number>,
+  candidateNames = new Set<string>()
+) {
+  const messages = validateImportItem(item, { allowedAthletes, candidateNames });
+  return { messages, quality: makeQuality(messages, item.resolution === 'skip' || item.quality === 'skipped') };
+}
+
+const PAYLOAD_EDITABLE: Record<DataImportItemType, Set<string>> = {
+  athlete_profile: new Set([
+    'gender',
+    'birthDate',
+    'team',
+    'region',
+    'city',
+    'county',
+    'technicalLevel',
+    'bestResult', 'eventItem', 'representativeUnit', 'trainingYears', 'bestResultEvent', 'bestResultDate',
+  ]),
+  wellness: new Set([...WELLNESS_NUMBER_FIELDS, 'status', 'note']),
+  training_session: new Set([
+    'sessionOrder',
+    'startTime',
+    'separateTrainingSession',
+    'trainingType',
+    'structureType',
+    'intensityZone',
+    'content',
+    'durationMin',
+    'distanceKm',
+    'rpe',
+    'averageHeartRate',
+    'maxHeartRate',
+    'averagePowerW',
+    'strokeRateSpm', 'cadenceRpm', 'activityCode', 'intensitySystem',
+  ]),
+  training_set: new Set(['rpe', 'sessionOrder', 'exerciseCode', 'plannedWeightKg', 'completed', 'trainingEnvironment', 'durationMin', 'distanceKm', 'intensityZone', 'trainingCategory', 'bodyPosition', 'note']),
+  test_measurement: new Set(['durationMin', 'targetValue', 'protocol', 'protocolVersion', 'testContext', 'attemptOrder', 'note']),
+  body_measurement: new Set([...BODY_COMPOSITION_FIELDS.map(([key]) => key), 'note']),
+  injury_record: new Set([
+    'injuryName',
+    'bodyPart',
+    'side',
+    'status',
+    'painScore',
+    'restrictions',
+    'rehabPlan',
+    'reviewDate',
+    'note',
+  ]),
+  competitive_state: new Set([
+    'overallScore',
+    'stateLevel',
+    'enduranceScore',
+    'powerScore',
+    'techniqueScore',
+    'loadAdaptationScore',
+    'recoveryScore',
+    'competitionScore',
+    'note',
+  ]),
+  scoring_rule: new Set<string>(),
+  invalid_row: new Set<string>(),
+};
+
+/** 校对修改写入真实业务字段；valueNum 与 payload 中的同一业务值保持双向同步。 */
+function applyCorrection(
+  current: DataImportItemView,
+  correction: {
+    id: number;
+    sourceCells?: Record<string, string | number | null>;
+    metricCode?: string;
+    side?: string;
+    athleteId?: number | null;
+    eventDate?: string;
+    valueNum?: number | null;
+    actualReps?: number | null;
+    actualWeightKg?: number | null;
+    payload?: Record<string, unknown>;
+    resolution?: DataImportResolution | null;
+  }
+): DataImportItemView {
+  const next: DataImportItemView = {
+    ...current,
+    payload: { ...current.payload },
+  };
+  if ((current.payload.valueReviewDecision || current.payload.valueMergedInto || current.payload.valueReviewMemberOf) && !correction.payload?.valueReview
+    && (correction.payload || 'eventDate' in correction || 'athleteId' in correction || 'valueNum' in correction))
+    throw new Error('请先点击重新编辑，展开合并来源后再修改');
+  if (current.payload.sourceRow && Object.keys(correction).some(key => !['id', 'resolution'].includes(key))) next.payload.sourceRowOutdated = true;
+  if (current.payload.testTemplateColumn && ('metricCode' in correction || 'side' in correction ||
+      ['protocol', 'protocolVersion', 'testContext', 'attemptOrder'].some(field => Object.hasOwn(correction.payload ?? {}, field))))
+    throw new Error('模板中的测试指标、协议和试次固定，可校对日期与成绩。');
+  if ('metricCode' in correction) {
+    if (next.itemType !== 'test_measurement') throw new Error('只有测试记录可以重选测试项目');
+    const project = (db.prepare('SELECT project FROM data_import_batches WHERE id = ?').get(current.batchId) as { project: string }).project;
+    const metric = readImportMetricDefinitions(project).find(entry => entry.code === correction.metricCode);
+    if (!metric) throw new Error('所选测试项目不在当前项目正式字典中');
+    next.metricCode = metric.code;
+    next.metricLabel = metric.label;
+    next.unit = metric.unit;
+    delete next.payload.metricSelectionError;
+    delete next.payload.unitConflict;
+  }
+  if ('side' in correction) {
+    if (next.itemType !== 'test_measurement' || !['center', 'left', 'right', 'bilateral'].includes(correction.side || '')) throw new Error('测试侧别无效');
+    next.side = correction.side as DataImportItemView['side'];
+  }
+  if ('athleteId' in correction) next.athleteId = correction.athleteId ?? null;
+  if ('eventDate' in correction) next.eventDate = text(correction.eventDate);
+  if ('actualReps' in correction) next.actualReps = correction.actualReps ?? null;
+  if ('actualWeightKg' in correction) next.actualWeightKg = correction.actualWeightKg ?? null;
+  if ('resolution' in correction && correction.resolution !== undefined) {
+    next.resolution = correction.resolution ?? '';
+    if (next.payload.trainingRecordTeamId) next.payload.trainingRecordExcluded = next.resolution === 'skip';
+    if (next.resolution !== 'skip' && next.quality === 'skipped') next.quality = 'valid';
+  }
+  const editable = PAYLOAD_EDITABLE[next.itemType] || new Set<string>();
+  if (correction.payload) {
+    for (const [key, value] of Object.entries(correction.payload)) {
+      if (!editable.has(key)) continue;
+      if (key === 'separateTrainingSession' && (value !== true || current.payload.sessionOrderProvided !== false))
+        throw new Error('只有未填写课次序号的训练记录可确认作为另一课次');
+      if (key === 'technicalLevel') { next.payload[key] = normalizeTechnicalLevel(value); continue; }
+      if (value === null) delete next.payload[key];
+      else next.payload[key] = typeof value === 'string' || typeof value === 'number' ? canonicalEnumField(next.itemType, key, value) : value;
+    }
+  }
+  if ('valueNum' in correction) {
+    const value = correction.valueNum ?? null;
+    next.valueNum = value;
+    if (next.itemType === 'training_session') {
+      next.payload = { ...next.payload, durationMin: value, durationReported: value !== null };
+    } else if (next.itemType === 'wellness') {
+      next.payload = { ...next.payload, sleepHours: value };
+    } else if (next.itemType === 'injury_record') {
+      next.payload = { ...next.payload, painScore: value };
+    } else if (next.itemType === 'competitive_state') {
+      next.payload = { ...next.payload, overallScore: value };
+    }
+  } else if (correction.payload) {
+    if (next.itemType === 'training_session' && 'durationMin' in correction.payload)
+      next.valueNum = optionalNumber(next.payload.durationMin);
+    else if (next.itemType === 'wellness' && 'sleepHours' in correction.payload)
+      next.valueNum = optionalNumber(next.payload.sleepHours);
+    else if (next.itemType === 'injury_record' && 'painScore' in correction.payload)
+      next.valueNum = optionalNumber(next.payload.painScore);
+    else if (next.itemType === 'competitive_state' && 'overallScore' in correction.payload)
+      next.valueNum = optionalNumber(next.payload.overallScore);
+    else if (next.itemType === 'body_measurement' && next.metricCode === 'body_composition')
+      next.valueNum = optionalNumber(next.payload.weightKg ?? next.payload.heightCm);
+  }
+  return next;
+}
+
+/** 合并只改暂存记录；来源及选择由服务端生成，正式入库仍走原事务与校验。 */
+function applyValueReview(items: DataImportItemView[], targetId: number, raw: unknown, allowed: Set<number>, userId: number) {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) throw new Error('数据审查请求无效');
+  const review = raw as Record<string, unknown>;
+  const target = items.find(item => item.id === targetId);
+  if (!target || !reviewFields([target]).length) throw new Error('该记录不支持数据审查');
+  const checkAccess = (item: DataImportItemView) => {
+    if (item.athleteId && !allowed.has(item.athleteId)) throw new Error('所选运动员不在当前权限范围内');
+  };
+  checkAccess(target);
+  if (review.action === 'draft') {
+    if (target.payload.valueReviewDecision || target.payload.valueMergedInto) throw new Error('请先重新编辑合并结果');
+    const draft: Record<string, Record<string, string>> = {};
+    for (const key of ['choices', 'manual']) {
+      const rawValues = review[key];
+      if (!rawValues || typeof rawValues !== 'object' || Array.isArray(rawValues)) throw new Error('审查草稿格式无效');
+      draft[key] = {};
+      for (const [field, value] of Object.entries(rawValues)) {
+        if (!reviewFields(items.filter(item => importReviewKey(item) === importReviewKey(target))).some(([, code]) => code === field) || typeof value !== 'string' || value.length > 10000) throw new Error('审查草稿字段无效');
+        draft[key][field] = String(canonicalEnumField(target.itemType, field, value));
+      }
+    }
+    target.payload.valueReviewDraft = draft;
+    return;
+  }
+  if (review.action === 'reopen') {
+    const decision = target.payload.valueReviewDecision as { sources?: Array<{ id: number; values: Record<string, ReviewValue> }> } | undefined;
+    if (!decision?.sources) throw new Error('该组尚未合并');
+    for (const source of decision.sources) {
+      const item = items.find(entry => entry.id === source.id);
+      if (!item || (item.id !== target.id && item.payload.valueMergedInto !== target.id && item.payload.valueReviewMemberOf !== target.id)) throw new Error('合并来源已变化，请刷新后重试');
+      checkAccess(item);
+      writeReviewValues(item, source.values, items.filter(entry => importReviewKey(entry) === importReviewKey(target)));
+      delete item.payload.valueMergedInto;
+      delete item.payload.valueReviewMemberOf;
+      delete item.payload.valueReviewProtocol;
+      delete item.payload.valueReviewDecision;
+      item.resolution = '';
+      item.quality = 'valid';
+
+    }
+    const history = Array.isArray(target.payload.valueReviewHistory) ? target.payload.valueReviewHistory : [];
+    target.payload.valueReviewHistory = [...history, { ...decision, reopenedBy: userId, reopenedAt: new Date().toISOString() }];
+    return;
+  }
+  if (review.action !== 'merge' || !Array.isArray(review.memberIds) || !review.values || typeof review.values !== 'object' || Array.isArray(review.values)) throw new Error('合并参数无效');
+  const memberIds = review.memberIds;
+  if (memberIds.length < (review.includeDatabase === true ? 1 : 2) || new Set(memberIds).size !== memberIds.length || !memberIds.includes(targetId)) throw new Error('请至少选择两条不同来源');
+  const members = memberIds.map(id => items.find(item => item.id === id));
+  if (members.some(item => !item || !reviewFields([item]).length || importReviewKey(item) !== importReviewKey(target))) throw new Error('只能合并同一业务记录的重复来源');
+  const sources = members.filter((item): item is DataImportItemView => Boolean(item));
+  for (const item of sources) {
+    checkAccess(item);
+    if (Array.isArray(item.payload.sessionChoices) && item.payload.sessionChoices.length > 1) throw new Error('请先选择所属课次，再选择冲突值');
+    if (item.payload.unitConflict) throw new Error(`原始记录单位不一致，请先排除或修正来源：${item.sourceSheet}!${item.sourceAddress}`);
+    if (item.resolution === 'skip' || item.payload.valueReviewDecision || item.payload.valueMergedInto || item.payload.valueReviewMemberOf) throw new Error('请先重新编辑已合并的记录');
+  }
+  const databaseSnapshots = review.includeDatabase === true ? sources.map(item => {
+    const fresh = detectItemConflict(item);
+    assertConflictUnchanged(item, fresh);
+    if (item.conflict?.exists && !fresh.exists) throw new Error('数据库已有记录已变化，请刷新后重新审查');
+    return { id: item.id, conflict: fresh };
+  }) : [];
+  const database = databaseReviewRecords(sources.map(item => ({ ...item, conflict: databaseSnapshots.find(snapshot => snapshot.id === item.id)?.conflict ?? null })));
+  if (review.includeDatabase === true && !database.length) throw new Error('没有可比较的数据库已有值，请刷新后重试');
+  const comparison = [...sources, ...database];
+  const selected = { ...review.values } as Record<string, unknown>;
+  const fields = reviewFields(comparison);
+  if (Object.keys(selected).some(field => !fields.some(([, key]) => key === field))) throw new Error('合并包含不支持的字段');
+  const values: Record<string, ReviewValue> = {};
+  for (const [, field, , label, , kind] of fields) {
+    const available = importFieldValues(comparison, field);
+    if (Object.prototype.hasOwnProperty.call(selected, field)) {
+      const value = selected[field];
+      if (kind === 'text' ? typeof value !== 'string' || value.length > 10000 : typeof value !== 'number' || !Number.isFinite(value)) throw new Error(`${label}格式无效`);
+      values[field] = canonicalEnumField(target.itemType, field, value as ReviewValue);
+      selected[field] = values[field];
+    } else if (available.length === 1) values[field] = available[0];
+    else if (available.length > 1) throw new Error(`请为${label}选择最终值`);
+  }
+  const snapshots = sources.map(item => ({ id: item.id, sourceSheet: item.sourceSheet, sourceAddress: item.sourceAddress,
+    eventDate: item.eventDate, rawDate: item.payload.rawDate,
+    values: reviewValues(item, sources) }));
+  const representatives = new Set<string>();
+  for (const item of [target, ...sources.filter(item => item.id !== target.id)]) {
+    const fact = item.itemType === 'test_measurement' ? reviewMetricKey(item) : 'record';
+    if (representatives.has(fact)) {
+      item.resolution = 'skip';
+      item.payload.valueMergedInto = target.id;
+    } else {
+      representatives.add(fact);
+      writeReviewValues(item, values, sources);
+      if (review.includeDatabase === true) {
+        item.resolution = 'update';
+        if (item.itemType === 'test_measurement' && typeof values.protocol === 'string') {
+          const existing = findTestSession(db, importedTestIdentity(item));
+          if (text(existing?.protocol) && text(existing?.protocol) !== values.protocol)
+            item.payload.valueReviewProtocol = { previous: text(existing?.protocol), next: values.protocol };
+        }
+      }
+      if (item.id !== target.id) item.payload.valueReviewMemberOf = target.id;
+    }
+  }
+  if (target.itemType === 'training_session' && Object.hasOwn(values, 'srpe')) target.payload.srpeCalculated = false;
+  delete target.payload.valueReviewDraft;
+  target.payload.valueReviewDecision = { confirmed: true, sources: snapshots, databaseSnapshots, databaseSources: database.map(item => ({ id: -item.id, values: reviewValues(item, comparison) })), choices: selected, finalValues: values, confirmedBy: userId, confirmedAt: new Date().toISOString() };
+
+}
+
+/** 校对与人员映射共用重新校验、冲突快照及暂存计数；调用方负责事务。 */
+function persistValidatedImportItems(
+  batchId: string, items: DataImportItemView[], allowed: Set<number>, candidateNames: Set<string>
+) {
+  const update = db.prepare(
+    `UPDATE data_import_items SET athlete_id = ?, event_date = ?, value_num = ?, actual_reps = ?, actual_weight_kg = ?, unit = ?, target_reps = ?, intensity_percent = ?,
+      payload_json = ?, resolution = ?, conflict_json = ?, quality = ?, messages_json = ?, metric_code = ?, metric_label = ?, side = ? WHERE id = ? AND batch_id = ?`
+  );
+  refreshImportConflicts(items);
+  for (const next of items) {
+    const validation = revalidateItem(next, allowed, candidateNames);
+    next.quality = validation.quality;
+    next.messages = validation.messages;
+    // 校对后按最终值重新检测重复与覆盖，保证预览展示的就是提交时会写入的数据。
+    next.conflict = next.quality === 'skipped' ? null : detectItemConflict(next);
+    update.run(
+      next.athleteId,
+      next.eventDate,
+      next.valueNum,
+      next.actualReps,
+      next.actualWeightKg,
+      next.unit,
+      next.targetReps,
+      next.intensityPercent,
+      JSON.stringify(next.payload),
+      next.resolution,
+      JSON.stringify(next.conflict ?? {}),
+      next.quality,
+      JSON.stringify(next.messages),
+      next.metricCode,
+      next.metricLabel,
+      next.side,
+      next.id,
+      batchId
+    );
+  }
+  const counts = db
+    .prepare(
+      `SELECT COUNT(*) AS itemCount,
+    SUM(quality = 'valid') AS validCount, SUM(quality = 'warning') AS warningCount, SUM(quality = 'error') AS errorCount
+    FROM data_import_items WHERE batch_id = ?`
+    )
+    .get(batchId) as Record<string, number>;
+  db.prepare(
+    `UPDATE data_import_batches SET item_count = ?, valid_count = ?, warning_count = ?, error_count = ? WHERE id = ?`
+  ).run(
+    Number(counts.itemCount),
+    Number(counts.validCount || 0),
+    Number(counts.warningCount || 0),
+    Number(counts.errorCount || 0),
+    batchId
+  );
+}
+
+export function updateDataImportItems(input: {
+  batchId: string;
+  reviewTargetId?: number;
+  userId: number;
+  expectedRevision?: number;
+  authorizeBatch?: () => void;
+  athletes: ImportAthlete[];
+  corrections: Array<{
+    id: number;
+    sourceCells?: Record<string, string | number | null>;
+    metricCode?: string;
+    side?: string;
+    athleteId?: number | null;
+    eventDate?: string;
+    valueNum?: number | null;
+    actualReps?: number | null;
+    actualWeightKg?: number | null;
+    payload?: Record<string, unknown>;
+    resolution?: DataImportResolution | null;
+  }>;
+}) {
+  // 超限显式拒绝而不是静默截断：截断会让用户以为全部修改已保存。
+  if (input.corrections.length > 5000)
+    throw new Error('单次最多保存 5000 条校对修改，请分批保存后重试。');
+  if (input.reviewTargetId !== undefined && (!Number.isSafeInteger(input.reviewTargetId) || !input.corrections.length || input.corrections.some(correction =>
+    correction.id !== input.reviewTargetId || Object.keys(correction).some(key => !['id', 'payload'].includes(key)) ||
+    !correction.payload || Object.keys(correction.payload).some(key => key !== 'valueReview') || !correction.payload.valueReview
+  ))) throw new Error('单组审查只能保存当前组的选择');
+  const batch = getDataImportBatch(input.batchId, input.userId, false, input.reviewTargetId);
+  if (batch.status !== 'reviewing') throw new Error('只有待审核批次可以修改。');
+  const allowed = new Set(input.athletes.map((athlete) => athlete.id));
+  const candidateNames = new Set(
+    batch.athleteCandidates.map((candidate) => candidate.normalizedName)
+  );
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    input.authorizeBatch?.();
+    assertImportRevision(input.batchId, input.userId, input.expectedRevision);
+    const sourceGroups = new Map<string, { item: DataImportItemView; cells: Record<string, string | number | null> }>();
+    for (const correction of input.corrections) {
+      const item = batch.items.find(entry => entry.id === correction.id);
+      if (!item) throw new Error('校对记录不属于当前批次');
+      if (correction.sourceCells === undefined) continue;
+      if (Object.keys(correction).some(key => !['id', 'sourceCells'].includes(key))) throw new Error('源行修复不能与记录字段修改混用');
+      const source = item.payload.sourceRow as { rowIndex: number } | undefined;
+      if (!source || !Number.isSafeInteger(source.rowIndex)) throw new Error('该记录没有可定位的完整源行，请修正原文件后重新上传');
+      const key = `${item.sourceSheet}:${source.rowIndex}`;
+      if (sourceGroups.has(key)) throw new Error('同一源行请合并为一次修复');
+      sourceGroups.set(key, { item, cells: correction.sourceCells });
+    }
+    for (const { item, cells } of sourceGroups.values()) {
+      const source = item.payload.sourceRow as { rowIndex: number; columns: [string, number][]; values: (string | number)[]; filename: string; defaultDate: string; simplified: boolean; fallbackDate?: string };
+      if (!cells || typeof cells !== 'object' || Array.isArray(cells) || Object.keys(cells).length > 200) throw new Error('源行修复格式无效');
+      const related = batch.items.filter(entry => entry.sourceSheet === item.sourceSheet && (entry.payload.sourceRow as { rowIndex?: number } | undefined)?.rowIndex === source.rowIndex);
+      if (related.some(entry => entry.payload.sourceRowOutdated)) throw new Error('该源行已通过业务字段校对，请继续使用业务字段校对；如需修改源单元格请修正原文件后重新上传');
+      if (related.some(entry => entry.payload.valueReviewDecision || entry.payload.valueMergedInto || entry.payload.valueReviewMemberOf)) throw new Error('请先重新编辑合并来源，再修复源行');
+      if (related.some(entry => input.corrections.some(correction => correction.id === entry.id && correction.sourceCells === undefined))) throw new Error('同源行不能同时修改源单元格和派生记录');
+      const values = [...source.values];
+      for (const [label, value] of Object.entries(cells)) {
+        const column = source.columns.find(([name]) => name === normalizedText(label))?.[1];
+        if (column === undefined || (value !== null && typeof value !== 'string' && typeof value !== 'number') || (typeof value === 'number' && !Number.isFinite(value)) || (typeof value === 'string' && value.length > 10000)) throw new Error('源行修复包含无效字段或数值');
+        values[column] = value ?? '';
+      }
+      const matrix: Matrix = Array.from({ length: source.rowIndex + 1 }, () => []);
+      for (const [label, column] of source.columns) matrix[0][column] = label;
+      matrix[source.rowIndex] = values;
+      const parsed = parseStandardSheet(matrix, item.sourceSheet, batch.project, source.filename, source.defaultDate, input.athletes, source.simplified, source.fallbackDate, batch.summary.team);
+      if (!parsed.length) throw new Error('修复后没有可导入业务记录；如不需导入请明确排除此行');
+      const projectColumn = source.columns.find(([label]) => label === '运动项目')?.[1];
+      if (projectColumn !== undefined && text(values[projectColumn]) && normalizeProject(text(values[projectColumn])) !== normalizeProject(batch.project)) throw new Error('源行运动项目与当前批次不一致');
+      for (const entry of parsed) if (batch.summary.team) entry.payload.team = batch.summary.team;
+      collectPersons(parsed);
+      const identityEdited = Object.keys(cells).some(label =>
+        ['姓名', '所属队伍', '运动项目', '系统运动员编号', '运动员编号', '编号'].includes(normalizedText(label))
+      );
+      for (const entry of parsed) {
+        if (!identityEdited && entry.itemType !== 'invalid_row' && entry.itemType !== 'scoring_rule') {
+          const previousKeys = new Set(related.filter(previous =>
+            previous.itemType !== 'invalid_row' && previous.itemType !== 'scoring_rule' &&
+            normalizedName(previous.rawAthleteName) === normalizedName(entry.rawAthleteName)
+          ).map(dataImportPersonKey));
+          // 校对生日和业务字段时沿用该源行已选定的人员，避免生成一个新的暂存身份。
+          if (previousKeys.size === 1) entry.payload.personKey = [...previousKeys][0];
+        }
+        const candidate = batch.athleteCandidates.find(person => person.normalizedName === dataImportPersonKey(entry));
+        const numberedIdentityUpdated = Boolean(text(entry.payload.athleteCode)) && Object.keys(cells).some(label =>
+          ['性别', '出生日期'].includes(normalizedText(label))
+        );
+        if (!identityEdited && !numberedIdentityUpdated && candidate?.status === 'pending' && candidate.confirmed) entry.athleteId = candidate.excluded ? null : candidate.matchedAthleteId;
+        else if (!identityEdited && !numberedIdentityUpdated && candidate?.status === 'matched' && input.athletes.some(athlete =>
+          athlete.id === candidate.matchedAthleteId && athlete.active !== false && athlete.project === batch.project &&
+          (!batch.summary.team || athlete.team === batch.summary.team)
+        )) entry.athleteId = candidate.matchedAthleteId;
+        else if (entry.itemType !== 'invalid_row') {
+          const person = resolvePerson({
+            name: entry.rawAthleteName,
+            project: batch.project,
+            team: text(entry.payload.team),
+            athleteCode: text(entry.payload.athleteCode),
+            birthDate: text(entry.payload.birthDate),
+            gender: text(entry.payload.gender),
+          }, input.athletes);
+          if (person.kind === 'conflict' || person.kind === 'ambiguous') throw new Error(person.message);
+          entry.athleteId = person.kind === 'matched' ? person.athlete.id : null;
+        }
+        if (candidate?.confirmed && entry.itemType === 'athlete_profile') entry.payload.gender = candidate.gender;
+      }
+      const metricCodes = new Set(readImportMetricDefinitions(batch.project).map(metric => metric.code));
+      if (parsed.some(entry => entry.itemType === 'test_measurement' && entry.metricCode && !metricCodes.has(entry.metricCode))) throw new Error('源行测试项目不在当前项目正式字典中');
+      for (const entry of related) db.prepare('DELETE FROM data_import_items WHERE id = ? AND batch_id = ?').run(entry.id, input.batchId);
+      insertItems(input.batchId, parsed);
+    }
+    const currentItems = sourceGroups.size ? getDataImportBatch(input.batchId, input.userId).items : batch.items;
+    const corrected = new Map(input.corrections.filter(correction => correction.sourceCells === undefined).map(correction => [correction.id, correction]));
+    const nextItems = currentItems.map(item => {
+      const correction = corrected.get(item.id);
+      const next = correction ? applyCorrection(item, correction) : { ...item, payload: { ...item.payload } };
+      if (correction?.payload && Object.hasOwn(correction.payload, 'sessionOrder')) {
+        next.payload.sessionOrderProvided = true;
+        delete next.payload.sessionOrderInferred;
+      }
+      if (correction?.payload && Object.hasOwn(correction.payload, 'srpe')) next.payload.srpeCalculated = false;
+      if (next.itemType !== 'scoring_rule' && !next.athleteId && !correction?.athleteId) {
+        const candidate = batch.athleteCandidates.find(candidate => candidate.normalizedName === dataImportPersonKey(next) && !candidate.excluded);
+        if (candidate?.matchedAthleteId) next.athleteId = candidate.matchedAthleteId;
+      }
+      return next;
+    });
+    for (const correction of input.corrections) {
+      if (correction.resolution === undefined) continue;
+      for (const item of nextItems) if (item.payload.valueReviewMemberOf === correction.id) {
+        item.resolution = correction.resolution ?? '';
+        if (item.payload.trainingRecordTeamId) item.payload.trainingRecordExcluded = item.resolution === 'skip';
+        if (item.resolution !== 'skip' && item.quality === 'skipped') item.quality = 'valid';
+      }
+    }
+    for (const correction of input.corrections) {
+      if (!correction.payload || !('valueReview' in correction.payload)) continue;
+      applyValueReview(nextItems, correction.id, correction.payload.valueReview, allowed, input.userId);
+    }
+    persistValidatedImportItems(input.batchId, nextItems, allowed, candidateNames);
+    input.authorizeBatch?.();
+    advanceImportRevision(input.batchId, input.userId, input.expectedRevision);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  return getDataImportBatch(input.batchId, input.userId, false, input.reviewTargetId);
+}
+
+export function updateDataImportAthleteCandidates(input: {
+  batchId: string;
+  userId: number;
+  expectedRevision?: number;
+  authorizeBatch?: () => void;
+  allowedTeams: Set<string>;
+  athletes: ImportAthlete[];
+  autoMatch?: boolean;
+  corrections: Array<{
+    id: number;
+    name?: string;
+    team?: string;
+    gender?: string;
+    /** 关联已有运动员；null 表示解除关联回到待建档 */
+    matchedAthleteId?: number | null;
+    /** 移除该人员，其关联业务记录一并排除 */
+    excluded?: boolean;
+    /** 人员确认弹窗中的确认状态（仅映射草稿，不写正式表） */
+    confirmed?: boolean;
+  }>;
+}) {
+  // 超限显式拒绝而不是静默截断：截断会让用户以为全部修改已保存。
+  if (input.corrections.length > 500)
+    throw new Error('单次最多保存 500 条人员修改，请分批保存后重试。');
+  const batch = getDataImportBatch(input.batchId, input.userId);
+  if (batch.status !== 'reviewing') throw new Error('只有待审核批次可以修改新运动员资料。');
+  const update =
+    db.prepare(`UPDATE data_import_athlete_candidates SET name = ?, team = ?, gender = ?,
+    matched_athlete_id = ?, confirmed = ?, excluded = ?, messages_json = ?
+    WHERE id = ? AND batch_id = ? AND status = 'pending'`);
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    input.authorizeBatch?.();
+    assertImportRevision(input.batchId, input.userId, input.expectedRevision);
+    const corrections = [...input.corrections];
+    if (input.autoMatch) {
+      const explicit = new Set(corrections.map(correction => correction.id));
+      const flagInactive = db.prepare(`UPDATE data_import_athlete_candidates SET confirmed=0, suggested_json=?, messages_json=?
+        WHERE id=? AND batch_id=? AND status='pending'`);
+      let flaggedInactive = false;
+      for (const candidate of batch.athleteCandidates) {
+        if (explicit.has(candidate.id) || candidate.status !== 'pending' || candidate.excluded ||
+          candidate.matchedAthleteId || candidate.messages.some(message => message.includes('系统运动员编号')) ||
+          !input.allowedTeams.has(candidate.team)) continue;
+        const matches = activeTeamNameMatches(input.athletes, candidate.project, candidate.team, candidate.name);
+        if (matches.length === 1) {
+          corrections.push({ id: candidate.id, matchedAthleteId: matches[0].id, confirmed: true });
+        } else if (!matches.length) {
+          const inactive = input.athletes.filter(athlete => athlete.active === false &&
+            athlete.project === candidate.project && athlete.team === candidate.team &&
+            normalizedName(athlete.name) === normalizedName(candidate.name)).map(toSuggestion);
+          if (inactive.length && (candidate.confirmed || candidate.messages[0] !== inactiveImportPersonMessage ||
+            JSON.stringify(candidate.suggested) !== JSON.stringify(inactive))) {
+            flagInactive.run(JSON.stringify(inactive), JSON.stringify([inactiveImportPersonMessage]), candidate.id, input.batchId);
+            flaggedInactive = true;
+          }
+        }
+      }
+      if (!corrections.length && !flaggedInactive) {
+        db.exec('COMMIT');
+        return batch;
+      }
+    }
+    for (const correction of corrections) {
+      const current = batch.athleteCandidates.find((candidate) => candidate.id === correction.id);
+      if (!current || current.status !== 'pending') continue;
+      const name = 'name' in correction ? text(correction.name) : current.name;
+      const team = 'team' in correction ? text(correction.team) : current.team;
+      const gender = 'gender' in correction ? text(correction.gender) : current.gender;
+      const excluded = 'excluded' in correction ? Boolean(correction.excluded) : current.excluded;
+      let confirmed = 'confirmed' in correction ? Boolean(correction.confirmed) : current.confirmed;
+      let matchedAthleteId =
+        'matchedAthleteId' in correction
+          ? correction.matchedAthleteId ?? null
+          : current.matchedAthleteId;
+      const messages: string[] = [];
+      const numberMessages = current.messages.filter(message => message.includes('系统运动员编号'));
+      if (!excluded && !matchedAthleteId && numberMessages.length && confirmed &&
+          (!('matchedAthleteId' in correction) || correction.matchedAthleteId !== null))
+        throw new Error(`${current.name}：请明确选择对应档案或新建运动员。`);
+      if (!excluded && !matchedAthleteId && team && !numberMessages.length) {
+        const existing = activeTeamNameMatches(input.athletes, current.project, team, name);
+        if (existing.length === 1) {
+          matchedAthleteId = existing[0].id;
+          confirmed = true;
+        } else if (existing.length > 1 && confirmed) {
+          messages.push('同队存在多名同名运动员，请选择具体档案');
+        }
+      }
+      if (!excluded) {
+        if (!name || name.length > 40) messages.push('姓名不能为空且不能超过40个字符');
+        if (gender && !['男', '女'].includes(gender)) messages.push('性别应为男、女或暂不填写');
+        if (matchedAthleteId) {
+          // 关联已有运动员必须真实存在、在当前权限范围内且项目一致；不允许仅凭参数越权关联。
+          const target = input.athletes.find((athlete) => athlete.id === matchedAthleteId);
+          if (!target || target.project !== current.project) {
+            matchedAthleteId = null;
+            messages.push('所选已有运动员不存在或不在当前权限范围内');
+          }
+        } else if (!input.allowedTeams.has(team)) {
+          messages.push('所属队伍不在当前账号权限范围内');
+        }
+        if (messages.length) throw new Error(`${current.name}：${messages.join('；')}`);
+      }
+      update.run(
+        name,
+        team,
+        gender,
+        matchedAthleteId,
+        confirmed ? 1 : 0,
+        excluded ? 1 : 0,
+        JSON.stringify(
+          excluded
+            ? ['已移除该人员，其关联业务记录将一并排除']
+            : matchedAthleteId
+              ? ['将关联已有运动员，非空档案资料按本次导入更新']
+              : confirmed ? ['将创建无登录账号的最小运动员档案，姓名与所属队伍以外的资料可稍后补充']
+                : numberMessages.length ? numberMessages : current.messages
+        ),
+        current.id,
+        input.batchId
+      );
+    }
+    const updated = getDataImportBatch(input.batchId, input.userId);
+    const candidates = new Map(updated.athleteCandidates.map(candidate => [candidate.normalizedName, candidate]));
+    const allowed = new Set(input.athletes.map(athlete => athlete.id));
+    const changedKeys = new Set(updated.athleteCandidates.filter(candidate => {
+      const previous = batch.athleteCandidates.find(entry => entry.id === candidate.id);
+      return previous && (previous.matchedAthleteId !== candidate.matchedAthleteId || previous.excluded !== candidate.excluded);
+    }).map(candidate => candidate.normalizedName));
+    // 身份变化使既有合并选择失效，先恢复来源，再按新身份检测冲突。
+    for (const item of updated.items) {
+      const decision = item.payload.valueReviewDecision as { sources?: Array<{ id: number }> } | undefined;
+      if (decision?.sources?.some(source => updated.items.some(entry => entry.id === source.id && changedKeys.has(dataImportPersonKey(entry)))))
+        applyValueReview(updated.items, item.id, { action: 'reopen' }, allowed, input.userId);
+    }
+    for (const item of updated.items) {
+      const candidate = candidates.get(dataImportPersonKey(item));
+      if (!candidate || candidate.status !== 'pending' || item.itemType === 'invalid_row' || item.itemType === 'scoring_rule') continue;
+      item.athleteId = candidate.excluded ? null : candidate.matchedAthleteId;
+      if (item.itemType === 'athlete_profile') item.payload.gender = candidate.gender;
+      item.quality = item.resolution === 'skip' || candidate.excluded ? 'skipped' : 'valid';
+    }
+    persistValidatedImportItems(input.batchId, updated.items, allowed, new Set(candidates.keys()));
+    input.authorizeBatch?.();
+    advanceImportRevision(input.batchId, input.userId, input.expectedRevision);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  return getDataImportBatch(input.batchId, input.userId);
+}
+
+export type UpsertResult = {
+  skipped: boolean;
+  entityId: number;
+  sessionId?: number;
+  created: boolean;
+  /** 补全已有空字段的数量 */
+  filled: number;
+  /** 覆盖已有非空字段的数量 */
+  overwritten: number;
+};
+
+function resolveItemPolicy(
+  item: DataImportItemView,
+  batchPolicy: 'skip' | 'update'
+): 'skip' | 'update' {
+  return importRecordPolicy(item, batchPolicy);
+}
+
+function upsertTrainingItem(
+  item: DataImportItemView,
+  batchId: string,
+  userId: number,
+  batchPolicy: 'skip' | 'update'
+): UpsertResult {
+  const policy = resolveItemPolicy(item, batchPolicy);
+  const existingSession = findImportStrengthSession(item);
+  let sessionId = existingSession?.id;
+  const payload = item.payload;
+  const existing = sessionId
+    ? (db
+        .prepare(
+          'SELECT * FROM strength_result_sets WHERE training_session_id = ? AND exercise_name = ? AND set_index = ?'
+        )
+        .get(sessionId, item.exerciseName, item.setIndex) as Record<string, unknown> | undefined)
+    : undefined;
+  const category = text(payload.trainingCategory) || inferStrengthCategory(item.exerciseName);
+  const position = text(payload.bodyPosition) || inferStrengthBodyPosition(item.exerciseName);
+  const note = text(payload.note);
+  const sourceRow = `${item.sourceSheet}!${item.sourceAddress}`;
+  if (existing) {
+    // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
+    const patch: Array<[string, unknown]> = [
+      ['exercise_code', text(payload.exerciseCode)],
+      ['planned_weight_kg', optionalNumber(payload.plannedWeightKg)],
+      ['completed', optionalNumber(payload.completed)],
+      ['training_environment', text(payload.trainingEnvironment)],
+      ['duration_min', optionalNumber(payload.durationMin)],
+      ['distance_km', optionalNumber(payload.distanceKm)],
+      ['intensity_zone', text(payload.intensityZone)],
+      ['target_reps', item.targetReps],
+      ['actual_reps', item.actualReps],
+      ['actual_weight_kg', item.actualWeightKg],
+      ['intensity_percent', item.intensityPercent],
+      ['training_category', category],
+      ['body_position', position],
+      ['rpe', optionalNumber(payload.rpe)],
+      ['note', note],
+    ];
+    const proposed = patch.filter(
+      ([column, value]) => isProvided(value) && !importReviewValuesEqual(existing[column], value)
+    );
+    const changed = proposed.filter(
+      ([column]) => policy === 'update' || !isProvided(existing[column])
+    );
+    const filled = changed.filter(([column]) => !isProvided(existing[column])).length;
+    const overwritten = changed.length - filled;
+    if (!changed.length)
+      return { skipped: true, entityId: Number(existing.id), sessionId, created: false, filled: 0, overwritten: 0 };
+    const setSql = changed.map(([column]) => `${column} = ?`).join(', ');
+    db.prepare(
+      `UPDATE strength_result_sets SET ${setSql}, source = 'file_import', data_import_batch_id = ?, source_row = ?, original_text = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).run(
+      ...sqlList(changed.map(([, value]) => value)),
+      batchId,
+      sourceRow,
+      item.rawValue,
+      Number(existing.id)
+    );
+    return { skipped: false, entityId: Number(existing.id), sessionId, created: false, filled, overwritten };
+  }
+  if (!sessionId) {
+    const order = db
+      .prepare(
+        'SELECT COALESCE(MAX(session_order), 0) AS value FROM training_sessions WHERE athlete_id = ? AND session_date = ?'
+      )
+      .get(item.athleteId, item.eventDate) as { value: number };
+    const inserted = db
+      .prepare(
+        `INSERT INTO training_sessions (
+      athlete_id, session_date, session_order, training_type, structure_type, intensity_zone, content,
+      duration_min, distance_km, duration_reported, distance_reported, rpe, srpe, smvl, source, quality, is_demo, created_by
+    ) VALUES (?, ?, ?, '力量训练', '体能训练', 'AN', ?, 0, 0, 0, 0, NULL, NULL, 0, 'file_import', ?, 0, ?)`
+      )
+      .run(
+        item.athleteId,
+        item.eventDate,
+        optionalNumber(payload.sessionOrder) ?? Number(order.value) + 1,
+        item.sessionLabel,
+        item.quality === 'warning' ? 'partial' : 'valid',
+        userId
+      );
+    sessionId = Number(inserted.lastInsertRowid);
+    saveImportSessionContext(sessionId, { ...item, payload: { ...payload, activityCode: 'strength', trainingType: '力量训练' } }, true);
+  }
+  const inserted = db
+    .prepare(
+      `INSERT INTO strength_result_sets (
+    training_session_id, exercise_name, set_index, target_reps, actual_reps, actual_weight_kg,
+    exercise_code, planned_weight_kg, duration_min, distance_km, training_category, body_position, training_environment, intensity_percent, intensity_zone, rpe,
+    completed, note, source, data_import_batch_id, source_row, original_text, created_by
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'file_import', ?, ?, ?, ?)`
+    )
+    .run(
+      sessionId,
+      item.exerciseName,
+      item.setIndex,
+      item.targetReps,
+      item.actualReps,
+      item.actualWeightKg,
+      text(payload.exerciseCode),
+      optionalNumber(payload.plannedWeightKg),
+      optionalNumber(payload.durationMin) ?? 0,
+      optionalNumber(payload.distanceKm) ?? 0,
+      category,
+      position,
+      text(payload.trainingEnvironment) || '陆上',
+      item.intensityPercent,
+      text(payload.intensityZone) || 'AN',
+      optionalNumber(payload.rpe),
+      optionalNumber(payload.completed) ?? 1,
+      note,
+      batchId,
+      sourceRow,
+      item.rawValue,
+      userId
+    );
+  return {
+    skipped: false,
+    entityId: Number(inserted.lastInsertRowid),
+    sessionId,
+    created: true,
+    filled: 0,
+    overwritten: 0,
+  };
+}
+
+function updateSessionTotals(sessionId: number) {
+  const totals = db
+    .prepare(
+      `SELECT COALESCE(SUM(actual_reps * actual_weight_kg), 0) AS volume FROM strength_result_sets WHERE training_session_id = ?`
+    )
+    .get(sessionId) as { volume: number };
+  db.prepare(
+    'UPDATE training_sessions SET smvl = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?'
+  ).run(Math.round(Number(totals.volume) * 10) / 10, sessionId);
+}
+
+function importedTestIdentity(item: DataImportItemView) {
+  return { athleteId: Number(item.athleteId), date: item.eventDate, type: item.testType || '力量素质测试',
+    protocol: text(item.payload.protocol), protocolVersion: text(item.payload.protocolVersion),
+    context: text(item.payload.testContext), attempt: Number(item.payload.attemptOrder) || 1 };
+}
+
+function upsertTestItem(
+  item: DataImportItemView,
+  batchId: string,
+  userId: number,
+  batchPolicy: 'skip' | 'update'
+): UpsertResult {
+  if (item.payload.fmsObservation && item.testType === 'FMS测试') {
+    const identity = importedTestIdentity(item);
+    const session = findTestSession(db, identity) ?? saveTestSession(db, {
+      ...identity, source: 'file_import', quality: 'partial', createdBy: userId,
+    });
+    const stored = storedFmsObservation(session.id, item.metricCode);
+    const before = stored ?? {};
+    const current = item.payload.fmsObservation as FmsObservation;
+    const observation = resolveItemPolicy(item, batchPolicy) === 'skip' ? { ...current, ...before } : { ...before, ...current };
+    const changed = !stored || Object.entries(observation).some(([key, value]) => before[key as FmsInputKey] !== value);
+    if (changed) db.prepare(`INSERT INTO fms_import_observations(test_session_id,metric_code,observation_json,data_import_batch_id)
+      VALUES(?,?,?,?) ON CONFLICT(test_session_id,metric_code) DO UPDATE SET
+      observation_json=excluded.observation_json,data_import_batch_id=excluded.data_import_batch_id`)
+      .run(session.id, item.metricCode, JSON.stringify(observation), batchId);
+    const score = fmsFinalScore(item.metricCode, observation);
+    if (score === null) return { entityId: session.id, sessionId: session.id, skipped: !changed, created: !stored, filled: 0, overwritten: Number(Boolean(stored && changed)) };
+    const result = upsertTestItem({ ...item, valueNum: score, payload: { ...item.payload, fmsObservation: undefined } }, batchId, userId, batchPolicy);
+    if (changed) result.skipped = false;
+    return result;
+  }
+  const existingConflict = detectItemConflict(item);
+  if (existingConflict.identical && existingConflict.entityType === 'test_measurement' && existingConflict.entityId !== null)
+    return { skipped: true, entityId: existingConflict.entityId, created: false, filled: 0, overwritten: 0 };
+  const identity = importedTestIdentity(item);
+  const stored = findTestSession(db, identity);
+  const policy = item.resolution === 'update' ? 'update' : batchPolicy;
+  const duration = optionalNumber(item.payload.durationMin);
+  const durationMin = duration !== null && duration > 0 &&
+    (policy === 'update' || stored?.durationMin == null) ? duration : null;
+  const durationChanged = stored !== undefined && durationMin !== null && stored.durationMin !== durationMin;
+  const durationFilled = durationChanged && stored.durationMin === null ? 1 : 0;
+  const durationOverwritten = Number(durationChanged) - durationFilled;
+  const session = saveTestSession(db, { ...identity, source: 'file_import',
+    durationMin, quality: item.quality === 'warning' ? 'partial' : 'valid', createdBy: userId });
+  const existing = db
+    .prepare(
+      'SELECT id, value_num AS valueNum, target_value AS targetValue, unit, note FROM test_measurements WHERE test_session_id = ? AND metric_code = ? AND side = ?'
+    )
+    .get(session.id, item.metricCode, item.side) as
+    | { id: number; valueNum: number | null; targetValue: number | null; unit: string; note: string }
+    | undefined;
+  const note = text(item.payload.note);
+  if (existing) {
+    const proposed = { valueNum: item.valueNum, targetValue: optionalNumber(item.payload.targetValue), unit: item.unit, note };
+    const keys = ['valueNum', 'targetValue', 'unit', 'note'] as const;
+    const changed = keys.filter(key => isProvided(proposed[key]) && !importReviewValuesEqual(proposed[key], existing[key])
+      && (policy === 'update' || !isProvided(existing[key])));
+    if (!changed.length) return { skipped: !durationChanged, entityId: existing.id, created: false, filled: durationFilled, overwritten: durationOverwritten };
+    const next = { ...existing };
+    for (const key of changed) Object.assign(next, { [key]: proposed[key] });
+    db.prepare(`UPDATE test_measurements SET value_num = ?, target_value = ?, unit = ?, note = ?, quality = ?, source = 'file_import', is_demo = 0,
+      data_import_batch_id = ?, source_ref = ? WHERE id = ?`).run(next.valueNum, next.targetValue, next.unit, next.note,
+      item.quality === 'warning' ? 'partial' : 'valid', batchId, `${item.sourceSheet}!${item.sourceAddress}`, existing.id);
+    const filled = changed.filter(key => !isProvided(existing[key])).length;
+    return { skipped: false, entityId: existing.id, created: false, filled: filled + durationFilled, overwritten: changed.length - filled + durationOverwritten };
+  }
+  const inserted = db
+    .prepare(
+      `INSERT INTO test_measurements (
+    test_session_id, metric_code, value_num, target_value, unit, side, quality, source, is_demo, data_import_batch_id, source_ref, note
+  ) VALUES (?, ?, ?, ?, ?, ?, ?, 'file_import', 0, ?, ?, ?)`
+    )
+    .run(
+      session.id,
+      item.metricCode,
+      item.valueNum,
+      optionalNumber(item.payload.targetValue),
+      item.unit,
+      item.side,
+      item.quality === 'warning' ? 'partial' : 'valid',
+      batchId,
+      `${item.sourceSheet}!${item.sourceAddress}`,
+      note
+    );
+  return {
+    skipped: false,
+    entityId: Number(inserted.lastInsertRowid),
+    created: true,
+    filled: 0,
+    overwritten: 0,
+  };
+}
+
+function bodyColumnOf(field: string) {
+  return field.replace(/[A-Z]/g, (char) => `_${char.toLowerCase()}`);
+}
+
+function upsertBodyItem(
+  item: DataImportItemView,
+  batchId: string,
+  batchPolicy: 'skip' | 'update'
+): UpsertResult {
+  const policy = resolveItemPolicy(item, batchPolicy);
+  const quality = item.quality === 'warning' ? 'partial' : 'valid';
+  if (item.metricCode === 'body_composition') {
+    const payload = item.payload;
+    const existing = db
+      .prepare('SELECT * FROM athlete_body_measurements WHERE athlete_id = ? AND measurement_date = ?')
+      .get(item.athleteId, item.eventDate) as Record<string, unknown> | undefined;
+    const provided = BODY_COMPOSITION_FIELDS.map(([key]) => [key, optionalNumber(payload[key])] as const)
+      .filter(([, value]) => value !== null);
+    const note = text(payload.note);
+    if (existing) {
+      // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
+      const isBlank = (key: string) => {
+        const value = existing[bodyColumnOf(key)];
+        return value === null || value === undefined;
+      };
+      const proposed = provided.filter(([key, value]) => {
+        const column = bodyColumnOf(key);
+        return !importReviewValuesEqual(existing[column], value);
+      });
+      const changed = proposed.filter(([key]) => policy === 'update' || isBlank(key));
+      const noteChanged = isProvided(note) && text(existing.note) !== note;
+      const noteApplied = noteChanged && (policy === 'update' || !text(existing.note));
+      const blanks = changed.filter(([key]) => isBlank(key)).length;
+      const filled = blanks + (noteApplied && !text(existing.note) ? 1 : 0);
+      const overwritten =
+        changed.length - blanks + (noteApplied && text(existing.note) ? 1 : 0);
+      if (!changed.length && !noteApplied)
+        return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
+      const setParts = changed.map(([key]) => `${bodyColumnOf(key)} = ?`);
+      const params = sqlList(changed.map(([, value]) => value));
+      if (noteApplied) {
+        setParts.push('note = ?');
+        params.push(note);
+      }
+      db.prepare(
+        `UPDATE athlete_body_measurements SET ${setParts.join(', ')}, source = 'file_import', quality = ?, is_demo = 0, data_import_batch_id = ? WHERE id = ?`
+      ).run(...params, quality, batchId, Number(existing.id));
+      return { skipped: false, entityId: Number(existing.id), created: false, filled, overwritten };
+    }
+    const columns = ['athlete_id', 'measurement_date', ...provided.map(([key]) => bodyColumnOf(key))];
+    const values: SqlValue[] = [
+      item.athleteId,
+      item.eventDate,
+      ...sqlList(provided.map(([, value]) => value)),
+    ];
+    if (isProvided(note)) {
+      columns.push('note');
+      values.push(note);
+    }
+    const inserted = db
+      .prepare(
+        `INSERT INTO athlete_body_measurements (${columns.join(', ')}, source, quality, is_demo, data_import_batch_id)
+      VALUES (${columns.map(() => '?').join(', ')}, 'file_import', ?, 0, ?)`
+      )
+      .run(...values, quality, batchId);
+    return {
+      skipped: false,
+      entityId: Number(inserted.lastInsertRowid),
+      created: true,
+      filled: 0,
+      overwritten: 0,
+    };
+  }
+  const existing = db
+    .prepare(
+      'SELECT id, height_cm AS heightCm, weight_kg AS weightKg FROM athlete_body_measurements WHERE athlete_id = ? AND measurement_date = ?'
+    )
+    .get(item.athleteId, item.eventDate) as
+    | { id: number; heightCm: number | null; weightKg: number | null }
+    | undefined;
+  const column = item.metricCode === 'height_cm' ? 'height_cm' : 'weight_kg';
+  const current = item.metricCode === 'height_cm' ? existing?.heightCm : existing?.weightKg;
+  if (existing) {
+    if (current !== null && current !== undefined) {
+      // 该字段已有值：跳过策略不更新已有数据；更新策略才覆盖。
+      if (policy === 'skip' || importReviewValuesEqual(current, item.valueNum))
+        return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
+      db.prepare(
+        `UPDATE athlete_body_measurements SET ${column} = ?, source = 'file_import', quality = ?, is_demo = 0, data_import_batch_id = ? WHERE id = ?`
+      ).run(item.valueNum, quality, batchId, existing.id);
+      return { skipped: false, entityId: existing.id, created: false, filled: 0, overwritten: 1 };
+    }
+    // 字段为空：属于补全空字段，不破坏该行其他数据。
+    db.prepare(
+      `UPDATE athlete_body_measurements SET ${column} = ?, source = 'file_import', quality = ?, is_demo = 0, data_import_batch_id = ? WHERE id = ?`
+    ).run(item.valueNum, quality, batchId, existing.id);
+    return { skipped: false, entityId: existing.id, created: false, filled: 1, overwritten: 0 };
+  }
+  const inserted = db
+    .prepare(
+      `INSERT INTO athlete_body_measurements (athlete_id, measurement_date, ${column}, source, quality, is_demo, data_import_batch_id)
+    VALUES (?, ?, ?, 'file_import', ?, 0, ?)`
+    )
+    .run(item.athleteId, item.eventDate, item.valueNum, quality, batchId);
+  return {
+    skipped: false,
+    entityId: Number(inserted.lastInsertRowid),
+    created: true,
+    filled: 0,
+    overwritten: 0,
+  };
+}
+
+const PROFILE_DETAIL_FIELDS: Array<[string, string, string]> = [
+  ['ethnicity', '民族', 'ethnicity'],
+  ['phone', '手机号', 'phone'],
+  ['bloodType', '血型', 'blood_type'],
+  ['emergencyContact', '紧急联系人', 'emergency_contact'],
+  ['emergencyPhone', '紧急电话', 'emergency_phone'],
+  ['education', '学历', 'education'],
+  ['technicalLevel', '技术等级', 'technical_level'],
+  ['position', '位置号位', 'position'],
+  ['healthStatus', '身体状态', 'health_status'],
+  ['bestResult', '最好成绩', 'best_result'],
+  ['eventItem', '具体小项', 'event_item'],
+  ['representativeUnit', '代表单位', 'representative_unit'],
+  ['trainingYears', '训练年限', 'training_years'],
+  ['bestResultEvent', '对应赛事', 'best_result_event'],
+  ['bestResultDate', '成绩日期', 'best_result_date'],
+  ['nativePlace', '籍贯', 'native_place'],
+  ['homeAddress', '家庭住址', 'home_address'],
+  ['athleteStatus', '训练状态', 'athlete_status'],
+  ['startSportDate', '开始运动日期', 'start_sport_date'],
+  ['trainingVenue', '训练场地', 'training_venue'],
+  ['currentEvent', '备战赛事', 'current_event'],
+  ['trainingPhase', '备战阶段', 'training_phase'],
+  ['campPeriod', '集训时间', 'camp_period'],
+  ['originPlace', '输送地', 'origin_place'],
+  ['originUnit', '输送单位', 'origin_unit'],
+  ['originCoach', '输送教练', 'origin_coach'],
+  ['specialties', '优势项', 'specialties'],
+  ['notes', '备注', 'notes'],
+];
+
+/**
+ * 运动员档案写入：区分新建 / 补全空字段 / 覆盖已有字段。
+ * 空白一律视为未提供；档案非空资料按本次导入自动更新；
+ * 队伍不通过导入变更，覆盖计数供结果摘要展示。
+ */
+function upsertAthleteProfileItem(
+  item: DataImportItemView,
+  batchId: string,
+  batchPolicy: 'skip' | 'update'
+): UpsertResult {
+  const policy = resolveItemPolicy(item, batchPolicy);
+  const p = item.payload;
+  const existing = db
+    .prepare(
+      `SELECT a.gender, a.team_id AS teamId, a.birth_date AS birthDate,
+        ap.technical_level AS technicalLevel, ap.best_result AS bestResult
+      FROM athletes a LEFT JOIN athlete_profiles ap ON ap.athlete_id = a.id WHERE a.id = ?`
+    )
+    .get(item.athleteId) as Record<string, unknown> | undefined;
+  if (!existing) throw new Error('运动员档案不存在，无法写入档案信息。');
+  const details = db
+    .prepare('SELECT * FROM athlete_profiles WHERE athlete_id = ?')
+    .get(item.athleteId) as Record<string, unknown> | undefined;
+  const origins = db
+    .prepare('SELECT * FROM athlete_origins WHERE athlete_id = ?')
+    .get(item.athleteId) as Record<string, unknown> | undefined;
+  let filled = 0;
+  let overwritten = 0;
+  const athleteSets: string[] = [];
+  const athleteParams: SqlValue[] = [];
+  const consider = (
+    currentValue: unknown,
+    newValue: string | number | null,
+    apply: (value: string | number) => void,
+    keepOnSkip: boolean = true
+  ) => {
+    const provided = isProvided(newValue);
+    const current = currentValue === null || currentValue === undefined ? '' : String(currentValue);
+    if (!provided) return;
+    const next = String(newValue);
+    if (current === next) return;
+    if (!current) {
+      filled += 1;
+      apply(newValue as string | number);
+      return;
+    }
+    if (policy === 'update') {
+      overwritten += 1;
+      apply(newValue as string | number);
+      return;
+    }
+    if (!keepOnSkip) apply(newValue as string | number);
+  };
+  const birthDateText = text(p.birthDate);
+  consider(existing.gender, text(p.gender), (value) => {
+    athleteSets.push('gender = ?');
+    athleteParams.push(value);
+  });
+  consider(existing.birthDate, validIsoDate(birthDateText) ? birthDateText : null, (value) => {
+    athleteSets.push('birth_date = ?');
+    athleteParams.push(value);
+  });
+  // 队伍是身份与权限归属，已有档案不通过数据导入调队。
+  if (athleteSets.length) {
+    db.prepare(
+      `UPDATE athletes SET ${athleteSets.join(', ')}, source = 'file_import', data_import_batch_id = ? WHERE id = ?`
+    ).run(...athleteParams, batchId, item.athleteId);
+  }
+  // 档案明细字段共用自动更新策略，空白不覆盖已有值。
+  const detailSets: string[] = [];
+  const detailParams: SqlValue[] = [];
+  for (const [key, , column] of PROFILE_DETAIL_FIELDS) {
+    const newValue = text(p[key]);
+    if (!isProvided(newValue)) continue;
+    const currentValue = details?.[column];
+    const current = currentValue === null || currentValue === undefined ? '' : String(currentValue);
+    if (current === newValue) continue;
+    if (!current) {
+      filled += 1;
+      detailSets.push(`${column} = ?`);
+      detailParams.push(newValue);
+    } else if (policy === 'update') {
+      overwritten += 1;
+      detailSets.push(`${column} = ?`);
+      detailParams.push(newValue);
+    }
+  }
+  if (details) {
+    if (detailSets.length) {
+      db.prepare(
+        `UPDATE athlete_profiles SET ${detailSets.join(', ')}, updated_at = CURRENT_TIMESTAMP WHERE athlete_id = ?`
+      ).run(...detailParams, item.athleteId);
+    }
+  } else {
+    db.prepare(
+      `INSERT INTO athlete_profiles (athlete_id, ${PROFILE_DETAIL_FIELDS.map(([, , column]) => column).join(', ')})
+      VALUES (?, ${PROFILE_DETAIL_FIELDS.map(() => '?').join(', ')})`
+    ).run(
+      item.athleteId,
+      ...PROFILE_DETAIL_FIELDS.map(([key]) => {
+        const value = text(p[key]);
+        return isProvided(value) ? value : key === 'trainingYears' ? null : '';
+      })
+    );
+    filled += PROFILE_DETAIL_FIELDS.filter(([key]) => isProvided(text(p[key]))).length;
+  }
+  const region = text(p.region);
+  const city = text(p.city);
+  const county = text(p.county);
+  if (isProvided(region) && isProvided(city)) {
+    const currentProvince = origins ? String(origins.province ?? '') : '';
+    const currentCity = origins ? String(origins.city ?? '') : '';
+    const currentCounty = origins ? String(origins.county ?? '') : '';
+    const willFill = !currentProvince || !currentCity;
+    const willOverwrite =
+      (currentProvince && currentProvince !== region) ||
+      (currentCity && currentCity !== city) ||
+      (currentCounty && isProvided(county) && currentCounty !== county);
+    if (willOverwrite && policy === 'skip' && !willFill) {
+      // 保留原值，不隐式更新。
+    } else if (origins) {
+      if (willFill) filled += 1;
+      else if (willOverwrite) overwritten += 1;
+      db.prepare(
+        `UPDATE athlete_origins SET province = ?, city = ?, county = ?, source = 'file_import', quality = 'valid', is_demo = 0, updated_at = CURRENT_TIMESTAMP WHERE athlete_id = ?`
+      ).run(region, city, county || currentCounty, item.athleteId);
+    } else {
+      db.prepare(
+        `INSERT INTO athlete_origins (athlete_id, province, city, county, source, quality, is_demo) VALUES (?, ?, ?, ?, 'file_import', 'valid', 0)`
+      ).run(item.athleteId, region, city, county);
+      filled += 1;
+    }
+  }
+  if (text(p.gender) && region && city && county)
+    db.prepare(
+      `UPDATE athletes SET profile_status = 'complete' WHERE id = ? AND profile_status = 'incomplete'`
+    ).run(item.athleteId);
+  return {
+    skipped: filled + overwritten === 0,
+    entityId: Number(item.athleteId),
+    created: false,
+    filled,
+    overwritten,
+  };
+}
+
+function upsertWellnessItem(
+  item: DataImportItemView,
+  batchPolicy: 'skip' | 'update'
+): UpsertResult {
+  const policy = resolveItemPolicy(item, batchPolicy);
+  const p = item.payload;
+  const existing = db
+    .prepare('SELECT * FROM daily_wellness WHERE athlete_id=? AND wellness_date=?')
+    .get(item.athleteId, item.eventDate) as Record<string, unknown> | undefined;
+  const quality = item.quality === 'warning' ? 'partial' : 'valid';
+  const map: Array<[string, string]> = [
+    ['sleepHours', 'sleep_hours'],
+    ['sleepQuality', 'sleep_quality'],
+    ['morningPulse', 'morning_pulse'],
+    ['weightKg', 'weight_kg'],
+    ['fatigueIndex', 'fatigue_index'],
+    ['sorenessIndex', 'soreness_index'],
+    ['moodIndex', 'mood_index'],
+  ];
+  const provided = map
+    .map(([key, column]) => [column, optionalNumber(p[key])] as const)
+    .filter(([, value]) => value !== null);
+  const status = text(p.status);
+  const statusProvided = ['normal', 'attention', 'alert', 'rest', 'missing'].includes(status);
+  if (existing) {
+    // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
+    const isBlank = (column: string) => existing[column] === null || existing[column] === undefined;
+    const proposed = provided.filter(
+      ([column, value]) => !importReviewValuesEqual(existing[column], value)
+    );
+    const changed = proposed.filter(([column]) => policy === 'update' || isBlank(column));
+    const statusChanged = statusProvided && text(existing.status) !== status;
+    const statusApplied = statusChanged && (policy === 'update' || !text(existing.status));
+    const note = text(p.note);
+    const noteApplied = Boolean(note) && note !== text(existing.note) && (policy === 'update' || !text(existing.note));
+    const blanks = changed.filter(([column]) => isBlank(column)).length;
+    const filled = blanks + (statusApplied && !text(existing.status) ? 1 : 0) + (noteApplied && !text(existing.note) ? 1 : 0);
+    const overwritten =
+      changed.length - blanks + (statusApplied && text(existing.status) ? 1 : 0) + (noteApplied && text(existing.note) ? 1 : 0);
+    if (!changed.length && !statusApplied && !noteApplied)
+      return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
+    const setParts = changed.map(([column]) => `${column} = ?`);
+    const params: SqlValue[] = sqlList(changed.map(([, value]) => value));
+    if (statusApplied) {
+      setParts.push('status = ?');
+      params.push(status);
+    }
+    if (noteApplied) { setParts.push('note = ?'); params.push(note); }
+    db.prepare(
+      `UPDATE daily_wellness SET ${setParts.join(', ')}, source = 'file_import', quality = ?, is_demo = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).run(...params, quality, Number(existing.id));
+    return { skipped: false, entityId: Number(existing.id), created: false, filled, overwritten };
+  }
+  const columns = ['athlete_id', 'wellness_date', ...provided.map(([column]) => column)];
+  const values: SqlValue[] = [
+    item.athleteId,
+    item.eventDate,
+    ...sqlList(provided.map(([, value]) => value)),
+  ];
+  columns.push('note');
+  values.push(text(p.note));
+  columns.push('status');
+  // 新记录才使用默认状态；已有记录绝不因空白被改写。
+  values.push(statusProvided ? status : 'normal');
+  const inserted = db
+    .prepare(
+      `INSERT INTO daily_wellness (${columns.join(', ')}, source, quality, is_demo)
+      VALUES (${columns.map(() => '?').join(', ')}, 'file_import', ?, 0)`
+    )
+    .run(...values, quality);
+  return {
+    skipped: false,
+    entityId: Number(inserted.lastInsertRowid),
+    created: true,
+    filled: 0,
+    overwritten: 0,
+  };
+}
+
+function saveImportSessionContext(id: number, item: DataImportItemView, created = false) {
+  const p = item.payload;
+  const stored = db.prepare("SELECT ts.*, (SELECT value_num FROM training_session_metrics WHERE training_session_id=ts.id AND metric_code='cadenceRpm') AS cadenceRpm FROM training_sessions ts WHERE id=?").get(id) as Record<string, unknown>;
+  const context = importTrainingContext(item, stored);
+  if (!importSnapshotMatches(item, stored)) throw new Error('正式课次的项目归属不匹配，不能通过导入修改。');
+  if (created) db.prepare("UPDATE training_sessions SET project_code=?, project_status='confirmed', project_source='file_import' WHERE id=?").run(context.project, id);
+  db.prepare('UPDATE training_sessions SET activity_code=?, training_category=?, rules_version=?, intensity_system=? WHERE id=?').run(context.activity, context.category, context.version, context.system, id);
+  db.prepare("UPDATE training_sessions SET srpe=NULL WHERE id=? AND (duration_reported=0 OR rpe IS NULL)").run(id);
+  const cadenceChanged = isProvided(p.cadenceRpm) && !importReviewValuesEqual(stored.cadenceRpm, p.cadenceRpm);
+  if (cadenceChanged) db.prepare("INSERT INTO training_session_metrics(training_session_id,metric_code,value_num,unit,source) VALUES (?,'cadenceRpm',?,'rpm','file_import') ON CONFLICT(training_session_id,metric_code) DO UPDATE SET value_num=excluded.value_num,source=excluded.source").run(id, Number(p.cadenceRpm));
+  const changes = [
+    [stored.cadenceRpm, p.cadenceRpm], [stored.activity_code, p.activityCode], [stored.intensity_system, p.intensitySystem],
+  ].filter(([oldValue, newValue]) => isProvided(newValue) && !importReviewValuesEqual(oldValue, newValue));
+  return { filled: changes.filter(([oldValue]) => !isProvided(oldValue)).length, overwritten: changes.filter(([oldValue]) => isProvided(oldValue)).length };
+}
+
+function upsertSessionItem(
+  item: DataImportItemView,
+  userId: number,
+  batchPolicy: 'skip' | 'update'
+): UpsertResult {
+  const policy = resolveItemPolicy(item, batchPolicy);
+  const p = item.payload;
+  const order = Math.max(1, Math.round(optionalNumber(p.sessionOrder) || 1));
+  const existing = db
+    .prepare("SELECT ts.*, (SELECT value_num FROM training_session_metrics WHERE training_session_id=ts.id AND metric_code='cadenceRpm') AS cadenceRpm FROM training_sessions ts WHERE athlete_id=? AND session_date=? AND session_order=?")
+    .get(item.athleteId, item.eventDate, order) as Record<string, unknown> | undefined;
+  if (existing && p.trainingRecordTeamId && !db.prepare(`SELECT 1 FROM training_record_session_scope
+    WHERE session_id=? AND team_id=?`).get(Number(existing.id), Number(p.trainingRecordTeamId)))
+    throw new Error('课次归属已变化，请重新上传并校验。');
+  const quality = item.quality === 'warning' ? 'partial' : 'valid';
+  const duration = optionalNumber(p.durationMin);
+  const distance = optionalNumber(p.distanceKm);
+  // 时长/距离：仅在文件或校对明确提供（含真实 0）时写入；空白不改已有值。
+  const durationProvided = Boolean(p.durationReported) || duration !== null;
+  const distanceProvided = Boolean(p.distanceReported) || distance !== null;
+  const numberFields: Array<[string, string]> = [
+    ['rpe', 'rpe'],
+    ['srpe', 'srpe'],
+    ['smvl', 'smvl'],
+    ['averageHeartRate', 'average_heart_rate'],
+    ['maxHeartRate', 'max_heart_rate'],
+    ['averagePowerW', 'average_power_w'],
+    ['strokeRateSpm', 'stroke_rate_spm'],
+  ];
+  const textFields: Array<[string, string]> = [
+    ['startTime', 'start_time'],
+    ['trainingType', 'training_type'],
+    ['structureType', 'structure_type'],
+    ['intensityZone', 'intensity_zone'],
+    ['content', 'content'],
+  ];
+  const providedNumbers = numberFields
+    .map(([key, column]) => [column, optionalNumber(p[key])] as const)
+    .filter(([, value]) => value !== null);
+  const providedTexts = textFields
+    .map(([key, column]) => [column, text(p[key])] as const)
+    .filter(([, value]) => isProvided(value));
+  if (existing) {
+    // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
+    const changes: Array<[string, unknown]> = [];
+    const proposals: Array<[string, unknown, boolean]> = [];
+    const consider = (column: string, value: unknown, provided: boolean) => {
+      if (!provided || value === null) return;
+      const current = existing[column];
+      const currentText = current === null || current === undefined ? '' : String(current);
+      if (importReviewValuesEqual(current, value) || currentText === String(value)) return;
+      // 时长/距离列 NOT NULL 默认 0，是否空缺以 reported 标记为准；其余字段 0 视为真实值。
+      const blank =
+        column === 'duration_min'
+          ? Number(existing.duration_reported ?? 1) !== 1
+          : column === 'distance_km'
+            ? Number(existing.distance_reported ?? 1) !== 1
+            : !currentText && current !== 0;
+      proposals.push([column, value, blank]);
+    };
+    consider('duration_min', duration, durationProvided);
+    consider('distance_km', distance, distanceProvided);
+    for (const [column, value] of providedNumbers) consider(column, value, true);
+    for (const [column, value] of providedTexts) consider(column, value, true);
+    let filled = 0;
+    let overwritten = 0;
+    for (const [column, value, blank] of proposals) {
+      if (policy === 'skip' && !blank) continue;
+      if (blank) filled += 1;
+      else overwritten += 1;
+      changes.push([column, value]);
+    }
+    // 已报标记跟随字段写入：仅在实际写入时长/距离或更新策略下同步，避免 skip 改写已有元数据。
+    const appliedColumn = (column: string) => changes.some(([key]) => key === column);
+    if (
+      durationProvided &&
+      (policy === 'update' || appliedColumn('duration_min')) &&
+      Number(existing.duration_reported ?? 1) !== 1
+    )
+      changes.push(['duration_reported', 1]);
+    if (
+      distanceProvided &&
+      (policy === 'update' || appliedColumn('distance_km')) &&
+      Number(existing.distance_reported ?? 1) !== 1
+    )
+      changes.push(['distance_reported', 1]);
+    if (!changes.length) {
+      const contextChanges = saveImportSessionContext(Number(existing.id), item);
+      return { skipped: contextChanges.filled + contextChanges.overwritten === 0, entityId: Number(existing.id), created: false, ...contextChanges };
+    }
+    db.prepare(
+      `UPDATE training_sessions SET ${changes.map(([column]) => `${column} = ?`).join(', ')}, source = 'file_import', quality = ?, is_demo = 0, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).run(...sqlList(changes.map(([, value]) => value)), quality, Number(existing.id));
+    const contextChanges = saveImportSessionContext(Number(existing.id), item);
+    return { skipped: false, entityId: Number(existing.id), created: false, filled: filled + contextChanges.filled, overwritten: overwritten + contextChanges.overwritten };
+  }
+  const inserted = db
+    .prepare(
+      `INSERT INTO training_sessions (athlete_id, session_date, session_order, start_time, training_type, structure_type, intensity_zone, content, duration_min, distance_km, duration_reported, distance_reported, rpe, srpe, smvl, average_heart_rate, max_heart_rate, average_power_w, stroke_rate_spm, source, quality, is_demo, created_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'file_import', ?, 0, ?)`
+    )
+    .run(
+      item.athleteId,
+      item.eventDate,
+      order,
+      text(p.startTime),
+      text(p.trainingType),
+      text(p.structureType),
+      text(p.intensityZone),
+      text(p.content),
+      duration ?? 0,
+      distance ?? 0,
+      durationProvided ? 1 : 0,
+      distanceProvided ? 1 : 0,
+      optionalNumber(p.rpe),
+      durationProvided && optionalNumber(p.rpe) != null ? optionalNumber(p.srpe) ?? ((duration ?? 0) * Number(p.rpe)) : null,
+      optionalNumber(p.smvl) ?? 0,
+      optionalNumber(p.averageHeartRate),
+      optionalNumber(p.maxHeartRate),
+      optionalNumber(p.averagePowerW),
+      optionalNumber(p.strokeRateSpm),
+      quality,
+      userId
+    );
+  saveImportSessionContext(Number(inserted.lastInsertRowid), item, true);
+  return {
+    skipped: false,
+    entityId: Number(inserted.lastInsertRowid),
+    created: true,
+    filled: 0,
+    overwritten: 0,
+  };
+}
+
+function upsertInjuryItem(
+  item: DataImportItemView,
+  userId: number,
+  batchPolicy: 'skip' | 'update'
+): UpsertResult {
+  const policy = resolveItemPolicy(item, batchPolicy);
+  const p = item.payload;
+  const existing = db
+    .prepare('SELECT * FROM injury_records WHERE athlete_id=? AND onset_date=? AND injury_name=?')
+    .get(item.athleteId, item.eventDate, text(p.injuryName)) as Record<string, unknown> | undefined;
+  const side = canonicalCode(p.side, INJURY_SIDE_CODES, 'unspecified');
+  const status = canonicalCode(p.status, INJURY_STATUS_CODES, 'observation');
+  const painScore = optionalNumber(p.painScore);
+  const fields: Array<[string, unknown]> = [
+    ['body_part', text(p.bodyPart)],
+    ['side', side],
+    ['status', status],
+    ['pain_score', painScore === null ? null : Math.min(10, Math.max(0, painScore))],
+    ['restrictions', text(p.restrictions)],
+    ['rehab_plan', text(p.rehabPlan)],
+    ['review_date', text(p.reviewDate)],
+    ['note', text(p.note)],
+  ];
+  if (existing) {
+    // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
+    const isBlank = (column: string) => {
+      const current = existing[column];
+      return current === null || current === undefined || current === '';
+    };
+    const proposed = fields.filter(([column, value]) => {
+      if (!isProvided(value)) return false; // 空白=未提供，不清空已有文本或数值
+      const current = existing[column];
+      const currentText = current === null || current === undefined ? '' : String(current);
+      return !importReviewValuesEqual(current, value) && currentText !== String(value);
+    });
+    const changed = proposed.filter(([column]) => policy === 'update' || isBlank(column));
+    const filled = changed.filter(([column]) => isBlank(column)).length;
+    const overwritten = changed.length - filled;
+    if (!changed.length)
+      return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
+    db.prepare(
+      `UPDATE injury_records SET ${changed.map(([column]) => `${column} = ?`).join(', ')} WHERE id = ?`
+    ).run(...sqlList(changed.map(([, value]) => value)), Number(existing.id));
+    return { skipped: false, entityId: Number(existing.id), created: false, filled, overwritten };
+  }
+  const inserted = db
+    .prepare(
+      `INSERT INTO injury_records (athlete_id, record_type, injury_name, body_part, side, status, pain_score, onset_date, restrictions, rehab_plan, review_date, note, created_by) VALUES (?, 'formal', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      item.athleteId,
+      text(p.injuryName),
+      text(p.bodyPart),
+      side,
+      status,
+      painScore,
+      item.eventDate,
+      text(p.restrictions),
+      text(p.rehabPlan),
+      text(p.reviewDate),
+      text(p.note),
+      userId
+    );
+  return {
+    skipped: false,
+    entityId: Number(inserted.lastInsertRowid),
+    created: true,
+    filled: 0,
+    overwritten: 0,
+  };
+}
+
+function upsertCompetitiveItem(
+  item: DataImportItemView,
+  batchPolicy: 'skip' | 'update'
+): UpsertResult {
+  const policy = resolveItemPolicy(item, batchPolicy);
+  const p = item.payload;
+  const existing = db
+    .prepare('SELECT * FROM competitive_state_assessments WHERE athlete_id=? AND assessment_date=?')
+    .get(item.athleteId, item.eventDate) as Record<string, unknown> | undefined;
+  const quality = item.quality === 'warning' ? 'partial' : 'valid';
+  const level = canonicalCode(p.stateLevel, STATE_LEVEL_CODES, '');
+  const map: Array<[string, string]> = [
+    ['overallScore', 'overall_score'],
+    ['enduranceScore', 'endurance_score'],
+    ['powerScore', 'power_score'],
+    ['techniqueScore', 'technique_score'],
+    ['loadAdaptationScore', 'load_adaptation_score'],
+    ['recoveryScore', 'recovery_score'],
+    ['competitionScore', 'competition_score'],
+  ];
+  const provided = map
+    .map(([key, column]) => [column, optionalNumber(p[key])] as const)
+    .filter(([, value]) => value !== null);
+  const note = text(p.note);
+  if (existing) {
+    // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
+    const isBlank = (column: string) => existing[column] === null || existing[column] === undefined;
+    const proposed = provided.filter(
+      ([column, value]) => !importReviewValuesEqual(existing[column], value)
+    );
+    const changed = proposed.filter(([column]) => policy === 'update' || isBlank(column));
+    const levelChanged =
+      isProvided(level) && text(existing.state_level) !== level &&
+      (policy === 'update' || !text(existing.state_level));
+    const noteChanged =
+      isProvided(note) && text(existing.note) !== note &&
+      (policy === 'update' || !text(existing.note));
+    const blanks = changed.filter(([column]) => isBlank(column)).length;
+    const filled =
+      blanks +
+      (levelChanged && !text(existing.state_level) ? 1 : 0) +
+      (noteChanged && !text(existing.note) ? 1 : 0);
+    const overwritten =
+      changed.length -
+      blanks +
+      (levelChanged && text(existing.state_level) ? 1 : 0) +
+      (noteChanged && text(existing.note) ? 1 : 0);
+    if (!changed.length && !levelChanged && !noteChanged)
+      return { skipped: true, entityId: Number(existing.id), created: false, filled: 0, overwritten: 0 };
+    const setParts = changed.map(([column]) => `${column} = ?`);
+    const params: SqlValue[] = sqlList(changed.map(([, value]) => value));
+    if (levelChanged) {
+      setParts.push('state_level = ?');
+      params.push(level);
+    }
+    if (noteChanged) {
+      setParts.push('note = ?');
+      params.push(note);
+    }
+    db.prepare(
+      `UPDATE competitive_state_assessments SET ${setParts.join(', ')}, source = 'file_import', quality = ?, is_demo = 0 WHERE id = ?`
+    ).run(...params, quality, Number(existing.id));
+    return { skipped: false, entityId: Number(existing.id), created: false, filled, overwritten };
+  }
+  // 新记录：overall_score/state_level 为 NOT NULL，仅在缺失时使用既有默认档位。
+  const overallScore = optionalNumber(p.overallScore);
+  const inserted = db
+    .prepare(
+      `INSERT INTO competitive_state_assessments (athlete_id,assessment_date,overall_score,state_level,endurance_score,power_score,technique_score,load_adaptation_score,recovery_score,competition_score,note,source,quality,is_demo) VALUES (?,?,?,?,?,?,?,?,?,?,?,'file_import',?,0)`
+    )
+    .run(
+      item.athleteId,
+      item.eventDate,
+      overallScore ?? 0,
+      level || 'build',
+      optionalNumber(p.enduranceScore),
+      optionalNumber(p.powerScore),
+      optionalNumber(p.techniqueScore),
+      optionalNumber(p.loadAdaptationScore),
+      optionalNumber(p.recoveryScore),
+      optionalNumber(p.competitionScore),
+      note,
+      quality
+    );
+  return {
+    skipped: false,
+    entityId: Number(inserted.lastInsertRowid),
+    created: true,
+    filled: 0,
+    overwritten: 0,
+  };
+}
+
+function upsertScoringRule(
+  item: DataImportItemView,
+  batchId: string,
+  batchPolicy: 'skip' | 'update'
+): UpsertResult {
+  const policy = resolveItemPolicy(item, batchPolicy);
+  const payload = item.payload;
+  const project = text(payload.project);
+  const gender = text(payload.gender);
+  const score = optionalNumber(payload.score);
+  const comparison = text(payload.comparison) || 'gte';
+  const ruleVersion = text(payload.ruleVersion);
+  const existing = db
+    .prepare(
+      `SELECT id, threshold_value AS thresholdValue, comparison FROM metric_scoring_rules WHERE project = ? AND gender = ? AND metric_code = ? AND score = ? AND rule_version = ?`
+    )
+    .get(project, gender, item.metricCode, score, ruleVersion) as
+    | { id: number; thresholdValue: number; comparison: string }
+    | undefined;
+  if (existing) {
+    // 统一合并语义：最新导入的非空值更新已有记录，空白保留原值。
+    const blank = existing.thresholdValue === null || existing.thresholdValue === undefined;
+    if (!blank && importReviewValuesEqual(existing.thresholdValue, item.valueNum) && existing.comparison === comparison)
+      return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
+    if (policy === 'skip' && !blank)
+      return { skipped: true, entityId: existing.id, created: false, filled: 0, overwritten: 0 };
+    db.prepare(
+      'UPDATE metric_scoring_rules SET threshold_value = ?, comparison = ?, source_batch_id = ?, active = 1 WHERE id = ?'
+    ).run(item.valueNum, comparison, batchId, existing.id);
+    return {
+      skipped: false,
+      entityId: existing.id,
+      created: false,
+      filled: blank ? 1 : 0,
+      overwritten: blank ? 0 : 1,
+    };
+  }
+  const inserted = db
+    .prepare(
+      `INSERT INTO metric_scoring_rules (project, gender, metric_code, score, threshold_value, comparison, rule_version, source_batch_id)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(project, gender, item.metricCode, score, item.valueNum, comparison, ruleVersion, batchId);
+  return {
+    skipped: false,
+    entityId: Number(inserted.lastInsertRowid),
+    created: true,
+    filled: 0,
+    overwritten: 0,
+  };
+}
+
+function resolvePendingAthletes(input: {
+  batch: DataImportPreview;
+  userId: number;
+  allowedAthletes: Set<number>;
+}): {
+  createdCount: number;
+  linkedCount: number;
+  resolvedIds: number[];
+  excludedKeys: Set<string>;
+} {
+  const requiredNames = new Set(
+    input.batch.items
+      .filter(
+        (item) =>
+          item.itemType !== 'scoring_rule' &&
+          item.itemType !== 'invalid_row' &&
+          item.quality !== 'skipped' &&
+          item.resolution !== 'skip'
+      )
+      .map((item) => dataImportPersonKey(item))
+  );
+  const resolved = new Map<string, number>();
+  const excludedKeys = new Set<string>();
+  const candidatesByName = new Map(
+    input.batch.athleteCandidates.map((candidate) => [candidate.normalizedName, candidate])
+  );
+  const namesByTeam = new Map<number, Map<string, Array<{ id: number; active: number }>>>();
+  const numberedPeople = new Set(input.batch.items.filter(item => text(item.payload.athleteCode)).map(dataImportPersonKey));
+  const createdHere = new Set<number>();
+  let createdCount = 0;
+  let linkedCount = 0;
+  for (const candidate of input.batch.athleteCandidates) {
+    if (candidate.excluded) {
+      excludedKeys.add(candidate.normalizedName);
+      continue;
+    }
+    if (candidate.status !== 'pending' || !requiredNames.has(candidate.normalizedName)) continue;
+    let targetId = candidate.matchedAthleteId;
+    const team = !targetId ? db
+      .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+      .get(candidate.project, candidate.team) as { id: number } | undefined : undefined;
+    let teamNames = team && namesByTeam.get(team.id);
+    const personName = normalizedName(candidate.name);
+    if (team && !teamNames) {
+      teamNames = new Map();
+      const roster = db.prepare('SELECT id, name, active FROM athletes WHERE project = ? AND team_id = ?')
+        .all(candidate.project, team.id) as Array<{ id: number; name: string; active: number }>;
+      for (const athlete of roster) {
+        const name = normalizedName(athlete.name);
+        const entries = teamNames.get(name) ?? [];
+        entries.push(athlete);
+        teamNames.set(name, entries);
+      }
+      namesByTeam.set(team.id, teamNames);
+    }
+    const numbered = numberedPeople.has(candidate.normalizedName);
+    if (!targetId && !numbered) {
+      const sameName = teamNames?.get(personName) ?? [];
+      const active = sameName.filter(athlete => athlete.active === 1);
+      if (active.length > 1)
+        throw new Error(`“${candidate.name}”在该队伍匹配到多个同名档案，请选择具体队员。`);
+      if (active.length === 1) targetId = active[0].id;
+      else if (sameName.length) {
+        const canRestore = sameName.some(athlete => input.allowedAthletes.has(athlete.id));
+        throw new Error(canRestore
+          ? `“${candidate.name}”的档案已停用。请重新打开该导入批次，在人员确认中选择原档案后提交。`
+          : `“${candidate.name}”的档案已停用。请联系有权限的人员恢复原档案，再继续本次导入。`);
+      }
+    }
+    if (!candidate.confirmed && (!targetId || candidate.matchedAthleteId))
+      throw new Error(`请先在人员确认中确认“${candidate.name}”的建档或关联方式。`);
+    if (targetId) {
+      // 关联已有运动员：服务端重新验证存在性与权限，不覆盖已有档案。
+      const target = db
+        .prepare('SELECT id, name, project, active FROM athletes WHERE id = ?')
+        .get(targetId) as { id: number; name: string; project: string; active: number } | undefined;
+      if (!target || target.project !== candidate.project || (!input.allowedAthletes.has(target.id) && !createdHere.has(target.id)))
+        throw new Error(`“${candidate.name}”关联的已有运动员无效或不在当前权限范围内。`);
+      if (target.active === 0) {
+        reactivateAthlete(target.id, null);
+        db.prepare('INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)')
+          .run(input.userId, 'RESTORE_ATHLETE_FROM_IMPORT', 'athlete', target.id);
+      }
+      db.prepare(
+        `UPDATE data_import_athlete_candidates SET status = 'matched', matched_athlete_id = ?, created_athlete_id = NULL, confirmed = 1 WHERE id = ?`
+      ).run(target.id, candidate.id);
+      resolved.set(candidate.normalizedName, target.id);
+      linkedCount += 1;
+      continue;
+    }
+    if (!team)
+      throw new Error(
+        `请先在人员确认中为“${candidate.name}”选择所属队伍（${candidate.project}下未找到“${candidate.team}”）。`
+      );
+    // 最小建档：仅姓名、项目、队伍与可选性别；不伪造生日等身份信息，不创建登录账号。
+    const result = db
+      .prepare(
+        `INSERT INTO athletes (
+      name, project, team, team_id, gender, region, city, county, profile_status, source, data_import_batch_id, active
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'incomplete', 'file_import', ?, 1)`
+      )
+      .run(
+        candidate.name,
+        candidate.project,
+        candidate.team,
+        team.id,
+        candidate.gender || null,
+        candidate.region || '未设置',
+        candidate.city || '未设置',
+        candidate.county || '未设置',
+        input.batch.id
+      );
+    const athlete = { id: Number(result.lastInsertRowid) };
+    createdHere.add(athlete.id);
+    teamNames?.set(personName, [{ id: athlete.id, active: 1 }]);
+    db.prepare(
+      `INSERT INTO athlete_origins (athlete_id, province, city, county, source, quality, is_demo)
+      VALUES (?, ?, ?, ?, 'file_import', 'valid', 0)`
+    ).run(athlete.id, candidate.region, candidate.city, candidate.county);
+    db.prepare(`INSERT INTO athlete_profiles (athlete_id, notes) VALUES (?, ?)`).run(
+      athlete.id,
+      '由数据导入最小建档创建，无登录账号；出生日期等资料可稍后在运动员档案中补充。'
+    );
+    createdCount += 1;
+    db.prepare(
+      `UPDATE data_import_athlete_candidates SET status = 'created', created_athlete_id = ?, matched_athlete_id = NULL WHERE id = ?`
+    ).run(athlete.id, candidate.id);
+    resolved.set(candidate.normalizedName, athlete.id);
+  }
+  for (const item of input.batch.items) {
+    if (item.itemType === 'scoring_rule' || item.itemType === 'invalid_row') continue;
+    const key = dataImportPersonKey(item);
+    if (excludedKeys.has(key)) {
+      item.quality = 'skipped';
+      db.prepare('UPDATE data_import_items SET quality = ? WHERE id = ?').run('skipped', item.id);
+      continue;
+    }
+    if (item.athleteId) continue;
+    const athleteId = resolved.get(key);
+    if (!athleteId) continue;
+    item.athleteId = athleteId;
+    if (item.itemType === 'athlete_profile') {
+      const candidate = candidatesByName.get(key);
+      if (candidate && !text(item.payload.team) && candidate.team)
+        item.payload = { ...item.payload, team: candidate.team };
+    }
+    item.messages = validateImportItem(item, {
+      allowedAthletes: new Set([athleteId, ...input.allowedAthletes]),
+      candidateNames: new Set(candidatesByName.keys()),
+    });
+    item.quality = makeQuality(item.messages, item.quality === 'skipped');
+    db.prepare(
+      'UPDATE data_import_items SET athlete_id = ?, payload_json = ?, quality = ?, messages_json = ? WHERE id = ?'
+    ).run(
+      athleteId,
+      JSON.stringify(item.payload),
+      item.quality,
+      JSON.stringify(item.messages),
+      item.id
+    );
+  }
+  return {
+    createdCount,
+    linkedCount,
+    resolvedIds: [...resolved.values()],
+    excludedKeys,
+  };
+}
+
+function assertConflictUnchanged(item: DataImportItemView, fresh: DataImportConflict) {
+  const recorded = item.conflict;
+  if (!recorded) return;
+  if (Boolean(recorded.exists) !== Boolean(fresh.exists) || (recorded.exists && (recorded.entityId !== fresh.entityId || recorded.entityType !== fresh.entityType)))
+    throw new Error('数据库已有记录已变化，请保存校对并重新确认后再提交。');
+  if (!recorded.exists) return;
+  for (const field of recorded.fields) {
+    const freshField = fresh.fields.find((entry) => entry.field === field.field);
+    if (freshField && freshField.oldValue !== field.oldValue)
+      throw new Error(
+        `“${item.rawAthleteName}”的${field.label}在预览后被其他操作修改（${field.oldValue || '空'}→${freshField.oldValue || '空'}），请点击保存校对，核实更新后的差异后再提交。`
+      );
+  }
+}
+
+export function commitDataImport(input: {
+  batchId: string;
+  userId: number;
+  expectedRevision?: number;
+  authorizeBatch?: () => void;
+  creatorRole: string;
+  athletes: ImportAthlete[];
+  allowedTeams?: Set<string>;
+  conflictPolicy: 'skip' | 'update';
+}) {
+  const batch = getDataImportBatch(input.batchId, input.userId);
+  if (batch.status === 'committed') {
+    const audit = db.prepare("SELECT detail FROM audit_logs WHERE action = 'COMMIT_DATA_IMPORT' AND user_id = ? AND json_extract(detail, '$.batchId') = ? ORDER BY id DESC LIMIT 1")
+      .get(input.userId, input.batchId) as { detail: string } | undefined;
+    const saved = audit ? JSON.parse(audit.detail) as Record<string, number> : {};
+    return {
+      batch, receipt: batch.summary.receipt, imported: batch.importedCount, skipped: batch.skippedCount,
+      createdAthletes: saved.createdAthletes ?? 0, linkedAthletes: saved.linkedAthletes ?? 0,
+      createdRecords: saved.createdRecords ?? 0, updatedRecords: saved.updatedRecords ?? 0,
+      filledProfileFields: saved.filledProfileFields ?? 0, overwrittenProfileFields: saved.overwrittenProfileFields ?? 0,
+    };
+  }
+  if (batch.status !== 'reviewing') throw new Error('该批次当前不能提交。');
+  if (batch.parserVersion !== DATA_IMPORT_PARSER_VERSION)
+    throw new Error('该草稿使用旧版导入规则，请重新上传原文件解析并确认后再提交。');
+  const allowed = new Set(input.athletes.map((athlete) => athlete.id));
+  const candidateNames = new Set(
+    batch.athleteCandidates.map((candidate) => candidate.normalizedName)
+  );
+  // 手工关联的运动员必须已在当前可访问集合内（保存关联时已校验）；
+  // 不把草稿里的 matched_athlete_id 无条件并入权限集合，否则越权 id 会绕过二次验证。
+  const excludedKeys = new Set(
+    batch.athleteCandidates.filter((candidate) => candidate.excluded).map((c) => c.normalizedName)
+  );
+  const importable = batch.items.filter(
+    (item) =>
+      item.quality !== 'skipped' &&
+      item.resolution !== 'skip' &&
+      item.itemType !== 'invalid_row' &&
+      !excludedKeys.has(dataImportPersonKey(item))
+  );
+  const invalidRows = batch.items.filter(
+    (item) => item.itemType === 'invalid_row' && item.resolution !== 'skip'
+  );
+  if (invalidRows.length)
+    throw new Error(
+      `仍有${invalidRows.length}个非空错误行（缺少姓名、非法数值等）未处理；这类行无法在页面修改，请在列表中排除后重新提交，需保留该数据时请在原文件中修正并重新上传。`
+    );
+  const candidateWithoutTeam = batch.athleteCandidates.find(
+    (candidate) =>
+      candidate.status === 'pending' &&
+      !candidate.excluded &&
+      !candidate.matchedAthleteId &&
+      importable.some(
+        (item) =>
+          !item.athleteId && dataImportPersonKey(item) === candidate.normalizedName
+      ) &&
+      !text(candidate.team)
+  );
+  if (candidateWithoutTeam)
+    throw new Error(`请先在人员确认中为“${candidateWithoutTeam.name}”选择所属队伍。`);
+  const candidateTeamOutOfScope = batch.athleteCandidates.find(
+    (candidate) =>
+      candidate.status === 'pending' &&
+      !candidate.excluded &&
+      !candidate.matchedAthleteId &&
+      text(candidate.team) &&
+      input.allowedTeams &&
+      !input.allowedTeams.has(text(candidate.team))
+  );
+  if (candidateTeamOutOfScope)
+    throw new Error(`“${candidateTeamOutOfScope.name}”选择的所属队伍不在当前账号权限范围内。`);
+  refreshImportConflicts(importable);
+  const invalid = importable.filter(
+    (item) =>
+      revalidateItem(item, allowed, candidateNames).quality === 'error'
+  );
+  if (invalid.length)
+    throw new Error(
+      `仍有${invalid.length}条数据未通过校验（如${invalid[0].sourceSheet}!${invalid[0].sourceAddress}），请先修正红色字段。`
+    );
+  let imported = 0;
+  let skipped = batch.items.filter((item) => item.quality === 'skipped').length;
+  let unchangedRecords = 0;
+  const initialStatistics = importStatistics(batch.items, excludedKeys, batch.summary.unfilledRows || 0);
+  let receipt: ImportStatistics;
+  let createdRecords = 0;
+  let updatedRecords = 0;
+  let filledProfileFields = 0;
+  let overwrittenProfileFields = 0;
+  const previewAthleteIds = new Set(batch.items.filter(item => item.athleteId).map(item => item.id));
+  const sessionIds = new Set<number>();
+  const explicitTotalIds = new Set<number>();
+  // 赋值发生在事务内且失败即回滚抛出，后续返回必然已赋值。
+  let createdAthletes!: number;
+  let linkedAthletes!: number;
+  db.exec('BEGIN IMMEDIATE');
+  try {
+    input.authorizeBatch?.();
+    assertImportRevision(input.batchId, input.userId, input.expectedRevision);
+    const resolution = resolvePendingAthletes({
+      batch,
+      userId: input.userId,
+      allowedAthletes: allowed,
+    });
+    createdAthletes = resolution.createdCount;
+    linkedAthletes = new Set(importable.filter(item => item.athleteId !== null && allowed.has(item.athleteId)).map(item => item.athleteId)).size;
+    for (const athleteId of resolution.resolvedIds) allowed.add(athleteId);
+    if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && revalidateItem(item, allowed, candidateNames).quality === 'error'))
+      throw new Error('数据或指标配置已变化，请重新校验后提交。');
+    assertUniqueFmsObservations(importable.filter(item => !resolution.excludedKeys.has(dataImportPersonKey(item))));
+    refreshImportConflicts(importable.filter(item => !resolution.excludedKeys.has(dataImportPersonKey(item))));
+    if (importable.some(item => !resolution.excludedKeys.has(dataImportPersonKey(item)) && (item.payload.missingSessionOrder || item.payload.valueReviewPending || Array.isArray(item.payload.valueImportConflicts))))
+      throw new Error('人员关联后出现重复业务数据，请保存校对并重新审查后提交');
+    const savedConflicts = new Map((db.prepare('SELECT id, conflict_json AS conflictJson FROM data_import_items WHERE batch_id = ?')
+      .all(input.batchId) as Array<{ id: number; conflictJson: string }>).map(row => [row.id, JSON.parse(row.conflictJson || '{}') as DataImportConflict]));
+    const freshConflicts = new Map(importable.map(item => [item.id, detectItemConflict(item)]));
+    const trainingDetailsBySession = new Map<string, TrainingRecordDetail[]>();
+    const trainingDetailsKey = (item: DataImportItemView) => JSON.stringify([
+      item.athleteId, item.eventDate, item.payload.sessionOrder, item.payload.trainingRecordName,
+    ]);
+    for (const row of batch.items) {
+      if (!row.payload.trainingRecordTeamId) continue;
+      if (!Array.isArray(row.payload.trainingRecordRowDetails))
+        throw new Error('训练记录草稿使用旧版明细，请重新上传。');
+      if (row.payload.trainingRecordExcluded || resolution.excludedKeys.has(dataImportPersonKey(row))) continue;
+      if (row.resolution === 'skip' && !row.payload.valueAutoMerged && !row.payload.valueMergedInto) continue;
+      const key = trainingDetailsKey(row);
+      const details = trainingDetailsBySession.get(key) ?? [];
+      for (const detail of row.payload.trainingRecordRowDetails as TrainingRecordDetail[]) details.push(detail);
+      trainingDetailsBySession.set(key, details);
+    }
+    for (const item of [...importable].sort((a, b) => Number(b.itemType === 'training_session') - Number(a.itemType === 'training_session'))) {
+      if (item.payload.valueAutoMerged || resolution.excludedKeys.has(dataImportPersonKey(item))) {
+        skipped += 1;
+        continue;
+      }
+      // 提交时基于最新数据库状态重新判定重复与覆盖；预览后被并发修改的覆盖必须重新确认。
+      const fresh = freshConflicts.get(item.id)!;
+      const anchor = batch.items.find(entry => entry.id === item.payload.valueReviewMemberOf) || item;
+      const decision = anchor.payload.valueReviewDecision as { databaseSnapshots?: Array<{ id: number; conflict: DataImportConflict }> } | undefined;
+      const snapshot = decision?.databaseSnapshots?.find(snapshot => snapshot.id === item.id);
+      // 新建档案在本事务产生，不与建档前的空快照比较。
+      const recorded = snapshot?.conflict ?? savedConflicts.get(item.id);
+      if ((item.itemType === 'scoring_rule' || previewAthleteIds.has(item.id)) && recorded)
+        assertConflictUnchanged({ ...item, conflict: recorded }, fresh);
+      let result: UpsertResult;
+      let entityType = '';
+      if (item.itemType === 'athlete_profile') {
+        result = upsertAthleteProfileItem(item, input.batchId, input.conflictPolicy);
+        entityType = 'athlete';
+      } else if (item.itemType === 'wellness') {
+        result = upsertWellnessItem(item, input.conflictPolicy);
+        entityType = 'daily_wellness';
+      } else if (item.itemType === 'training_session') {
+        result = upsertSessionItem(item, input.userId, input.conflictPolicy);
+        if (item.payload.trainingRecordTeamId) {
+          db.prepare('INSERT OR IGNORE INTO training_record_session_scope(session_id,team_id) VALUES(?,?)')
+            .run(result.entityId, Number(item.payload.trainingRecordTeamId));
+        }
+        const details = trainingDetailsBySession.get(trainingDetailsKey(item));
+        if (details?.length) {
+          const save = db.prepare(`INSERT INTO training_record_details(session_id,team_id,template_name,detail_order,field,unit,value_num,value_text)
+            VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(session_id,team_id,template_name,detail_order,field,unit) DO UPDATE
+            SET value_num=excluded.value_num,value_text=excluded.value_text
+            WHERE value_num IS NOT excluded.value_num OR value_text IS NOT excluded.value_text`);
+          const changes = details.reduce((total, entry) => total + Number(save.run(result.entityId,
+            Number(item.payload.trainingRecordTeamId), entry.template ?? text(item.payload.trainingRecordName),
+            entry.order, entry.field, entry.unit, entry.number, entry.text).changes), 0);
+          if (changes) result.skipped = false;
+        }
+        if (optionalNumber(item.payload.smvl) !== null) explicitTotalIds.add(result.entityId);
+        entityType = 'training_session';
+      } else if (item.itemType === 'training_set') {
+        result = upsertTrainingItem(item, input.batchId, input.userId, input.conflictPolicy);
+        entityType = 'strength_result_set';
+        if (result.sessionId && !result.skipped) sessionIds.add(result.sessionId);
+      } else if (item.itemType === 'test_measurement') {
+        result = upsertTestItem(item, input.batchId, input.userId, input.conflictPolicy);
+        entityType = item.payload.fmsObservation && result.sessionId === result.entityId ? 'test_session' : 'test_measurement';
+      } else if (item.itemType === 'body_measurement') {
+        result = upsertBodyItem(item, input.batchId, input.conflictPolicy);
+        entityType = 'athlete_body_measurement';
+      } else if (item.itemType === 'injury_record') {
+        result = upsertInjuryItem(item, input.userId, input.conflictPolicy);
+        entityType = 'injury_record';
+      } else if (item.itemType === 'competitive_state') {
+        result = upsertCompetitiveItem(item, input.conflictPolicy);
+        entityType = 'competitive_state_assessment';
+      } else {
+        result = upsertScoringRule(item, input.batchId, input.conflictPolicy);
+        entityType = 'metric_scoring_rule';
+      }
+      if (result.skipped) {
+        if (fresh.identical) unchangedRecords += 1;
+        skipped += 1;
+      } else {
+        imported += 1;
+        if (result.created) {
+          createdRecords += 1;
+          saveSubmissionProvenance(db, entityType, result.entityId, input.userId);
+        }
+        else updatedRecords += 1;
+        filledProfileFields += result.filled;
+        overwrittenProfileFields += result.overwritten;
+      }
+      db.prepare(
+        'UPDATE data_import_items SET committed_entity_type = ?, committed_entity_id = ? WHERE id = ?'
+      ).run(entityType, result.entityId, item.id);
+    }
+    receipt = { ...initialStatistics, newCount: createdRecords, updateCount: updatedRecords, unchangedCount: unchangedRecords, errorCount: 0 };
+    db.prepare("UPDATE data_import_batches SET summary_json=json_set(summary_json,'$.receipt',json(?)) WHERE id=?").run(JSON.stringify(receipt), input.batchId);
+    for (const sessionId of sessionIds) if (!explicitTotalIds.has(sessionId)) updateSessionTotals(sessionId);
+    db.prepare(
+      `UPDATE data_import_batches SET status = 'committed', imported_count = ?, skipped_count = ?, committed_at = CURRENT_TIMESTAMP WHERE id = ?`
+    ).run(imported, skipped, input.batchId);
+    db.prepare(
+      'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+    ).run(
+      input.userId,
+      'COMMIT_DATA_IMPORT',
+      'data_import_batch',
+      null,
+      JSON.stringify({
+        batchId: input.batchId,
+        imported,
+        skipped,
+        createdRecords,
+        updatedRecords,
+        receipt,
+        filledProfileFields,
+        overwrittenProfileFields,
+        createdAthletes,
+        linkedAthletes,
+        conflictPolicy: 'update',
+      })
+    );
+    input.authorizeBatch?.();
+    advanceImportRevision(input.batchId, input.userId, input.expectedRevision);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+  return {
+    batch: getDataImportBatch(input.batchId, input.userId),
+    receipt: receipt!,
+    imported,
+    skipped,
+    createdAthletes,
+    linkedAthletes,
+    createdRecords,
+    updatedRecords,
+    filledProfileFields,
+    overwrittenProfileFields,
+  };
+}

@@ -7,7 +7,7 @@ await mkdir(outputDirectory, { recursive: true });
 
 const browser = await chromium.launch({
   executablePath: 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe',
-  headless: true
+  headless: true,
 });
 const errors = [];
 
@@ -15,9 +15,12 @@ try {
   for (const viewport of [
     { name: 'desktop-low', width: 1234, height: 720 },
     { name: 'desktop-tall', width: 1440, height: 1000 },
-    { name: 'mobile', width: 390, height: 844 }
+    { name: 'mobile', width: 390, height: 844 },
   ]) {
-    const page = await browser.newPage({ viewport: { width: viewport.width, height: viewport.height }, deviceScaleFactor: 1 });
+    const page = await browser.newPage({
+      viewport: { width: viewport.width, height: viewport.height },
+      deviceScaleFactor: 1,
+    });
     page.on('pageerror', (error) => errors.push(`${viewport.name} pageerror: ${error.message}`));
     page.on('console', (message) => {
       if (message.type() === 'error') errors.push(`${viewport.name} console: ${message.text()}`);
@@ -26,7 +29,8 @@ try {
     await page.goto(baseUrl, { waitUntil: 'networkidle' });
     await page.getByRole('button', { name: '运动员注册', exact: true }).click();
     await page.getByRole('heading', { name: '运动员注册', exact: true }).waitFor();
-    if (await page.getByText('教练', { exact: true }).count()) throw new Error(`${viewport.name} 注册页仍显示教练入口`);
+    if (await page.getByText('教练', { exact: true }).count())
+      throw new Error(`${viewport.name} 注册页仍显示教练入口`);
 
     const layout = await page.evaluate(() => {
       const panel = document.querySelector('.login-panel');
@@ -46,7 +50,7 @@ try {
         storyHeight: Math.round(storyRect.height),
         scrollWidth: document.documentElement.scrollWidth,
         clientWidth: document.documentElement.clientWidth,
-        scrollHeight: document.documentElement.scrollHeight
+        scrollHeight: document.documentElement.scrollHeight,
       };
     });
 

@@ -1,0 +1,148 @@
+.import-page {
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
+}
+
+.import-card {
+  display: flex;
+  flex-direction: column;
+  gap: 16rpx;
+  overflow-wrap: anywhere;
+}
+
+.import-page .primary-button,
+.import-page .secondary-button {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  margin: 0;
+  padding: 12rpx 16rpx;
+  line-height: 1.4;
+  white-space: normal;
+}
+
+.import-template-grid,
+.import-mode-picker {
+  display: grid;
+  gap: 12rpx;
+}
+
+.import-template-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.import-template-grid button:last-child {
+  grid-column: 1 / -1;
+}
+
+.import-mode-picker {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  margin-bottom: 16rpx;
+}
+
+.import-page .import-mode {
+  padding-right: 8rpx;
+  padding-left: 8rpx;
+}
+
+.import-page .import-mode-active {
+  border-color: var(--river);
+  background: var(--river);
+  color: var(--paper);
+}
+
+.import-mode text,
+.import-template-grid text,
+.import-picker-label,
+.import-person-name text:first-child {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.import-picker,
+.import-review,
+.import-editor {
+  padding: 18rpx;
+  border-radius: var(--radius-item);
+  background: var(--mist);
+  color: var(--ink);
+}
+
+.import-picker {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12rpx;
+}
+
+.import-picker-arrow {
+  flex: none;
+  color: var(--river);
+}
+
+.import-review,
+.import-item,
+.import-editor,
+.import-picker,
+.import-card input,
+.import-card picker {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.import-editor,
+.import-item {
+  display: flex;
+  flex-direction: column;
+  gap: 10rpx;
+}
+
+.import-item {
+  padding-top: 14rpx;
+  border-top: 1rpx solid var(--line);
+}
+
+.import-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10rpx;
+}
+
+.import-page .import-actions button {
+  width: auto;
+  flex: 1 1 180rpx;
+}
+
+.import-person-name {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8rpx;
+}
+
+.import-page .error-box,
+.import-filename,
+.import-attention {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.import-filename,
+.import-person-title,
+.import-subtitle {
+  font-weight: 650;
+}
+
+.import-tag {
+  display: inline-block;
+  padding: 2rpx 12rpx;
+  border-radius: 12rpx;
+  color: var(--river);
+  background: #e9f5f5;
+  font-size: 22rpx;
+}
+
+.import-attention,
+.import-status {
+  color: #803f1a;
+  font-size: 25rpx;
+}

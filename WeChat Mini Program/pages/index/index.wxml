@@ -1,0 +1,331 @@
+<import src="../../templates/training-state.wxml" />
+<view class="page">
+  <view class="page-head">
+    <view class="page-title">{{meta.scope === 'individual' ? '个人训练总览' : '训练总览'}}</view>
+    <view class="page-meta">
+      <text class="page-meta-strong">{{projectLabel}}</text>
+      <text>·</text>
+      <text>{{teamLabel || '全部授权队伍'}}</text>
+      <text>·</text>
+      <text>{{from}} 至 {{to}}</text>
+    </view>
+  </view>
+
+  <scope-filter show-search="{{false}}" projects="{{projects}}" project="{{project}}" teams="{{teams}}" team-id="{{teamId}}" show-team="{{showTeam}}" athletes="{{scopeAthletes}}" athlete-id="{{selectedAthleteId}}" show-athlete="{{showAthlete}}" range="{{range}}" bindprojectchange="onScopeChange" bindteamchange="onOverviewTeamChange" bindathletechange="onOverviewAthleteChange" bindrangechange="onScopeChange" />
+
+  <view wx:if="{{canBrowseTeam && selectedAthleteId}}" class="view-mode-bar">
+    <text class="view-mode-label">个人分析视图 · 团队趋势参照保留</text>
+    <button class="view-mode-button" bindtap="onBackToTeam" aria-label="返回团队视角">返回团队视角</button>
+  </view>
+
+  <view wx:if="{{loading || error || overviewError || comparisonError}}" class="training-page-status" aria-live="polite">
+    <text>{{loading ? '正在加载训练总览' : (error || overviewError || comparisonError || '')}}</text>
+    <button wx:if="{{!loading && (error || overviewError || comparisonError)}}" class="mini-button" bindtap="loadPage">重试</button>
+  </view>
+
+  <block>
+    <block wx:if="{{canBrowseTeam}}">
+      <block wx:if="{{canViewTodos}}">
+      <view class="section-head"><view class="section-head-title">今日队伍恢复日报</view><view class="section-head-note">恢复日报填报 · {{teamOverview.date || '今日'}}</view></view>
+      <view class="card morning-card">
+        <view wx:if="{{teamLoading && !teamOverview}}" class="todo-note" aria-role="status" aria-live="polite">正在读取今日恢复日报数据…</view>
+        <view wx:if="{{teamError}}" class="error-box"><text>{{teamError}}</text><button class="error-retry" bindtap="retryTeam">重试</button></view>
+        <view class="morning-stats" aria-label="今日恢复日报填报人数">
+          <view wx:for="{{morningView.cards}}" wx:key="key" class="morning-stat {{item.tone}}">
+            <view class="morning-stat-value">{{item.value}}<text class="morning-stat-unit">人</text></view>
+            <view class="morning-stat-label">{{item.label}}</view>
+          </view>
+        </view>
+      </view>
+
+      <view class="section-head"><view class="section-head-title">今日运动员状态</view><view class="section-head-note">当日恢复日报 · 点按查看档案</view></view>
+      <view class="card morning-card">
+        <view class="morning-filters" aria-label="恢复日报名单筛选">
+          <button wx:for="{{morningView.filters}}" wx:key="key" class="morning-filter {{item.active ? 'is-active' : ''}}" data-filter="{{item.key}}" bindtap="onMorningFilterChange" aria-label="{{item.label}}，{{item.count}} 人">{{item.label}} · {{item.count}}</button>
+        </view>
+        <view wx:if="{{!teamLoading && !teamError && morningView.listEmpty}}" class="chart-empty">{{morningView.filter === 'missing' ? '全员已完成恢复日报' : '暂无可管理运动员'}}</view>
+        <block wx:if="{{morningView.rows.items.length}}">
+          <view class="morning-table-head" aria-hidden="true">
+            <text>姓名</text><view class="morning-measures"><text>睡眠</text><text>晨脉(bpm)</text><text>疲劳(分)</text></view>
+          </view>
+          <button wx:for="{{morningView.rows.items}}" wx:key="athleteId" class="morning-row card-row-button" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.team}}，{{item.reported ? '恢复日报已填报，睡眠 ' + item.sleepText + '，晨脉 ' + item.pulseText + ' bpm，疲劳 ' + item.fatigueText + ' 分，横线表示单项暂无数据' : '恢复日报未填报'}}，查看运动员档案">
+            <text class="morning-name">{{item.athleteName}}</text>
+            <view class="morning-measures">
+              <text class="morning-measure-value {{item.sleepText === '--' ? 'is-empty' : ''}}">{{item.sleepText}}</text>
+              <text class="morning-measure-value {{item.pulseText === '--' ? 'is-empty' : ''}}">{{item.pulseText}}</text>
+              <text class="morning-measure-value {{item.fatigueText === '--' ? 'is-empty' : ''}}">{{item.fatigueText}}</text>
+            </view>
+          </button>
+          <pager-nav data-key="morning" page="{{morningView.rows.page}}" page-count="{{morningView.rows.pageCount}}" total="{{morningView.rows.total}}" label="今日运动员状态" bindpagechange="onPagerChange" />
+        </block>
+      </view>
+
+      <view class="section-head"><view class="section-head-title">今日训练情况</view><view class="section-head-note">按训练记录统计</view></view>
+      <view class="card morning-card">
+        <view class="morning-stats morning-stats-pair" aria-label="今日训练记录情况">
+          <view class="morning-stat tone-ok">
+            <view class="morning-stat-value">{{morningTraining.trained}}<text class="morning-stat-unit">人</text></view>
+            <view class="morning-stat-label">今日已有训练记录</view>
+          </view>
+          <view class="morning-stat">
+            <view class="morning-stat-value">{{morningTraining.noTraining}}<text class="morning-stat-unit">人</text></view>
+            <view class="morning-stat-label">今日暂无训练记录</view>
+          </view>
+        </view>
+      </view>
+
+      </block>
+      <view class="section-head plan-section-head">
+        <view class="plan-section-copy"><view class="section-head-title">今日训练计划</view><view class="section-head-note">来自训练计划表 · {{teamOverview.date || '今日'}}</view></view>
+        <button id="open-training-plans" class="plan-section-entry" bindtap="openTeamPlans" aria-label="打开训练计划">训练计划</button>
+      </view>
+      <view class="card morning-card">
+        <view wx:if="{{planLoading && !planExecution}}" class="todo-note" aria-role="status" aria-live="polite">正在读取今日训练计划…</view>
+        <view wx:if="{{planError}}" class="error-box"><text>{{planError}}</text><button class="error-retry" bindtap="retryPlan">重试</button></view>
+        <view wx:if="{{!planLoading && !planError && !coachPlanView.hasPlan}}" class="chart-empty">今日暂无训练计划</view>
+        <block wx:if="{{coachPlanView.hasPlan}}">
+          <view class="plan-focus-row"><text class="plan-label">今日训练重点</text><text class="plan-value">{{coachPlanView.focusText}}</text></view>
+          <view class="plan-focus-row"><text class="plan-label">专项内容</text><text class="plan-value">{{coachPlanView.specialText}}</text></view>
+          <view class="plan-focus-row"><text class="plan-label">体能内容</text><text class="plan-value">{{coachPlanView.physicalText}}</text></view>
+          <view class="plan-volume-row">
+            <view class="plan-volume"><text class="plan-label">计划时长</text><text class="plan-volume-value">{{coachPlanView.durationText}}</text></view>
+            <view class="plan-volume"><text class="plan-label">计划公里</text><text class="plan-volume-value">{{coachPlanView.distanceText}}</text></view>
+          </view>
+          <view wx:if="{{coachPlanView.items.length}}" class="plan-detail">
+            <view class="plan-detail-title">训练安排详情</view>
+            <view wx:for="{{coachPlanView.items}}" wx:key="key" class="plan-detail-row">
+              <text class="plan-detail-name">{{item.name}}</text>
+              <text class="plan-detail-note">{{item.detail}}</text>
+            </view>
+          </view>
+        </block>
+      </view>
+
+      <view class="section-head"><view class="section-head-title">今日执行情况</view><view class="section-head-note">执行率来自服务端近7天统计</view></view>
+      <view class="card morning-card">
+        <view wx:if="{{planError}}" class="error-box"><text>{{planError}}</text><button class="error-retry" bindtap="retryPlan">重试</button></view>
+        <view class="exec-tiles" aria-label="今日执行统计">
+          <view wx:for="{{coachExecutionView.tiles}}" wx:key="key" class="exec-tile">
+            <view class="exec-tile-value">{{item.value}}<text class="exec-tile-unit">{{item.unit}}</text></view>
+            <view class="exec-tile-label">{{item.label}}</view>
+            <view wx:if="{{item.note}}" class="exec-tile-note">{{item.note}}</view>
+          </view>
+        </view>
+        <view class="plan-detail-title">{{coachExecutionView.listTitle}}</view>
+        <view wx:if="{{!planError && coachExecutionView.listEmpty}}" class="chart-empty">暂无待确认人员</view>
+        <block wx:if="{{coachExecutionView.rows.items.length}}">
+          <button wx:for="{{coachExecutionView.rows.items}}" wx:key="athleteId" class="exec-row card-row-button" data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete" aria-label="{{item.athleteName}}，{{item.team}}，{{item.statusLabel}}，查看运动员档案">
+            <view class="morning-col-name">
+              <text class="morning-name">{{item.athleteName}}</text>
+              <text class="today-badge is-pending">{{item.statusLabel}}</text>
+            </view>
+            <text class="exec-row-team">{{item.team}}</text>
+            <text class="exec-row-focus">{{item.focusText}}</text>
+          </button>
+          <pager-nav data-key="exec" page="{{coachExecutionView.rows.page}}" page-count="{{coachExecutionView.rows.pageCount}}" total="{{coachExecutionView.rows.total}}" label="待确认人员" bindpagechange="onPagerChange" />
+        </block>
+      </view>
+    </block>
+
+    <view wx:if="{{canSelfReport}}" class="card today-status" aria-label="今日状态">
+      <view class="today-head">
+        <view><view class="today-title">今日状态</view><text class="today-subtitle">训练与恢复 · 每日记录</text></view>
+        <text wx:if="{{todayView}}" class="today-date">{{todayView.date}} · 北京时间</text>
+      </view>
+      <view class="today-announcement" aria-live="polite" aria-atomic="true">{{todayLoading ? '正在读取今日状态。' : todayError ? '今日状态读取失败，可点击重试。' : todayView ? '今日训练' + todayView.submittedLabel + '，恢复日报' + (wellnessView ? wellnessView.filledLabel : '暂不可用') : ''}}</view>
+      <view wx:if="{{todayLoading && !todayView}}" class="today-feedback">正在读取今日状态…</view>
+      <view wx:if="{{todayError}}" class="error-box"><text>{{todayError}}</text><button class="error-retry" bindtap="retryToday">重试</button></view>
+      <template wx:if="{{!todayView && !todayLoading && !todayError}}" is="training-state" data="{{message: '暂无今日状态数据'}}" />
+      <block wx:if="{{todayView}}">
+        <view class="today-load-panel">
+          <view><text class="today-load-label">近 24 小时训练负荷</text><view class="today-load-value">{{todayView.loadText}}<text class="today-load-unit">AU</text></view></view>
+          <text class="today-load-note">滚动统计
+非所选周期累计</text>
+        </view>
+        <view wx:if="{{todayView.timeNote}}" class="today-time-note">{{todayView.timeNote}}</view>
+        <view class="today-task-grid">
+          <view class="today-task">
+            <view class="today-task-head"><text class="today-task-title">训练记录</text><text class="today-badge {{todayView.submitted ? 'is-complete' : 'is-pending'}}">{{todayView.submittedLabel}}</text></view>
+            <text class="today-task-note">{{todayView.note}}</text>
+            <button class="today-entry today-entry-primary" bindtap="openTrainingEntry">{{todayView.submitted ? '补记训练' : '去记录训练'}}</button>
+          </view>
+          <view wx:if="{{wellnessView}}" class="today-task">
+            <view class="today-task-head"><text class="today-task-title">恢复日报</text><text class="today-badge {{wellnessView.filled ? 'is-complete' : 'is-pending'}}">{{wellnessView.filledLabel}}</text></view>
+            <text class="today-task-note">{{wellnessView.filled && wellnessView.statusLabel ? '自评状态：' + wellnessView.statusLabel : wellnessView.note}}</text>
+            <button class="today-entry today-entry-secondary" bindtap="openWellnessEntry">{{wellnessView.filled ? '更新恢复日报' : '填写恢复日报'}}</button>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <block wx:if="{{canSelfReport}}">
+      <view class="section-head plan-section-head">
+        <view class="plan-section-copy"><view class="section-head-title">今日训练</view><view class="section-head-note">今日安排与本人执行</view></view>
+        <button id="open-training-plans-athlete" class="plan-section-entry" bindtap="openTeamPlans" aria-label="打开训练计划">训练计划</button>
+      </view>
+      <view class="card morning-card">
+        <view wx:if="{{todayLoading && !todayView}}" class="todo-note" aria-role="status" aria-live="polite">正在读取今日训练…</view>
+        <view wx:if="{{todayError}}" class="error-box"><text>{{todayError}}</text><button class="error-retry" bindtap="retryToday">重试</button></view>
+        <view wx:if="{{!todayLoading && !todayError && !todayTraining.plan.hasPlan && !todayTraining.hasSessions}}" class="chart-empty">今日暂无训练计划，可直接记录实际训练</view>
+        <block wx:if="{{todayTraining.plan.hasPlan}}">
+          <view class="plan-focus-row"><text class="plan-label">训练重点</text><text class="plan-value">{{todayTraining.plan.focusText}}</text></view>
+          <view class="plan-focus-row"><text class="plan-label">专项内容</text><text class="plan-value">{{todayTraining.plan.specialText}}</text></view>
+          <view class="plan-focus-row"><text class="plan-label">体能内容</text><text class="plan-value">{{todayTraining.plan.physicalText}}</text></view>
+          <view class="plan-volume-row">
+            <view class="plan-volume"><text class="plan-label">计划时长</text><text class="plan-volume-value">{{todayTraining.plan.durationText}}</text></view>
+            <view class="plan-volume"><text class="plan-label">计划公里</text><text class="plan-volume-value">{{todayTraining.plan.distanceText}}</text></view>
+          </view>
+          <view wx:if="{{todayTraining.plan.items.length}}" class="plan-detail">
+            <view class="plan-detail-title">训练安排详情</view>
+            <view wx:for="{{todayTraining.plan.items}}" wx:key="key" class="plan-detail-row">
+              <text class="plan-detail-name">{{item.name}}</text>
+              <text class="plan-detail-note">{{item.detail}}</text>
+            </view>
+          </view>
+        </block>
+        <view class="plan-detail-title">本人实际训练记录</view>
+        <view wx:if="{{!todayTraining.hasSessions}}" class="chart-empty">今日暂无训练记录</view>
+        <view wx:for="{{todayTraining.sessions}}" wx:key="id" class="exec-session-row">
+          <view class="exec-session-head">
+            <text class="morning-name">{{item.content}}</text>
+            <text class="exec-session-rpe">RPE {{item.rpeText}}</text>
+          </view>
+          <text class="plan-detail-note">{{item.trainingType}}{{item.startTime ? ' · ' + item.startTime : ''}} · {{item.durationText}} · {{item.distanceText}}</text>
+        </view>
+        <button class="today-entry today-entry-primary" bindtap="openTrainingEntry">填写训练与 RPE</button>
+      </view>
+    </block>
+
+    <view class="section-head"><view class="section-head-title">核心指标</view><view class="section-head-note">{{meta.scope === 'individual' ? '个人周期 · 团队参照' : teamLabel}}</view></view>
+    <view class="metric-grid overview-metrics">
+      <view wx:for="{{metrics}}" wx:key="label" wx:if="{{!readOnly || item.label !== '损伤情况'}}" class="metric-card {{item.tone}}">
+        <view class="metric-label">{{item.label}}</view>
+        <view class="metric-value">{{item.value}}<text>{{item.unit}}</text></view>
+        <text class="metric-note">{{item.note}}</text>
+      </view>
+    </view>
+
+    <view wx:if="{{canViewTodos}}" class="section-head"><view class="section-head-title">状态监测</view><view class="section-head-note">当日待办 · 按人跟进</view></view>
+    <view wx:if="{{canViewTodos}}" class="card focus-card">
+      <view class="focus-filters">
+        <button class="morning-filter" data-filter="active" bindtap="onFocusFilter" aria-pressed="{{focusFilter === 'active'}}">待跟进</button>
+        <button class="morning-filter" data-filter="followed" bindtap="onFocusFilter" aria-pressed="{{focusFilter === 'followed'}}">已跟进</button>
+      </view>
+      <view wx:if="{{teamLoading}}" class="todo-note">正在核对恢复日报…</view>
+      <view wx:if="{{teamError}}" class="error-box"><text>恢复日报名单加载失败</text><button class="error-retry" bindtap="retryTeam">重试</button></view>
+      <view wx:if="{{todosLoading && !todos}}" class="todo-note" aria-role="status" aria-live="polite">正在核对当日训练状态…</view>
+      <view wx:if="{{todosError}}" class="error-box"><text>{{todosError}}</text><button class="error-retry" bindtap="retryTodos">重试</button></view>
+      <view wx:if="{{!todosLoading && !teamLoading && !todosError && !teamError && focusPager && !focusPager.total}}" class="chart-empty">暂无相关人员</view>
+      <block wx:if="{{focusRows.length}}">
+        <view wx:for="{{focusRows}}" wx:key="athleteId" class="focus-row" aria-label="{{item.athleteName}}，{{item.team || '未分队'}}，{{item.focusLabel}}，{{item.focusReason}}">
+          <view class="focus-row-head"><text class="focus-name">{{item.athleteName}}</text><view class="focus-tags"><text wx:for="{{item.focusLabels}}" wx:for-item="label" wx:key="*this" class="focus-tag">{{label}}</text></view></view>
+          <view class="todo-note">{{item.team || '未分队'}} · {{item.focusReason}}</view>
+          <view class="focus-actions">
+            <button data-athlete-id="{{item.athleteId}}" bindtap="goToAthlete">查看档案</button>
+            <button data-athlete-id="{{item.athleteId}}" data-action="training" bindtap="openTodoAction">代填训练</button>
+            <button data-athlete-id="{{item.athleteId}}" data-action="wellness" bindtap="openTodoAction">代填日报</button>
+            <button data-athlete-id="{{item.athleteId}}" data-action="injury" bindtap="openTodoAction">上报伤病</button>
+            <button data-athlete-id="{{item.athleteId}}" disabled="{{followupBusy}}" bindtap="toggleTodoFollowup">{{item.followedUp ? '已跟进 · 撤销' : '标记已跟进'}}</button>
+          </view>
+        </view>
+        <pager-nav data-key="focus" page="{{focusPager.page}}" page-count="{{focusPager.pageCount}}" total="{{focusPager.total}}" label="状态监测" bindpagechange="onPagerChange" />
+      </block>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">训练趋势</view><view class="section-head-note">{{range === 'day' ? '今日' : range === 'week' ? '近7天' : '近14天'}} · 训练时长（小时）与训练负荷（AU）分列展示</view></view>
+    <view class="card chart-card">
+      <view class="card-head">
+        <view><view class="card-head-title">专项/体能训练时长</view><view class="card-head-note">同日期并列柱状 · 小时</view></view>
+      </view>
+      <view class="chart-legend">
+        <view class="legend-item"><view class="legend-dot special" />专项训练</view>
+        <view class="legend-item"><view class="legend-dot physical" />体能训练</view>
+      </view>
+      <view class="overview-chart-stage"><view wx:if="{{durationPlaceholder || overviewError || error}}" class="overview-chart-overlay"><template is="training-state" data="{{loading, error: error || overviewError, message: '当前周期暂无真实专项或体能训练时长记录'}}" /></view>
+      <view class="trend-chart">
+        <button wx:for="{{durationTrend}}" wx:key="date" class="trend-day" aria-label="{{item.ariaLabel}}" data-index="{{index}}" bindtap="showDurationDetail">
+          <view class="trend-bars">
+            <view class="trend-bar special" style="height: {{item.specialHeight}}%;" />
+            <view class="trend-bar physical" style="height: {{item.physicalHeight}}%;" />
+          </view>
+          <text class="trend-label">{{item.label}}</text>
+        </button>
+      </view>
+      </view>
+    </view>
+    <view class="card chart-card">
+      <view class="card-head">
+        <view><view class="card-head-title">训练负荷趋势</view><view class="card-head-note">sRPE · AU，与训练时长不同轴</view></view>
+      </view>
+      <view class="chart-legend">
+        <view class="legend-item"><view class="legend-dot accent" />{{selectedAthleteId ? '当前运动员' : '队伍训练负荷'}}</view>
+        <view wx:if="{{selectedAthleteId}}" class="legend-item"><view class="legend-dot team-average" />团队参照</view>
+      </view>
+      <view class="overview-chart-stage"><view wx:if="{{trendPlaceholder || overviewError || error}}" class="overview-chart-overlay"><template is="training-state" data="{{loading, error: error || overviewError, message: '最近14天暂无真实专项或体能负荷记录'}}" /></view>
+      <view class="trend-chart">
+        <button wx:for="{{trend}}" wx:key="date" class="trend-day" aria-label="{{item.ariaLabel}}" data-index="{{index}}" bindtap="showTrendDetail">
+          <view class="trend-bars">
+            <view class="trend-bar accent" style="height: {{item.loadHeight}}%;" />
+            <view wx:if="{{selectedAthleteId && item.teamLoad !== null}}" class="trend-bar team-average" style="height: {{item.teamLoadHeight}}%;" />
+          </view>
+          <text class="trend-label">{{item.label}}</text>
+        </button>
+      </view>
+      </view>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">训练结构</view><view class="section-head-note">按训练负荷 AU</view></view>
+    <view class="card structure-card">
+      <view class="structure-status">{{loading ? '正在加载数据' : (error || overviewError || (!structureHasData ? '暂无可分类的训练负荷数据' : '专项、体能与恢复训练负荷'))}}</view>
+      <block>
+        <view class="structure-track" aria-label="专项、体能、恢复训练负荷占比">
+          <view wx:for="{{structure}}" wx:key="key" class="structure-segment {{item.color}}" style="width: {{item.width}}%;" />
+        </view>
+        <view class="structure-list">
+          <view wx:for="{{structure}}" wx:key="key" class="structure-row">
+            <view class="structure-label"><view class="structure-dot {{item.color}}" /><text>{{item.name}}</text></view>
+            <text class="structure-value">{{item.loadText}} AU</text><text class="structure-percent">{{item.percentageText}}%</text>
+          </view>
+        </view>
+      </block>
+    </view>
+
+    <view class="section-head"><view class="section-head-title">RPE 状态趋势</view><view class="section-head-note">0–10 分 · 缺失日期留空</view></view>
+    <view class="card chart-card">
+      <view class="chart-legend">
+        <view class="legend-item"><view class="legend-dot accent" />{{selectedAthleteId ? '个人 RPE' : '队伍平均 RPE'}}</view>
+        <view wx:if="{{selectedAthleteId}}" class="legend-item"><view class="legend-dot team-average" />团队平均</view>
+      </view>
+      <view class="overview-chart-stage overview-rpe-stage"><view wx:if="{{rpePlaceholder || overviewError || error}}" class="overview-chart-overlay"><template is="training-state" data="{{loading, error: error || overviewError, message: '当前周期暂无真实 RPE 记录'}}" /></view>
+      <view class="rpe-chart">
+        <view class="rpe-axis"><text>10</text><text>5</text><text>0</text></view>
+        <button wx:for="{{rpeDays}}" wx:key="date" class="rpe-day" aria-label="{{item.ariaLabel}}，点按查看详情" data-index="{{index}}" bindtap="showRpeDetail">
+          <view class="rpe-plot">
+            <view wx:if="{{item.mean !== null && item.mean !== undefined}}" class="rpe-range" style="bottom: {{item.lowerHeight}}%; height: {{item.rangeHeight}}%;" />
+            <view wx:if="{{item.mean !== null && item.mean !== undefined}}" class="rpe-mark" style="bottom: {{item.meanHeight}}%;" />
+            <view wx:if="{{selectedAthleteId && item.teamMean !== null && item.teamMean !== undefined}}" class="rpe-team-mark" style="bottom: {{item.teamMeanHeight}}%;" />
+          </view>
+          <text class="trend-label">{{item.label}}</text>
+        </button>
+      </view>
+      </view>
+      <view class="chart-footnote">阴影为队伍每日平均值 ±1 标准差；空白表示无有效记录。</view>
+    </view>
+
+    <block wx:if="{{canViewTodos}}">
+      <view wx:if="{{teamLoading && !teamOverview}}" class="todo-note" aria-role="status" aria-live="polite">正在读取队伍运动员…</view>
+      <view wx:if="{{teamError}}" class="error-box"><text>{{teamError}}</text><button class="error-retry" bindtap="retryTeam">重试</button></view>
+      <athlete-selector
+        title="运动员"
+        items="{{teamView.athletes}}"
+        selected-id="{{selectedAthleteId}}"
+        loading="{{teamLoading}}"
+        error="{{teamError}}"
+        label="运动员"
+        bind:select="onTeamAthleteSelect"
+        bind:detail="onTeamAthleteDetail"
+      />
+    </block>
+
+  </block>
+</view>

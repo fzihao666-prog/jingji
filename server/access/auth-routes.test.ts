@@ -1,0 +1,622 @@
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { DatabaseSync } from 'node:sqlite';
+import express from 'express';
+import bcrypt from 'bcryptjs';
+import type { Server } from 'node:http';
+import { passwordPool, PasswordPoolError } from '../core/password-pool.ts';
+import { LOGIN_ERROR_MESSAGES } from '../../shared/login-errors.ts';
+import { configureTrustedProxy } from '../core/trusted-proxy.ts';
+
+const fixture = vi.hoisted(() => {
+  return { db: null as DatabaseSync | null };
+});
+vi.mock('../core/db.ts', () => ({
+  upsertAthleteOrigin: vi.fn(),
+  get db() {
+    return fixture.db;
+  },
+}));
+
+let server: Server;
+let baseUrl: string;
+let db: DatabaseSync;
+let afterCompare: (() => void) | undefined;
+let passwordFailure: PasswordPoolError | undefined;
+
+const correctPassword = 'Secure123';
+
+function login(username: string, password: string) {
+  return fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ username, password }),
+  }).then(async (response) => ({
+    status: response.status,
+    retryAfter: response.headers.get('Retry-After'),
+    body: (await response.json()) as {
+      message: string;
+      code?: string;
+      token?: string;
+      user?: unknown;
+    },
+  }));
+}
+
+beforeAll(async () => {
+  vi.stubEnv('JWT_SECRET', 'test-only-login-error-secret-not-for-deployment');
+  db = new DatabaseSync(':memory:');
+  fixture.db = db;
+  db.exec(`
+    CREATE TABLE users (id INTEGER PRIMARY KEY, username TEXT, password_hash TEXT, display_name TEXT,
+      role TEXT, athlete_id INTEGER, active INTEGER DEFAULT 1, session_version INTEGER DEFAULT 0);
+    CREATE TABLE registration_requests (id INTEGER PRIMARY KEY, username TEXT UNIQUE, status TEXT DEFAULT 'pending',
+      password_hash TEXT, display_name TEXT, requested_role TEXT, coach_category TEXT, project TEXT, team TEXT, create_team INTEGER NOT NULL DEFAULT 0, gender TEXT,
+      birth_date TEXT, native_place TEXT, phone TEXT, region TEXT, city TEXT, county TEXT,
+      reviewed_by INTEGER, reviewed_at TEXT, created_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE coach_work_status (user_id INTEGER PRIMARY KEY, status TEXT, team_id INTEGER, updated_at TEXT DEFAULT CURRENT_TIMESTAMP);
+    CREATE TABLE athlete_team_affiliations (athlete_id INTEGER, team_id INTEGER, PRIMARY KEY (athlete_id, team_id));
+    CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER DEFAULT 1);
+    INSERT INTO project_teams (id, project, name) VALUES (1, 'ROWING', '测试队伍');
+    CREATE TABLE athletes (id INTEGER PRIMARY KEY, name TEXT, project TEXT, team TEXT, team_id INTEGER, gender TEXT, birth_date TEXT, source TEXT DEFAULT 'manual', profile_status TEXT DEFAULT 'complete',region TEXT,city TEXT,county TEXT,active INTEGER DEFAULT 1);
+    CREATE UNIQUE INDEX idx_athletes_identity ON athletes (name,project,team);
+    CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY,province TEXT,city TEXT,county TEXT,source TEXT,quality TEXT);
+    CREATE TABLE athlete_profiles (athlete_id INTEGER PRIMARY KEY,native_place TEXT,phone TEXT,created_at TEXT,updated_at TEXT);
+    CREATE TABLE user_area_permissions (user_id INTEGER,area_level TEXT,province TEXT,city TEXT,county TEXT,granted_by INTEGER);
+    CREATE TABLE user_project_permissions (user_id INTEGER,project TEXT,granted_by INTEGER);
+    CREATE TABLE user_team_permissions (user_id INTEGER,project TEXT,team TEXT,granted_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id, project, team));
+    CREATE TABLE training_plans (id INTEGER PRIMARY KEY, team_id INTEGER, model TEXT, title TEXT, published_at TEXT);
+    CREATE TABLE data_import_batches (id TEXT PRIMARY KEY, status TEXT);
+    CREATE TABLE data_import_athlete_candidates (batch_id TEXT, project TEXT, team TEXT);
+    CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY,parent_user_id INTEGER,account_code TEXT);
+    CREATE TABLE coach_profiles (user_id INTEGER PRIMARY KEY, category TEXT);
+    CREATE TABLE audit_logs (user_id INTEGER,action TEXT,entity_type TEXT,entity_id INTEGER,detail TEXT);
+    CREATE TABLE app_metadata (key TEXT PRIMARY KEY, value TEXT);
+  `);
+  const { registerAuthRoutes } = await import('./auth-routes.ts');
+  const app = express();
+  configureTrustedProxy(app);
+  app.use(express.json());
+  registerAuthRoutes(app, {
+    hash: async (password) => {
+      if (passwordFailure) throw passwordFailure;
+      return passwordPool.hash(password);
+    },
+    compare: async (password, hash) => {
+      if (passwordFailure) throw passwordFailure;
+      const result = await passwordPool.compare(password, hash);
+      afterCompare?.();
+      return result;
+    },
+  });
+  server = await new Promise<Server>((resolve) => {
+    const result = app.listen(0, '127.0.0.1', () => resolve(result));
+  });
+  const address = server.address();
+  if (!address || typeof address === 'string') throw new Error('测试端口不可用');
+  baseUrl = `http://127.0.0.1:${address.port}`;
+});
+
+beforeEach(() => {
+  afterCompare = undefined;
+  passwordFailure = undefined;
+  db.exec(
+    'DELETE FROM coach_profiles; DELETE FROM users; DELETE FROM registration_requests; DELETE FROM athletes; DELETE FROM app_metadata; DELETE FROM athlete_origins; DELETE FROM athlete_profiles; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions; DELETE FROM user_team_permissions; DELETE FROM account_profiles; DELETE FROM audit_logs;'
+  );
+  const passwordHash = bcrypt.hashSync(correctPassword, 4);
+  const insertUser = db.prepare(
+    'INSERT INTO users (id, username, password_hash, display_name, role, athlete_id, active, session_version) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+  );
+  insertUser.run(1, 'active_user', passwordHash, '正常用户', 'ATL', null, 1, 0);
+  insertUser.run(2, 'disabled_user', passwordHash, '停用用户', 'ATL', null, 0, 0);
+  insertUser.run(3, 'broken_user', null, '异常用户', 'ATL', null, 1, 0);
+  const insertRequest = db.prepare(
+    'INSERT INTO registration_requests (id, username, status) VALUES (?, ?, ?)'
+  );
+  insertRequest.run(1, 'pending_user', 'pending');
+  insertRequest.run(2, 'rejected_user', 'rejected');
+});
+
+afterAll(() => {
+  server.close();
+});
+
+describe('登录接口错误码', () => {
+  it('账号或密码为空返回统一提示', async () => {
+    const empty = await login('', '');
+    expect(empty.status).toBe(400);
+    expect(empty.body.code).toBe('MISSING_CREDENTIALS');
+    expect(empty.body.message).toBe(LOGIN_ERROR_MESSAGES.MISSING_CREDENTIALS);
+
+    const missingPassword = await login('active_user', '');
+    expect(missingPassword.status).toBe(400);
+    expect(missingPassword.body.code).toBe('MISSING_CREDENTIALS');
+  });
+
+  it('账号不存在与密码错误使用同一提示，不泄露账号是否存在', async () => {
+    const unknownUser = await login('never_registered', correctPassword);
+    const wrongPassword = await login('active_user', 'WrongPass123');
+    expect(unknownUser.status).toBe(401);
+    expect(wrongPassword.status).toBe(401);
+    expect(unknownUser.body.code).toBe('INVALID_CREDENTIALS');
+    expect(wrongPassword.body.code).toBe('INVALID_CREDENTIALS');
+    expect(unknownUser.body.message).toBe(wrongPassword.body.message);
+    expect(unknownUser.body.message).toBe(LOGIN_ERROR_MESSAGES.INVALID_CREDENTIALS);
+  });
+
+  it('待审核与审核未通过返回各自状态提示', async () => {
+    const pending = await login('pending_user', correctPassword);
+    expect(pending.status).toBe(403);
+    expect(pending.body.code).toBe('ACCOUNT_PENDING');
+    expect(pending.body.message).toBe(LOGIN_ERROR_MESSAGES.ACCOUNT_PENDING);
+
+    const rejected = await login('rejected_user', correctPassword);
+    expect(rejected.status).toBe(403);
+    expect(rejected.body.code).toBe('ACCOUNT_REJECTED');
+    expect(rejected.body.message).toBe(LOGIN_ERROR_MESSAGES.ACCOUNT_REJECTED);
+  });
+
+  it('停用账号在密码正确时提示已停用，密码错误时不暴露状态', async () => {
+    const disabled = await login('disabled_user', correctPassword);
+    expect(disabled.status).toBe(403);
+    expect(disabled.body.code).toBe('ACCOUNT_DISABLED');
+    expect(disabled.body.message).toBe(LOGIN_ERROR_MESSAGES.ACCOUNT_DISABLED);
+
+    const disabledWrongPassword = await login('disabled_user', 'WrongPass123');
+    expect(disabledWrongPassword.status).toBe(401);
+    expect(disabledWrongPassword.body.code).toBe('INVALID_CREDENTIALS');
+  });
+
+  it('正确凭据签发令牌并返回用户信息', async () => {
+    const result = await login('active_user', correctPassword);
+    expect(result.status).toBe(200);
+    expect(typeof result.body.token).toBe('string');
+    expect(result.body.user).toMatchObject({ username: 'active_user', role: 'ATL' });
+  });
+
+  it('登录内部异常返回统一提示，不暴露数据库或服务器错误', async () => {
+    const failure = await login('broken_user', correctPassword);
+    expect(failure.status).toBe(500);
+    expect(failure.body.code).toBe('SERVER_ERROR');
+    expect(failure.body.message).toBe(LOGIN_ERROR_MESSAGES.SERVER_ERROR);
+    expect(JSON.stringify(failure.body)).not.toMatch(/Illegal|sqlite|bcrypt|arguments/i);
+  });
+
+  it('会话失效与登录失败使用不同错误码', async () => {
+    const response = await fetch(`${baseUrl}/api/me`);
+    expect(response.status).toBe(401);
+    const body = (await response.json()) as { message: string; code?: string };
+    expect(body.code).toBe('SESSION_EXPIRED');
+  });
+
+  it('账号查询暂时失败后，同一令牌仍能恢复会话', async () => {
+    const { body } = await login('active_user', correctPassword);
+    const headers = { Authorization: `Bearer ${body.token}` };
+    fixture.db = new DatabaseSync(':memory:');
+    try {
+      const failure = await fetch(`${baseUrl}/api/me`, { headers });
+      expect(failure.status).toBe(503);
+      await expect(failure.json()).resolves.toEqual({
+        code: 'SERVICE_BUSY',
+        message: '暂时无法检查登录状态，请稍后重试。',
+      });
+    } finally {
+      fixture.db.close();
+      fixture.db = db;
+    }
+
+    const recovered = await fetch(`${baseUrl}/api/me`, { headers });
+    expect(recovered.status).toBe(200);
+    db.prepare('UPDATE users SET session_version = session_version + 1 WHERE id = 1').run();
+    const revoked = await fetch(`${baseUrl}/api/me`, { headers });
+    expect(revoked.status).toBe(401);
+    await expect(revoked.json()).resolves.toMatchObject({ code: 'SESSION_EXPIRED' });
+  });
+});
+
+describe('异步密码校验期间账户变化', () => {
+  it('密码计算期间停用账号后不得签发令牌', async () => {
+    afterCompare = () => {
+      db.prepare('UPDATE users SET active = 0 WHERE id = 1').run();
+    };
+    const result = await login('active_user', correctPassword);
+    expect(result.status).toBe(403);
+    expect(result.body.token).toBeUndefined();
+  });
+
+  it('密码计算期间会话版本变化后不得签发令牌', async () => {
+    afterCompare = () => {
+      db.prepare('UPDATE users SET session_version = 1 WHERE id = 1').run();
+    };
+    const result = await login('active_user', correctPassword);
+    expect(result.status).toBe(401);
+    expect(result.body.token).toBeUndefined();
+  });
+
+  it('密码计算期间改密后不得签发令牌', async () => {
+    afterCompare = () => {
+      db.prepare('UPDATE users SET password_hash = ? WHERE id = 1').run('changed-hash');
+    };
+    const result = await login('active_user', correctPassword);
+    expect(result.status).toBe(401);
+    expect(result.body.token).toBeUndefined();
+  });
+});
+
+describe('异步密码接口容量与并发', () => {
+  it('工作池拒绝时返回可重试的503且不泄露内部失败原因', async () => {
+    passwordFailure = new PasswordPoolError('OVERLOADED');
+    const result = await login('active_user', correctPassword);
+    expect(result.status).toBe(503);
+    expect(result.retryAfter).toBe('1');
+    expect(result.body.code).toBe('SERVICE_BUSY');
+    expect(result.body.token).toBeUndefined();
+  });
+
+  it('同账号并发注册只有一个申请成功且保持cost11', async () => {
+    const submit = () =>
+      fetch(`${baseUrl}/api/auth/register`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          username: 'new_coach',
+          password: correctPassword,
+          displayName: '测试教练',
+          role: 'SCC',
+          project: 'ROWING',
+          team: '测试队伍',
+          phone: '13800000000',
+          gender: '男',
+          birthDate: '2000-02-29',
+        }),
+      });
+    const responses = await Promise.all([submit(), submit()]);
+    expect(responses.map((response) => response.status).sort()).toEqual([201, 409]);
+    const records = db
+      .prepare('SELECT password_hash FROM registration_requests WHERE username = ?')
+      .all('new_coach') as Array<{ password_hash: string }>;
+    expect(records).toHaveLength(1);
+    expect(records[0].password_hash).toMatch(/^\$2[aby]\$11\$/);
+  });
+});
+
+it('超长登录密码返回凭据错误且不占用密码池', async () => {
+  passwordFailure = new PasswordPoolError('OVERLOADED');
+  const result = await login('active_user', 'A1'.repeat(37));
+  expect(result.status).toBe(401);
+  expect(result.body.code).toBe('INVALID_CREDENTIALS');
+});
+
+it('注册快速查重不占用已满的密码池', async () => {
+  passwordFailure = new PasswordPoolError('OVERLOADED');
+  const response = await fetch(`${baseUrl}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      username: 'pending_user',
+      password: correctPassword,
+      displayName: '测试教练',
+      role: 'SCC',
+      project: 'ROWING',
+      team: '测试队伍',
+      phone: '13800000000',
+      gender: '男',
+      birthDate: '2000-02-29',
+    }),
+  });
+  expect(response.status).toBe(409);
+});
+
+let registrationSource = 0;
+const registrationInput = {
+  username: 'new_person',
+  password: correctPassword,
+  displayName: '测试人员',
+  project: 'ROWING',
+  team: '测试队伍',
+  phone: '13800000000',
+  gender: '女',
+  birthDate: '2000-02-29',
+  nativePlace: '浙江/杭州市',
+};
+async function registerInput(input: Record<string, unknown>) {
+  registrationSource += 1;
+  return fetch(`${baseUrl}/api/auth/register`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-forwarded-for': `192.0.2.${registrationSource}` },
+    body: JSON.stringify(input),
+  });
+}
+describe('独立注册人口信息', () => {
+  it.each(['ATL', 'SCC'])('角色%s不需要身份证并保存性别生日', async (role) => {
+    const response = await registerInput({ ...registrationInput, role });
+    expect(response.status).toBe(201);
+    expect(
+      db
+        .prepare('SELECT gender,birth_date FROM registration_requests WHERE username=?')
+        .get(registrationInput.username)
+    ).toEqual({ gender: '女', birth_date: '2000-02-29' });
+  });
+  it.each([
+    { gender: undefined },
+    { gender: '未知' },
+    { birthDate: undefined },
+    { birthDate: '2001-02-29' },
+    { birthDate: '9999-01-01' },
+  ])('非法人口信息返回字段错误 %#', async (invalid) => {
+    const response = await registerInput({ ...registrationInput, role: 'SCC', ...invalid });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ fieldErrors: expect.any(Object) });
+  });
+});
+
+it.each(['identityNumber', 'identity_number'])(
+  '拒绝历史证件字段 %s 且不创建申请',
+  async (field) => {
+    const response = await registerInput({
+      ...registrationInput,
+      role: 'ATL',
+      [field]: '不应采集',
+    });
+    expect(response.status).toBe(400);
+    expect(
+      db
+        .prepare('SELECT id FROM registration_requests WHERE username=?')
+        .get(registrationInput.username)
+    ).toBeUndefined();
+  }
+);
+it('拒绝申请重提独立更新生日性别', async () => {
+  const response = await registerInput({
+    ...registrationInput,
+    role: 'SCC',
+    username: 'rejected_user',
+  });
+  expect(response.status).toBe(201);
+  expect(
+    db
+      .prepare("SELECT gender,birth_date FROM registration_requests WHERE username='rejected_user'")
+      .get()
+  ).toEqual({ gender: '女', birth_date: '2000-02-29' });
+});
+
+it('关闭审核时已有档案冲突明确返回错误，申请保留待人工核对', async () => {
+  db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+  db.prepare(
+    'INSERT INTO athletes (id,name,project,team,team_id,gender,birth_date) VALUES (10,?,?,?,?,?,?)'
+  ).run(registrationInput.displayName, 'ROWING', '测试队伍', 1, '女', '2000-02-29');
+  const response = await registerInput({ ...registrationInput, role: 'ATL' });
+  expect(response.status).toBe(400);
+  expect(await response.json()).toMatchObject({
+    status: 'pending',
+    message: expect.stringContaining('联系管理员'),
+  });
+  expect(db.prepare('SELECT id FROM users WHERE athlete_id=10').get()).toBeUndefined();
+  expect(
+    db
+      .prepare('SELECT status FROM registration_requests WHERE username=?')
+      .get(registrationInput.username)
+  ).toEqual({ status: 'pending' });
+});
+
+it.each(['SCC', 'coach'])('关闭审核时教练申请自动开通并可登录，权限限于申请项目队伍：%s', async (role) => {
+  db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+  const response = await registerInput({ ...registrationInput, role });
+  expect(response.status).toBe(201);
+  expect(await response.json()).toMatchObject({ status: 'approved', message: '注册成功，可登录。' });
+  const result = await login(registrationInput.username, correctPassword);
+  expect(result.status).toBe(200);
+  const user = db.prepare('SELECT id,role,athlete_id FROM users WHERE username=?').get(registrationInput.username);
+  expect(user).toMatchObject({ role: 'SCC', athlete_id: null });
+  expect(db.prepare('SELECT user_id FROM coach_profiles').get()).toEqual({ user_id: user?.id });
+  expect(db.prepare('SELECT project FROM user_project_permissions').all()).toEqual([{ project: 'ROWING' }]);
+  expect(db.prepare('SELECT project,team FROM user_team_permissions').all()).toEqual([{ project: 'ROWING', team: '测试队伍' }]);
+  expect(db.prepare('SELECT id FROM athletes').all()).toEqual([]);
+  expect(db.prepare('SELECT status,reviewed_by FROM registration_requests WHERE username=?').get(registrationInput.username)).toEqual({ status: 'approved', reviewed_by: null });
+  expect(db.prepare('SELECT action FROM audit_logs').all()).toEqual([{ action: 'AUTO_APPROVE_REGISTRATION' }]);
+});
+
+it.each(['主管教练', '专项教练', '体能教练', '康复治疗师'])('自动开通保留申请角色 %s', async (coachCategory) => {
+  db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+  const response = await registerInput({ ...registrationInput, role: 'SCC', coachCategory });
+  expect(response.status).toBe(201);
+  expect(await response.json()).toMatchObject({ status: 'approved' });
+  expect(db.prepare('SELECT category FROM coach_profiles').get()).toEqual({ category: coachCategory });
+});
+
+it.each([['SCC', 'DMD'], ['ATL', '主管教练']])('拒绝非法身份组合 %s / %s', async (role, coachCategory) => {
+  const response = await registerInput({ ...registrationInput, role, coachCategory });
+  expect(response.status).toBe(400);
+  expect(db.prepare('SELECT id FROM registration_requests WHERE username = ?').get(registrationInput.username)).toBeUndefined();
+});
+
+it.each(['ATL', 'SCC'])('开启审核时注册保持待审核且不能登录：%s', async (role) => {
+  const response = await registerInput({ ...registrationInput, role });
+  expect(response.status).toBe(201);
+  expect(await response.json()).toMatchObject({ status: 'pending' });
+  expect(db.prepare('SELECT id FROM users WHERE username=?').get(registrationInput.username)).toBeUndefined();
+  expect((await login(registrationInput.username, correctPassword)).body.code).toBe('ACCOUNT_PENDING');
+});
+
+it('关闭审核时运动员账号可登录，但入队来源保持待核实且归属为推测', async () => {
+  db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+  const response = await registerInput({ ...registrationInput, role: 'ATL' });
+  expect(response.status).toBe(201);
+  expect(await response.json()).toMatchObject({ status: 'approved' });
+  expect(db.prepare('SELECT source,region,city,county FROM athletes').get()).toEqual({
+    source: 'self_registered',
+    region: '浙江',
+    city: '杭州市',
+    county: '',
+  });
+  expect(db.prepare('SELECT source,quality FROM athlete_origins').get()).toEqual({
+    source: 'registration',
+    quality: 'estimated',
+  });
+  const result = await login(registrationInput.username, correctPassword);
+  expect(result.status).toBe(200);
+});
+
+it.each([
+  { project: 'CANOE', team: '测试队伍' },
+  { project: 'ROWING', team: '不存在的队伍' },
+])('关闭审核时教练仍不能注册到无效项目队伍：%j', async (scope) => {
+  db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+  const response = await registerInput({ ...registrationInput, role: 'SCC', ...scope });
+  expect(response.status).toBe(400);
+  expect(db.prepare('SELECT id FROM users WHERE username=?').get(registrationInput.username)).toBeUndefined();
+  expect(db.prepare('SELECT id FROM registration_requests WHERE username=?').get(registrationInput.username)).toBeUndefined();
+});
+
+it('教练自动开通失败时回滚账号和权限，保留待审核申请', async () => {
+  db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+  db.exec("CREATE TRIGGER fail_coach_profile BEFORE INSERT ON coach_profiles BEGIN SELECT RAISE(ABORT, 'test failure'); END");
+  try {
+    const response = await registerInput({ ...registrationInput, role: 'SCC' });
+    expect(response.status).toBe(400);
+    expect(await response.json()).toMatchObject({ status: 'pending' });
+    expect(db.prepare('SELECT id FROM users WHERE username=?').get(registrationInput.username)).toBeUndefined();
+    expect(db.prepare('SELECT user_id FROM user_team_permissions').all()).toEqual([]);
+    expect(db.prepare('SELECT action FROM audit_logs').all()).toEqual([]);
+    expect(db.prepare('SELECT status FROM registration_requests WHERE username=?').get(registrationInput.username)).toEqual({ status: 'pending' });
+  } finally {
+    db.exec('DROP TRIGGER fail_coach_profile');
+  }
+});
+
+it('不同客户端独立限流，伪造转发头前缀不能绕过限制', async () => {
+  async function attempt(forwarded: string) {
+    return fetch(`${baseUrl}/api/auth/login`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-forwarded-for': forwarded },
+      body: JSON.stringify({ username: '', password: '' }),
+    });
+  }
+  for (let index = 0; index < 12; index += 1) {
+    expect((await attempt('198.51.100.31')).status).toBe(400);
+  }
+  expect((await attempt('198.51.100.31')).status).toBe(429);
+  expect((await attempt('203.0.113.32')).status).toBe(400);
+  expect((await attempt('203.0.113.99, 198.51.100.31')).status).toBe(429);
+  expect((await attempt('127.0.0.1, 198.51.100.31')).status).toBe(429);
+});
+
+describe('教练注册新增队伍', () => {
+  it('需审核时仅保存申请，不提前创建队伍', async () => {
+    const response = await registerInput({ ...registrationInput, role: 'SCC', team: '新教练队', createTeam: true });
+    expect(response.status).toBe(201);
+    expect(db.prepare('SELECT create_team FROM registration_requests WHERE username=?').get(registrationInput.username)).toEqual({ create_team: 1 });
+    expect(db.prepare("SELECT id FROM project_teams WHERE name='新教练队'").get()).toBeUndefined();
+  });
+  it('自动开通同时创建队伍并限定教练权限', async () => {
+    db.exec("INSERT INTO app_metadata VALUES ('registration_approval_enabled','0')");
+    const response = await registerInput({ ...registrationInput, role: 'SCC', team: '新教练队', createTeam: true });
+    expect(response.status).toBe(201);
+    expect(await response.json()).toMatchObject({ status: 'approved' });
+    expect(db.prepare("SELECT active FROM project_teams WHERE project='ROWING' AND name='新教练队'").get()).toEqual({ active: 1 });
+    expect(db.prepare("SELECT project,team FROM user_team_permissions").get()).toEqual({ project: 'ROWING', team: '新教练队' });
+  });
+  it.each([
+    { role: 'ATL', team: '新教练队', createTeam: true },
+    { role: 'SCC', team: '新教练队', createTeam: 'true' },
+    { role: 'SCC', team: ' ', createTeam: true },
+    { role: 'SCC', team: '队', createTeam: true },
+    { role: 'SCC', team: '队'.repeat(31), createTeam: true },
+    { role: 'SCC', project: 'INVALID', team: '新教练队', createTeam: true },
+  ])('拒绝无效新增申请 %j', async (input) => {
+    expect((await registerInput({ ...registrationInput, ...input })).status).toBe(400);
+  });
+});
+
+describe('队伍改名', () => {
+  it('校验角色和队伍范围，并保留关联、历史与跨项目授权', async () => {
+    db.exec(`
+      INSERT INTO project_teams (id, project, name) VALUES (99, 'ROWING', '旧队名'), (98, 'ROWING', '同名冲突');
+      INSERT INTO athletes (id, name, project, team, team_id) VALUES (99, '运动员', 'ROWING', '旧队名', 99);
+      INSERT INTO user_project_permissions VALUES (1, '*', 1);
+      UPDATE registration_requests SET project = 'ROWING', team = '旧队名';
+      INSERT INTO data_import_batches VALUES ('open', 'reviewing'), ('done', 'committed');
+      INSERT INTO data_import_athlete_candidates VALUES ('open', 'ROWING', '旧队名'), ('done', 'ROWING', '旧队名');
+    `);
+    const patch = async (role: string, name: string) => {
+      db.prepare('UPDATE users SET role = ? WHERE id = 1').run(role);
+      const { body } = await login('active_user', correctPassword);
+      return fetch(`${baseUrl}/api/admin/teams/99`, {
+        method: 'PATCH',
+        headers: { authorization: `Bearer ${body.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ name }),
+      });
+    };
+    expect((await patch('REG', '新队名')).status).toBe(403);
+    expect((await patch('TD', '新队名')).status).toBe(403);
+    db.exec("INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (1, '*', '旧队名', 1)");
+    expect((await patch('TD', '同名冲突')).status).toBe(409);
+    db.exec("UPDATE project_teams SET active = 0 WHERE id = 98");
+    const archivedConflict = await patch('TD', '同名冲突');
+    expect(archivedConflict.status).toBe(409);
+    expect(await archivedConflict.json()).toMatchObject({ message: expect.stringContaining('合并') });
+    expect(db.prepare('SELECT name FROM project_teams WHERE id = 99').get()).toEqual({ name: '旧队名' });
+    expect(db.prepare('SELECT active FROM project_teams WHERE id = 98').get()).toEqual({ active: 0 });
+    db.exec("CREATE TRIGGER reject_import_update BEFORE UPDATE ON data_import_athlete_candidates BEGIN SELECT RAISE(ABORT, 'test rollback'); END");
+    expect((await patch('TD', '新队名')).status).toBe(500);
+    expect(db.prepare('SELECT name FROM project_teams WHERE id = 99').get()).toEqual({ name: '旧队名' });
+    expect(db.prepare('SELECT team FROM user_team_permissions WHERE project = ?').get('*')).toEqual({ team: '旧队名' });
+    db.exec('DROP TRIGGER reject_import_update');
+    expect((await patch('TD', '新队名')).status).toBe(200);
+    expect(db.prepare('SELECT team, team_id FROM athletes WHERE id = 99').get()).toEqual({ team: '新队名', team_id: 99 });
+    expect(db.prepare('SELECT team FROM user_team_permissions WHERE project = ?').get('CANOE_SPRINT')).toEqual({ team: '旧队名' });
+    expect(db.prepare('SELECT team FROM user_team_permissions WHERE project = ?').get('ROWING')).toEqual({ team: '新队名' });
+    expect(db.prepare('SELECT team FROM registration_requests ORDER BY id').all()).toEqual([{ team: '新队名' }, { team: '旧队名' }]);
+    expect(db.prepare('SELECT team FROM data_import_athlete_candidates ORDER BY batch_id').all()).toEqual([{ team: '旧队名' }, { team: '新队名' }]);
+    const merge = async () => {
+      const { body } = await login('active_user', correctPassword);
+      return fetch(`${baseUrl}/api/admin/teams/99`, {
+        method: 'PATCH',
+        headers: { authorization: `Bearer ${body.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify({ name: '同名冲突', merge: true }),
+      });
+    };
+    expect((await merge()).status).toBe(403);
+    db.exec("INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (1, 'ROWING', '同名冲突', 1)");
+    db.exec("INSERT INTO training_plans (id, team_id) VALUES (99,99)");
+    db.exec("CREATE TRIGGER reject_merge_audit BEFORE INSERT ON audit_logs BEGIN SELECT RAISE(ABORT, 'test rollback'); END");
+    expect((await merge()).status).toBe(500);
+    expect(db.prepare('SELECT team_id FROM athletes WHERE id = 99').get()).toEqual({ team_id: 99 });
+    expect(db.prepare('SELECT active FROM project_teams WHERE id = 98').get()).toEqual({ active: 0 });
+    db.exec('DROP TRIGGER reject_merge_audit');
+    expect((await merge()).status).toBe(200);
+    expect(db.prepare('SELECT team, team_id FROM athletes WHERE id = 99').get()).toEqual({ team: '同名冲突', team_id: 98 });
+    expect(db.prepare('SELECT active FROM project_teams WHERE id = 99').get()).toEqual({ active: 0 });
+    expect(db.prepare('SELECT active FROM project_teams WHERE id = 98').get()).toEqual({ active: 1 });
+    expect(db.prepare('SELECT team_id FROM training_plans WHERE id = 99').get()).toEqual({ team_id: 98 });
+    expect(db.prepare("SELECT team FROM user_team_permissions WHERE project = 'ROWING'").all()).toEqual([{ team: '同名冲突' }]);
+    expect(db.prepare("SELECT action FROM audit_logs").get()).toEqual({ action: 'MERGE_TEAM' });
+  });
+});
+
+it('同名队伍需要明确确认才恢复，保留原队伍 ID 和停用运动员状态', async () => {
+  db.exec(`
+    UPDATE users SET role = 'DMD' WHERE id = 1;
+    INSERT INTO user_project_permissions VALUES (1, '*', 1);
+    INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (1, '*', '*', 1);
+    INSERT INTO project_teams (id, project, name, active) VALUES (97, 'ROWING', '停用测试队', 0);
+    INSERT INTO training_plans VALUES (97, 97, 'team', '历史计划', '2026-11-24');
+    INSERT INTO athletes (id, name, project, team, team_id, active) VALUES (97, '测试运动员', 'ROWING', '停用测试队', 97, 0);
+  `);
+  const { body } = await login('active_user', correctPassword);
+  const inactive = await fetch(`${baseUrl}/api/admin/teams/inactive`, {
+    headers: { authorization: `Bearer ${body.token}` },
+  });
+  expect(await inactive.json()).toMatchObject({
+    teams: expect.arrayContaining([{ id: 97, project: 'ROWING', name: '停用测试队', planCount: 1, latestPublishedPlan: '历史计划' }]),
+  });
+  const create = (restore: boolean) => fetch(`${baseUrl}/api/admin/teams`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${body.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ project: 'ROWING', name: '停用测试队', restore }),
+  });
+  const conflict = await create(false);
+  expect(conflict.status).toBe(409);
+  expect(await conflict.json()).toMatchObject({ code: 'TEAM_INACTIVE' });
+  expect((await (await create(true)).json())).toMatchObject({ id: 97, message: '队伍已恢复。' });
+  expect(db.prepare('SELECT active FROM athletes WHERE id = 97').get()).toEqual({ active: 0 });
+});

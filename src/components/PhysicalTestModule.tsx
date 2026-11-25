@@ -1,0 +1,328 @@
+import { latestStrengthMetricTests } from './strength-test-samples';
+import { metricAppliesToProject } from '../../shared/import-metric-choice';
+import { useMemo, useState } from 'react';
+import {
+  CartesianGrid,
+  ComposedChart,
+  Line,
+  ReferenceLine,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from 'recharts';
+import type { Athlete, Project, StrengthTest } from '../types';
+import { formatNumber } from '../utils';
+import {
+  STRENGTH_METRICS,
+  STRENGTH_METRIC_MAP,
+  type StrengthMetricKey,
+} from '../../shared/strength-model';
+import { ChartCard, ContentState } from './PageLayout';
+import './PhysicalTestModule.css';
+
+type Props = {
+  tests: StrengthTest[];
+  project: Project;
+  from: string;
+  to: string;
+  athleteId: number | null;
+  athletes: Athlete[];
+};
+
+type TrendRow = {
+  date: string;
+  team: number | null;
+  personal: number | null;
+  count: number;
+};
+
+type Standard = {
+  value: number;
+  label: string;
+  note: string;
+};
+
+// 教练目标沿用现有测试聚合口径：仅统计大于 0 的目标值并取平均。
+function coachTarget(tests: StrengthTest[], metricKey: StrengthMetricKey) {
+  const targets = tests
+    .map((test) => test.targets[metricKey])
+    .filter((value): value is number => typeof value === 'number' && value > 0);
+  return targets.length ? targets.reduce((sum, value) => sum + value, 0) / targets.length : null;
+}
+
+function round(value: number, digits = 1) {
+  const factor = 10 ** digits;
+  return Math.round(value * factor) / factor;
+}
+
+export function PhysicalTestModule({ tests, project, from, to, athleteId, athletes }: Props) {
+  const metricOptions = useMemo(
+    () =>
+      STRENGTH_METRICS.filter((metric) => metricAppliesToProject(metric, project)),
+    [project]
+  );
+  const [selectedKey, setSelectedKey] = useState<StrengthMetricKey | ''>('');
+  const measuredMetric = metricOptions.find(({ key }) => tests.some((test) =>
+    (!athleteId || test.athleteId === athleteId) && typeof test.metrics[key] === 'number'
+  ));
+  const metricKey = (
+    selectedKey && metricOptions.some((item) => item.key === selectedKey)
+      ? selectedKey
+      : measuredMetric?.key ?? metricOptions[0]?.key
+  ) as StrengthMetricKey | undefined;
+  const definition = metricKey ? STRENGTH_METRIC_MAP[metricKey] : undefined;
+  const [selectedProtocol, setSelectedProtocol] = useState('');
+  const protocolKey = (test: StrengthTest) => JSON.stringify([test.protocol || '', test.protocolVersion || '', test.contextKey || '']);
+  const protocolOptions = [...new Map(tests.filter(test => (!athleteId || test.athleteId === athleteId) && metricKey && typeof test.metrics[metricKey] === 'number')
+    .map(test => [protocolKey(test), [test.protocol || '未知协议', test.protocolVersion && `版本 ${test.protocolVersion}`, test.contextKey && `条件 ${test.contextKey}`].filter(Boolean).join(' · ')])).entries()];
+  const activeProtocol = protocolOptions.some(([key]) => key === selectedProtocol) ? selectedProtocol : protocolOptions[0]?.[0];
+  const scopedTests = tests.filter(test => (!athleteId || test.athleteId === athleteId) && protocolKey(test) === activeProtocol);
+  const hasKnownProtocol = scopedTests.some((test) => Boolean(test.protocol));
+
+  const trendRows = useMemo<TrendRow[]>(() => {
+    if (!metricKey) return [];
+    const teamByDate = new Map<string, Map<number, number>>();
+    const personalByDate = new Map<string, number>();
+    for (const test of tests.filter(test => protocolKey(test) === activeProtocol)) {
+      const value = test.metrics[metricKey];
+      if (typeof value !== 'number' || !Number.isFinite(value)) continue;
+      const perAthlete = teamByDate.get(test.testDate) ?? new Map<number, number>();
+      perAthlete.set(test.athleteId, value);
+      teamByDate.set(test.testDate, perAthlete);
+      if (test.athleteId === athleteId) personalByDate.set(test.testDate, value);
+    }
+    return [...teamByDate.keys()].sort().map((date) => {
+      const values = [...(teamByDate.get(date)?.values() ?? [])];
+      return {
+        date,
+        team: values.length
+          ? round(values.reduce((sum, value) => sum + value, 0) / values.length)
+          : null,
+        personal: athleteId ? (personalByDate.get(date) ?? null) : null,
+        count: values.length,
+      };
+    });
+  }, [athleteId, metricKey, tests, activeProtocol]);
+
+  const standard = useMemo<Standard | null>(() => {
+    if (!metricKey || !definition) return null;
+    const target = coachTarget(scopedTests, metricKey);
+    if (target !== null) {
+      return {
+        value: target,
+        label: '教练目标',
+        note: '按当前范围已有测试目标值平均',
+      };
+    }
+    return null;
+  }, [definition, metricKey, scopedTests]);
+
+  const current = useMemo(() => {
+    if (!metricKey) return { value: null as number | null, sampleCount: 0 };
+    const sources = latestStrengthMetricTests(scopedTests, metricKey);
+    const values = sources
+      .map((test) => test.metrics[metricKey])
+      .filter((value): value is number => typeof value === 'number');
+    return {
+      value: values.length
+        ? round(values.reduce((sum, value) => sum + value, 0) / values.length)
+        : null,
+      sampleCount: values.length,
+    };
+  }, [metricKey, scopedTests]);
+
+  const comparison = useMemo(() => {
+    if (current.value === null || !standard)
+      return { difference: null as number | null, achieved: null as number | null };
+    return {
+      difference: round(current.value - standard.value),
+      achieved: standard.value > 0 ? round((current.value / standard.value) * 100) : null,
+    };
+  }, [current.value, standard]);
+
+  const isPlaceholder = trendRows.length === 0;
+  const chartData = [...(trendRows.length ? trendRows : [{ date: '—', team: null, personal: null, count: 0 }])];
+  const unit = definition?.unit ?? '';
+  const athleteName = athletes.find((item) => item.id === athleteId)?.name ?? '当前运动员';
+  const scopeLabel = athleteId ? `${athleteName}个人与团队对比` : '团队平均';
+
+  return (
+    <ChartCard
+      title="体能测试"
+      description={`${scopeLabel} · ${from} — ${to} · 同协议单指标趋势；项目参考评价在独立模块展示`}
+      className="physical-test-module"
+    >
+      {definition && metricOptions.length ? (
+        <div className="physical-test-body">
+          <div className="physical-test-chart">
+            <div className="physical-test-toolbar">
+              <label>
+                测试指标
+                <select
+                  aria-label="体能测试指标"
+                  value={metricKey}
+                  onChange={(event) => setSelectedKey(event.target.value as StrengthMetricKey)}
+                >
+                  {metricOptions.map((metric) => (
+                    <option key={metric.key} value={metric.key}>
+                      {metric.label}（{metric.unit}）
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>测试协议<select aria-label="体能测试协议" value={activeProtocol || ''} onChange={event => setSelectedProtocol(event.target.value)}>
+                {protocolOptions.map(([key,label]) => <option key={key} value={key}>{label}</option>)}
+              </select></label>
+
+            </div>
+            <div className="physical-test-canvas">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart
+                  data={chartData}
+                  margin={{ top: 18, right: 18, left: -12, bottom: 0 }}
+                >
+                  <CartesianGrid stroke="#dce7e9" strokeDasharray="3 5" vertical={false} />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10, fill: '#62767d' }}
+                    axisLine={false}
+                    tickLine={false}
+                  />
+                  <YAxis allowDataOverflow={isPlaceholder} domain={isPlaceholder ? [0, 1] : undefined} ticks={isPlaceholder ? [0, 0.25, 0.5, 0.75, 1] : undefined}
+                    tick={{ fontSize: 10, fill: '#62767d' }}
+                    axisLine={false}
+                    tickLine={false}
+                    unit={unit}
+                  />
+                  <Tooltip
+                    content={({ active, label }) => {
+                      const row = chartData.find((item) => item.date === String(label));
+                      if (!active || !row) return null;
+                      const mainValue = athleteId ? row.personal : row.team;
+                      const difference =
+                        standard && mainValue !== null && !isPlaceholder
+                          ? round(mainValue - standard.value)
+                          : null;
+                      return (
+                        <div className="training-volume-tooltip">
+                          <strong>
+
+                            {row.date}
+                          </strong>
+                          <p>
+                            团队平均：
+                            {row.team === null ? '缺失' : `${formatNumber(row.team, 1)} ${unit}`}
+                          </p>
+                          {athleteId && (
+                            <p>
+                              {athleteName}：
+                              {row.personal === null
+                                ? '缺失'
+                                : `${formatNumber(row.personal, 1)} ${unit}`}
+                            </p>
+                          )}
+                          <p>有效测试人数：{isPlaceholder ? '—' : `${row.count} 人`}</p>
+                          <p>
+                            参考标准（{standard?.label ?? '待参考'}）：
+                            {standard ? `${formatNumber(standard.value, 1)} ${unit}` : '—'}
+                          </p>
+                          <p>
+                            差值：
+                            {difference === null ? '—' : `${formatNumber(difference, 1)} ${unit}`}
+                          </p>
+                        </div>
+                      );
+                    }}
+                  />
+                  {standard && (
+                    <ReferenceLine
+                      y={standard.value}
+                      stroke="#f59e0b"
+                      strokeDasharray="4 3"
+                      label={{
+                        value: `${standard.label} ${formatNumber(standard.value, 1)}${unit}`,
+                        position: 'right',
+                        fontSize: 10,
+                        fill: '#b7791f',
+                      }}
+                    />
+                  )}
+                  <Line
+                    type="monotone"
+                    dataKey="team"
+                    name="团队平均"
+                    stroke="#0d9488"
+                    strokeWidth={hasKnownProtocol ? 2.6 : 0}
+                    dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
+                    connectNulls={false}
+                  />
+                  {athleteId && (
+                    <Line
+                      type="monotone"
+                      dataKey="personal"
+                      name={athleteName}
+                      stroke="#3b82f6"
+                      strokeWidth={hasKnownProtocol ? 2.2 : 0}
+                      strokeDasharray="6 3"
+                      dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
+                      connectNulls={false}
+                    />
+                  )}
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+            <p className="physical-test-note">
+              {isPlaceholder
+                ? '当前周期暂无真实体能测试数据。'
+                : hasKnownProtocol
+                  ? '按测试日期汇总有效记录，查看数据点可见测试人数。'
+                  : '历史记录缺少测试协议，以独立数据点展示。'}
+            </p>
+          </div>
+          <aside className="physical-test-standard">
+            <h3>标准对比</h3>
+            <p className="physical-test-standard-source">
+              {definition.label}（{unit}）· {standard ? standard.note : '待参考'}
+            </p>
+            <dl>
+              <div>
+                <dt>{athleteId ? `${athleteName}当前值` : '团队当前平均值'}</dt>
+                <dd>
+                  {current.value === null ? '—' : formatNumber(current.value, 1)}
+                  <small>{current.value === null ? '' : unit}</small>
+                </dd>
+              </div>
+              <div>
+                <dt>标准参考值（{standard?.label ?? '—'}）</dt>
+                <dd>
+                  {standard ? formatNumber(standard.value, 1) : '—'}
+                  <small>{standard ? unit : ''}</small>
+                </dd>
+              </div>
+              <div>
+                <dt>绝对差值</dt>
+                <dd>
+                  {comparison.difference === null ? '—' : formatNumber(comparison.difference, 1)}
+                </dd>
+              </div>
+              <div>
+                <dt>达成度</dt>
+                <dd>
+                  {comparison.achieved === null ? '—' : `${formatNumber(comparison.achieved, 1)}%`}
+                </dd>
+              </div>
+            </dl>
+            <small className="physical-test-standard-foot">
+              {current.value === null
+                ? '当前范围没有有效测试结果，不展示达标判断。'
+                : `基于 ${current.sampleCount} 条最近有效测试；标准优先取与项目、性别、小项和适用人群匹配的冠军模型参考值，单位不一致时回退教练目标，均缺失则不画参考线。`}
+            </small>
+          </aside>
+        </div>
+      ) : (
+        <ContentState kind="empty" title="当前项目没有可用的体能测试指标" />
+      )}
+    </ChartCard>
+  );
+}

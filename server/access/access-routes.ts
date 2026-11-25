@@ -1,0 +1,1103 @@
+import { removedAccountUsernamePattern, removedAccountUsernamePrefix } from '../core/removed-account.ts';
+import { COACH_WORK_STATUS_LABELS, type CoachWorkStatusRecord } from '../../shared/coach-work-status.ts';
+import { assertAthleteProjectChangeAllowed, AthleteProjectChangeError } from '../core/athlete-project-change.ts';
+import {
+  accountCredentialsSchema,
+  ACCOUNT_USERNAME_HINT,
+  INITIAL_ACCOUNT_PASSWORD_HINT,
+} from '../../shared/account-credentials.ts';
+import { validateAccountAreas } from '../../shared/account-regions.ts';
+import { athleteAccountAreaComplete } from '../../shared/athlete-account-area.ts';
+import bcrypt from 'bcryptjs';
+import { z } from 'zod';
+import { parentCoversAthleteScope } from '../core/athlete-parent.ts';
+import { registerResetPasswordRoutes } from './reset-password-routes.ts';
+import type { Express } from 'express';
+import { db, upsertAthleteOrigin } from '../core/db.ts';
+import {
+  accessibleAthleteIds,
+  accountPermissions,
+  accountCodeFor,
+  canManageAccount,
+  hasAthleteAccess,
+  parseScopePayload,
+  permissionsAllowAthlete,
+  permissionsAllowProjectTeam,
+  permissionsContain,
+  replaceAccountScope,
+  standardAccountName,
+  validateScopePayload,
+  selectableProjects,
+} from '../core/permissions.ts';
+import { cleanString, userById, validatePersonName } from '../core/utils.ts';
+import { requireAuth, requireRole } from '../core/auth.ts';
+import {
+  ROLES,
+  ROLE_META,
+  ROLE_HIERARCHY,
+  SYSTEM_MANAGEMENT_ROLES,
+  AREA_LEVEL_META,
+  canManageRole,
+  type Role,
+} from '../../shared/access.ts';
+import { PROVINCES } from '../../shared/regions.ts';
+import { PROJECTS } from '../../shared/projects.ts';
+import { DEFAULT_COACH_CATEGORY, isCoachCategory } from '../../shared/coach-categories.ts';
+import {
+  registrationApprovalEnabled,
+  setRegistrationApprovalEnabled,
+  activateRegistrationRequest,
+  canReviewRegistration,
+  verifyRegistrationTeam,
+} from './registration-service.ts';
+import type { AuthUser, AreaPermission } from '../core/shared-server.ts';
+import {
+  coachScopeConflict,
+  readCoachAthleteRelations,
+  sameCoachIds,
+} from '../core/coach-team-responsibility.ts';
+
+const assignmentUpdateSchema = z.strictObject({
+  coachIds: z.array(z.number().int().positive()).max(1000).optional(),
+  region: z.string().trim().min(1).max(80),
+  city: z.string().trim().min(2).max(120),
+  county: z.string().trim().min(2).max(120),
+});
+const assignmentParamsSchema = z.strictObject({
+  athleteId: z.string().regex(/^[1-9]\d{0,11}$/).transform(Number),
+});
+
+export type AccountRow = AuthUser & {
+  active: number;
+  parentUserId: number | null;
+  parentName: string | null;
+  accountCode: string;
+};
+
+const accountAccessUpdateSchema = z.strictObject({
+  role: z.enum(ROLES),
+  parentUserId: z.number().int().positive(),
+  areas: z
+    .array(
+      z.strictObject({
+        areaLevel: z.enum(['national', 'province', 'city', 'county']),
+        province: z.string().trim().max(80),
+        city: z.string().trim().max(120),
+        county: z.string().trim().max(120),
+      })
+    )
+    .max(100)
+    .default([]),
+  projects: z.array(z.string().trim().min(1).max(100)).max(100).default([]),
+  teams: z
+    .array(
+      z.strictObject({
+        project: z.string().trim().min(1).max(100),
+        team: z.string().trim().min(1).max(160),
+      })
+    )
+    .max(1000),
+});
+
+export function allAccountRows() {
+  return db
+    .prepare(
+      `
+    SELECT u.id, u.username, u.display_name AS displayName, u.role,
+      u.athlete_id AS athleteId, u.active,
+      ap.parent_user_id AS parentUserId, parent.display_name AS parentName,
+      COALESCE(ap.account_code, '') AS accountCode
+    FROM users u
+    LEFT JOIN account_profiles ap ON ap.user_id = u.id
+    LEFT JOIN users parent ON parent.id = ap.parent_user_id
+    WHERE u.username NOT LIKE ?
+    ORDER BY CASE u.role
+      WHEN 'DMD' THEN 5 WHEN 'TD' THEN 4 WHEN 'REG' THEN 3 WHEN 'SCC' THEN 2 ELSE 1 END DESC,
+      u.display_name, u.id
+  `
+    )
+    .all(removedAccountUsernamePattern) as AccountRow[];
+}
+
+export function serializeAccount(row: AccountRow) {
+  const permissions = accountPermissions(row.id);
+  return {
+    ...row,
+    roleLabel: ROLE_META[row.role].label,
+    roleLevel: ROLE_META[row.role].level,
+    areaPending: row.role === 'ATL' && !athleteAccountAreaComplete(permissions.areas),
+    standardName: standardAccountName({
+      displayName: row.displayName,
+      role: row.role,
+      projects: permissions.projects,
+      teams: permissions.teams,
+    }),
+    areas: row.role === 'ATL' ? permissions.areas : [],
+    projects: permissions.projects,
+    teams: permissions.teams,
+  };
+}
+
+export function resolveParent(
+  currentUser: AuthUser,
+  targetRole: Role,
+  parentUserId: number,
+  targetPermissions: ReturnType<typeof parseScopePayload>
+) {
+  const parent = userById(parentUserId);
+  if (
+    !parent ||
+    !db.prepare('SELECT id FROM users WHERE id=? AND active=1').get(parentUserId) ||
+    !canManageRole(parent.role, targetRole)
+  )
+    return { error: '上级账号层级不符合要求。', parent: null };
+  if (parent.id !== currentUser.id && !canManageAccount(currentUser, parent)) {
+    return { error: '不能选择权限范围外的上级账号。', parent: null };
+  }
+  if (
+    !(targetRole === 'OBS' && !targetPermissions.teams.length) &&
+    !(targetRole === 'ATL'
+      ? parentCoversAthleteScope(parent.id, targetPermissions)
+      : permissionsContain(accountPermissions(parent.id), targetPermissions))
+  ) {
+    return { error: '账号权限范围不能超出上级账号。', parent: null };
+  }
+  return { error: '', parent };
+}
+
+export function registerAccessRoutes(app: Express) {
+  registerResetPasswordRoutes(app);
+  app.get(
+    '/api/admin/registrations/approval',
+    requireAuth,
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
+    (_req, res) => {
+      res.json({ enabled: registrationApprovalEnabled() });
+    }
+  );
+
+  app.put(
+    '/api/admin/registrations/approval',
+    requireAuth,
+    requireRole('DMD'),
+    (req, res) => {
+      if (typeof req.body?.enabled !== 'boolean') {
+        return res.status(400).json({ message: '开关参数无效。' });
+      }
+      const enabled = req.body.enabled as boolean;
+      const previous = registrationApprovalEnabled();
+      setRegistrationApprovalEnabled(enabled);
+      if (previous !== enabled) {
+        db.prepare(
+          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+        ).run(
+          req.authUser!.id,
+          'UPDATE_REGISTRATION_APPROVAL',
+          'setting',
+          null,
+          JSON.stringify({ from: previous, to: enabled })
+        );
+      }
+      res.json({ enabled });
+    }
+  );
+
+  app.get(
+    '/api/admin/registrations',
+    requireAuth,
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
+    (req, res) => {
+      const requestedStatus = cleanString(req.query.status);
+      const status = ['pending', 'approved', 'rejected'].includes(requestedStatus)
+        ? requestedStatus
+        : 'pending';
+      const registrationRows = db.prepare(`
+      SELECT r.id, r.username, r.display_name AS displayName, r.requested_role AS requestedRole, r.coach_category AS coachCategory,
+        CASE WHEN a.id IS NOT NULL THEN a.project ELSE r.project END AS project,
+        CASE WHEN a.id IS NOT NULL THEN COALESCE(pt.name,a.team) ELSE r.team END AS team, r.gender, r.birth_date AS birthDate, r.native_place AS nativePlace, r.phone, r.status,
+        r.created_at AS createdAt, r.reviewed_at AS reviewedAt,
+        CASE WHEN a.source='self_registered' THEN 'pending'
+          WHEN r.status='approved' AND r.requested_role='ATL' AND r.reviewed_by IS NOT NULL THEN 'verified' ELSE NULL END AS teamVerification
+      FROM registration_requests r LEFT JOIN users u ON u.username=r.username AND u.role='ATL'
+      LEFT JOIN athletes a ON a.id=u.athlete_id
+      LEFT JOIN project_teams pt ON pt.id=a.team_id AND pt.project=a.project
+      WHERE r.status = ? ORDER BY r.created_at ASC
+    `);
+      type RegistrationRow = {
+        id: number;
+        username: string;
+        displayName: string;
+        requestedRole: 'ATL' | 'SCC';
+        project: string;
+        team: string;
+        gender: string | null;
+        birthDate: string | null;
+        nativePlace: string | null;
+        phone: string | null;
+        status: string;
+        createdAt: string;
+        reviewedAt: string | null;
+      };
+      const reviewer = req.authUser!;
+      const permissions = accountPermissions(reviewer.id);
+      const visibleRequests = (status: string) =>
+        (registrationRows.all(status) as RegistrationRow[]).filter((request) =>
+          canReviewRegistration(reviewer, request, permissions)
+        );
+      const requests = visibleRequests(status);
+      const pending = status === 'pending' ? requests.length : visibleRequests('pending').length;
+      res.json({ requests, pending });
+    }
+  );
+
+  app.put(
+    '/api/admin/registrations/:id/name',
+    requireAuth,
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
+    (req, res) => {
+      const requestId = Number(req.params.id);
+      const registration = db
+        .prepare(
+          `
+      SELECT id, username, display_name AS displayName, requested_role AS requestedRole, status
+      FROM registration_requests WHERE id = ?
+    `
+        )
+        .get(requestId) as
+        | {
+            id: number;
+            username: string;
+            displayName: string;
+            requestedRole: 'ATL' | 'SCC';
+            status: 'pending' | 'approved' | 'rejected';
+          }
+        | undefined;
+      if (!registration) return res.status(404).json({ message: '注册申请不存在。' });
+      const registrationScope = db
+        .prepare(
+          `
+      SELECT r.requested_role AS requestedRole, r.native_place AS nativePlace,
+        CASE WHEN a.id IS NOT NULL THEN a.project ELSE r.project END AS project,
+        CASE WHEN a.id IS NOT NULL THEN COALESCE(pt.name,a.team) ELSE r.team END AS team
+      FROM registration_requests r LEFT JOIN users u ON u.username=r.username AND u.role='ATL'
+      LEFT JOIN athletes a ON a.id=u.athlete_id
+      LEFT JOIN project_teams pt ON pt.id=a.team_id AND pt.project=a.project
+      WHERE r.id = ?
+    `
+        )
+        .get(requestId) as { requestedRole: Role; project: string; team: string; nativePlace: string | null };
+      if (!canReviewRegistration(req.authUser!, { ...registration, ...registrationScope }))
+        return res.status(403).json({ message: '无权修改该注册申请。' });
+      const { name, error } = validatePersonName(req.body?.name);
+      if (error) return res.status(400).json({ message: error });
+
+      db.exec('BEGIN');
+      try {
+        db.prepare('UPDATE registration_requests SET display_name = ? WHERE id = ?').run(
+          name,
+          requestId
+        );
+        if (registration.status === 'approved') {
+          const linkedUser = db
+            .prepare('SELECT id, athlete_id AS athleteId FROM users WHERE username = ?')
+            .get(registration.username) as
+            | {
+                id: number;
+                athleteId: number | null;
+              }
+            | undefined;
+          if (linkedUser) {
+            db.prepare('UPDATE users SET display_name = ? WHERE id = ?').run(name, linkedUser.id);
+            if (registration.requestedRole === 'ATL' && linkedUser.athleteId) {
+              db.prepare('UPDATE athletes SET name = ? WHERE id = ?').run(
+                name,
+                linkedUser.athleteId
+              );
+            }
+          }
+        }
+        db.prepare(
+          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+        ).run(
+          req.authUser!.id,
+          'UPDATE_REGISTRATION_NAME',
+          'registration_request',
+          requestId,
+          JSON.stringify({ from: registration.displayName, to: name })
+        );
+        db.exec('COMMIT');
+        res.json({ message: '申请姓名已修改。', displayName: name });
+      } catch (renameError) {
+        db.exec('ROLLBACK');
+        const message =
+          renameError instanceof Error && renameError.message.includes('UNIQUE')
+            ? '该姓名已被其他运动员使用。'
+            : '姓名修改失败。';
+        res.status(409).json({ message });
+      }
+    }
+  );
+
+  app.put(
+    '/api/admin/registrations/:id/team',
+    requireAuth,
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
+    (req, res) => {
+      const id = z.coerce.number().int().positive().safeParse(req.params.id);
+      const input = z
+        .strictObject({ project: z.enum(PROJECTS), team: z.string().trim().min(1).max(160) })
+        .safeParse(req.body);
+      if (!id.success || !input.success)
+        return res.status(400).json({ message: '项目或队伍参数无效。' });
+      const request = db
+        .prepare(
+          `SELECT requested_role AS requestedRole, project, team, status, username,
+            display_name AS displayName, native_place AS nativePlace FROM registration_requests WHERE id=?`
+        )
+        .get(id.data) as Parameters<typeof canReviewRegistration>[1] | undefined;
+      if (!request) return res.status(404).json({ message: '注册申请不存在。' });
+      if (request.status !== 'pending')
+        return res.status(409).json({ message: '只能更正待审核申请的队伍。' });
+      const reviewer = req.authUser!;
+      const permissions = accountPermissions(reviewer.id);
+      if (
+        !canReviewRegistration(reviewer, request, permissions) ||
+        !canReviewRegistration(reviewer, { ...request, ...input.data }, permissions)
+      ) {
+        return res.status(403).json({ message: '原队伍或新队伍超出当前账号的管辖范围。' });
+      }
+      if (
+        !db
+          .prepare('SELECT id FROM project_teams WHERE project=? AND name=? AND active=1')
+          .get(input.data.project, input.data.team)
+      ) {
+        return res.status(400).json({ message: '所选队伍不存在或已停用。' });
+      }
+      db.exec('BEGIN');
+      try {
+        db.prepare(
+          "UPDATE registration_requests SET project=?,team=?,create_team=0 WHERE id=? AND status='pending'"
+        ).run(input.data.project, input.data.team, id.data);
+        db.prepare(
+          'INSERT INTO audit_logs (user_id,action,entity_type,entity_id,detail) VALUES (?,?,?,?,?)'
+        ).run(
+          reviewer.id,
+          'UPDATE_REGISTRATION_TEAM',
+          'registration_request',
+          id.data,
+          JSON.stringify({ from: { project: request.project, team: request.team }, to: input.data })
+        );
+        db.exec('COMMIT');
+        res.json({ message: '申请队伍已更正，请核对身份后审核。' });
+      } catch {
+        db.exec('ROLLBACK');
+        res.status(500).json({ message: '申请队伍更正失败。' });
+      }
+    }
+  );
+
+  app.post(
+    '/api/admin/registrations/:id/verify-team',
+    requireAuth,
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
+    (req, res) => {
+      const id = z.coerce.number().int().positive().safeParse(req.params.id);
+      const input = z.strictObject({ approved: z.boolean() }).safeParse(req.body);
+      if (!id.success || !input.success)
+        return res.status(400).json({ message: '入队核实参数无效。' });
+      const outcome = verifyRegistrationTeam(id.data, req.authUser!, input.data.approved);
+      if (!outcome.ok) return res.status(outcome.status).json({ message: outcome.message });
+      res.json({
+        message: input.data.approved
+          ? '入队已核实。'
+          : '已拒绝入队并停用账号和档案，历史数据已保留。',
+      });
+    }
+  );
+
+  app.post(
+    '/api/admin/registrations/:id/approve',
+    requireAuth,
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
+    (req, res) => {
+      const requestId = Number(req.params.id);
+      const outcome = activateRegistrationRequest(requestId, req.authUser!);
+      if (!outcome.ok) return res.status(outcome.status).json({ message: outcome.message });
+      res.json({ message: '账户已开通。' });
+    }
+  );
+
+  app.post(
+    '/api/admin/registrations/:id/reject',
+    requireAuth,
+    requireRole(...SYSTEM_MANAGEMENT_ROLES),
+    (req, res) => {
+      const requestId = Number(req.params.id);
+      const registration = db
+        .prepare(
+          `
+      SELECT requested_role AS requestedRole, project, team, status, username,
+        display_name AS displayName, native_place AS nativePlace
+      FROM registration_requests WHERE id = ?
+    `
+        )
+        .get(requestId) as Parameters<typeof canReviewRegistration>[1] | undefined;
+      if (!registration) return res.status(404).json({ message: '注册申请不存在。' });
+      if (!canReviewRegistration(req.authUser!, registration))
+        return res.status(403).json({ message: '无权处理该注册申请。' });
+      db.exec('BEGIN');
+      try {
+        const result = db
+          .prepare(
+            `UPDATE registration_requests
+          SET status='rejected',reviewed_by=?,reviewed_at=CURRENT_TIMESTAMP
+          WHERE id=? AND status='pending'`
+          )
+          .run(req.authUser!.id, requestId);
+        if (!result.changes) {
+          db.exec('ROLLBACK');
+          return res.status(409).json({ message: '申请不存在或已经处理。' });
+        }
+        db.prepare(
+          'INSERT INTO audit_logs (user_id,action,entity_type,entity_id) VALUES (?,?,?,?)'
+        ).run(req.authUser!.id, 'REJECT_REGISTRATION', 'registration_request', requestId);
+        db.exec('COMMIT');
+        res.json({ message: '申请已拒绝。' });
+      } catch {
+        db.exec('ROLLBACK');
+        res.status(500).json({ message: '拒绝申请失败。' });
+      }
+    }
+  );
+
+  app.get(
+    '/api/admin/assignments',
+    requireAuth,
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    (req, res) => {
+      const ids = accessibleAthleteIds(req.authUser!);
+      const placeholders = ids.map(() => '?').join(',');
+      const athleteRows = ids.length ? db
+        .prepare(
+          `
+      SELECT a.id, a.name, a.project, a.team_id AS teamId, COALESCE(pt.name, '') AS team, a.gender, COALESCE(ao.province, '未设置') AS region, COALESCE(ao.province, '未设置') AS province, COALESCE(ao.city, '') AS city, COALESCE(ao.county, '') AS county
+      FROM athletes a
+      LEFT JOIN project_teams pt ON pt.id = a.team_id
+      LEFT JOIN athlete_origins ao ON ao.athlete_id = a.id
+      WHERE a.id IN (${placeholders}) AND a.active = 1
+      GROUP BY a.id ORDER BY a.project, pt.name, a.name
+    `
+        )
+        .all(...ids) : [];
+      const relations = readCoachAthleteRelations(db, ids);
+      const athletes = athleteRows.map((athlete) => {
+        const coachUsers = relations
+          .filter((coach) => coach.athleteId === athlete.id)
+          .map(({ id, displayName }) => ({ id, displayName }));
+        return {
+          ...athlete,
+          coachUsers,
+          coaches: coachUsers.map((coach) => coach.displayName).join('、'),
+          coachIds: coachUsers.map((coach) => coach.id).join(','),
+        };
+      });
+      const allCoaches = db
+        .prepare(
+          `
+      SELECT u.id, u.username, u.display_name AS displayName, u.role, u.athlete_id AS athleteId,
+        GROUP_CONCAT(cp.category) AS categories
+      FROM users u
+      LEFT JOIN coach_profiles cp ON cp.user_id = u.id
+      WHERE u.role = 'SCC' AND u.username NOT LIKE ? GROUP BY u.id ORDER BY u.id
+    `
+        )
+        .all(removedAccountUsernamePattern) as Array<AuthUser & { displayName: string; categories: string | null }>;
+      const readWorkStatus = db.prepare(
+        'SELECT status, updated_at AS updatedAt FROM coach_work_status WHERE user_id = ?'
+      );
+      const coaches = allCoaches
+        .filter((coach) => coach.id === req.authUser!.id || canManageAccount(req.authUser!, coach))
+        .map(({ id, displayName, categories }) => {
+          const roles = (categories ?? '').split(',').filter(isCoachCategory);
+          const workStatus = (readWorkStatus.get(id) as CoachWorkStatusRecord | undefined) ?? null;
+          return { id, displayName, categories: roles, category: roles[0] ?? null, workStatus };
+        });
+      res.json({ athletes, coaches });
+    }
+  );
+
+  app.put(
+    '/api/admin/coaches/:id/work-status',
+    requireAuth,
+    requireRole('REG', 'TD', 'DMD'),
+    (req, res) => {
+      const id = Number(req.params.id);
+      const input = z.strictObject({
+        status: z.enum(Object.keys(COACH_WORK_STATUS_LABELS) as [keyof typeof COACH_WORK_STATUS_LABELS]),
+        teamId: z.number().int().positive().nullable().optional(),
+      }).safeParse(req.body);
+      if (!Number.isSafeInteger(id) || id < 1 || !input.success)
+        return res.status(400).json({ message: '请选择有效的教练工作状态。' });
+      const currentUser = req.authUser!;
+      const coach = userById(id);
+      if (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach))
+        return res.status(404).json({ message: '教练不存在或不在可管理范围内。' });
+      const workStatus = db.prepare(`
+        INSERT INTO coach_work_status(user_id,status) VALUES(?,?)
+        ON CONFLICT(user_id) DO UPDATE SET status=excluded.status, team_id=NULL,
+          updated_at=CURRENT_TIMESTAMP
+        RETURNING status, updated_at AS updatedAt
+      `).get(id, input.data.status);
+      res.json({ message: '教练工作状态已更新。', workStatus });
+    }
+  );
+
+  app.put(
+    '/api/admin/coaches/:id/category',
+    requireAuth,
+    requireRole('REG', 'TD', 'DMD'),
+    (req, res) => {
+      const currentUser = req.authUser!;
+      const coachId = Number(req.params.id);
+      const categories: unknown = req.body?.categories ?? [req.body?.category];
+      const coach = userById(coachId);
+      if (!coach || coach.role !== 'SCC' || !canManageAccount(currentUser, coach)) {
+        return res.status(404).json({ message: '教练不存在或不在可管理范围内。' });
+      }
+      if (!Array.isArray(categories) || !categories.every(isCoachCategory))
+        return res.status(400).json({ message: '教练类别无效。' });
+      const roles = [...new Set(categories)];
+      db.exec('BEGIN');
+      try {
+        db.prepare('DELETE FROM coach_profiles WHERE user_id = ?').run(coachId);
+        const insert = db.prepare('INSERT INTO coach_profiles (user_id, category) VALUES (?, ?)');
+        for (const category of roles) insert.run(coachId, category);
+        db.prepare(
+          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+        ).run(currentUser.id, 'UPDATE_COACH_CATEGORY', 'user', coachId, JSON.stringify({ categories: roles }));
+        db.exec('COMMIT');
+      } catch (error) {
+        db.exec('ROLLBACK');
+        throw error;
+      }
+      res.json({ message: '教练类别已更新。', categories: roles, category: roles[0] });
+    }
+  );
+
+  app.put(
+    '/api/admin/assignments/:athleteId',
+    requireAuth,
+    requireRole('REG', 'TD', 'DMD'),
+    (req, res) => {
+      const parsedParams = assignmentParamsSchema.safeParse(req.params);
+      const parsed = assignmentUpdateSchema.safeParse(req.body);
+      if (!parsedParams.success || !parsed.success)
+        return res.status(400).json({ message: '运动员或行政归属信息格式无效。' });
+      const { athleteId } = parsedParams.data;
+      const { coachIds, region, city, county } = parsed.data;
+      const currentUser = req.authUser!;
+      const athlete = db
+        .prepare(`SELECT a.id, a.project, COALESCE(pt.name, '') AS team
+          FROM athletes a LEFT JOIN project_teams pt ON pt.id = a.team_id WHERE a.id = ?`)
+        .get(athleteId) as
+        | {
+            id: number;
+            project: string;
+            team: string;
+          }
+        | undefined;
+      const targetScope = {
+        id: athleteId,
+        region,
+        city,
+        county,
+        project: athlete?.project || '',
+        team: athlete?.team || '',
+      };
+      if (
+        !athlete ||
+        !hasAthleteAccess(currentUser, athleteId) ||
+        !(PROVINCES as readonly string[]).includes(region) ||
+        city.length < 2 ||
+        county.length < 2 ||
+        !permissionsAllowAthlete(accountPermissions(currentUser.id), targetScope)
+      ) {
+        return res.status(400).json({ message: '运动员或行政归属信息无效。' });
+      }
+      const derivedCoachIds = readCoachAthleteRelations(db, [athleteId]).map((coach) => coach.id);
+      if (coachIds && !sameCoachIds(coachIds, derivedCoachIds))
+        return res.status(409).json(coachScopeConflict);
+      db.exec('BEGIN');
+      try {
+        upsertAthleteOrigin({
+          athleteId,
+          province: region,
+          city,
+          county,
+          source: 'manual',
+          quality: 'valid',
+        });
+        const athleteUser = db
+          .prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'")
+          .get(athleteId) as { id: number } | undefined;
+        if (athleteUser) {
+          db.prepare('DELETE FROM user_area_permissions WHERE user_id = ?').run(athleteUser.id);
+          db.prepare(
+            `
+          INSERT INTO user_area_permissions (user_id, area_level, province, city, county, granted_by)
+          VALUES (?, 'county', ?, ?, ?, ?)
+        `
+          ).run(athleteUser.id, region, city, county, currentUser.id);
+        }
+        db.prepare(
+          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+        ).run(
+          currentUser.id,
+          'UPDATE_ATHLETE_ORIGIN',
+          'athlete',
+          athleteId,
+          JSON.stringify({ region, city, county })
+        );
+        db.exec('COMMIT');
+        res.json({ updated: true });
+      } catch {
+        db.exec('ROLLBACK');
+        res.status(500).json({
+          message: '行政归属更新失败，请稍后重试。',
+        });
+      }
+    }
+  );
+
+  app.get(
+    '/api/access/accounts',
+    requireAuth,
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    (req, res) => {
+      const currentUser = req.authUser!;
+      const rows = allAccountRows();
+      const current = rows.find((row) => row.id === currentUser.id);
+      const accounts = currentUser.role === 'SCC'
+        ? []
+        : rows.filter((row) => row.id !== currentUser.id && canManageAccount(currentUser, row));
+      const visibleParents = currentUser.role === 'SCC'
+        ? []
+        : rows.filter(
+            (row) =>
+              row.active === 1 &&
+              (row.id === currentUser.id || canManageAccount(currentUser, row)) &&
+              canManageRole(currentUser.role, 'ATL')
+          );
+      res.json({
+        current: current ? serializeAccount(current) : null,
+        accounts: accounts.map(serializeAccount),
+        possibleParents: visibleParents.map((row) => ({
+          id: row.id,
+          displayName: row.displayName,
+          role: row.role,
+          roleLabel: ROLE_META[row.role].label,
+        })),
+        meta: {
+          roles: ROLE_META,
+          hierarchy: ROLE_HIERARCHY,
+          areaLevels: AREA_LEVEL_META,
+          provinces: PROVINCES,
+          projects: [...PROJECTS],
+        },
+      });
+    }
+  );
+
+  app.post(
+    '/api/access/accounts',
+    requireAuth,
+    requireRole('REG', 'TD', 'DMD'),
+    (req, res) => {
+      const currentUser = req.authUser!;
+      const credentials = accountCredentialsSchema.safeParse({
+        username: req.body?.username,
+        password: req.body?.password,
+      });
+      if (!credentials.success) {
+        const usernameInvalid = credentials.error.issues.some((issue) => issue.path[0] === 'username');
+        return res.status(400).json({
+          message: usernameInvalid ? ACCOUNT_USERNAME_HINT : INITIAL_ACCOUNT_PASSWORD_HINT,
+        });
+      }
+      const { username, password } = credentials.data;
+      const displayNameResult = validatePersonName(req.body?.displayName);
+      const roleResult = z.enum(ROLES).safeParse(cleanString(req.body?.role));
+      if (!roleResult.success) return res.status(400).json({ message: '请选择有效的账号角色。' });
+      const role = roleResult.data;
+        const parentUserId = role === 'OBS' ? currentUser.id : Number(req.body?.parentUserId);
+      const gender = cleanString(req.body?.gender);
+      const coachCategory = cleanString(req.body?.coachCategory) || DEFAULT_COACH_CATEGORY;
+      const permissions = parseScopePayload(req.body);
+      if (role !== 'ATL') permissions.areas = [];
+      permissions.projects = [...new Set(permissions.teams.map((team) => team.project))];
+      const errors: string[] = [];
+      if (displayNameResult.error) errors.push(displayNameResult.error);
+      if (!canManageRole(currentUser.role, role))
+        errors.push('不能创建该层级的账号');
+      const scopeError =
+        (role === 'OBS' && !permissions.teams.length ? '' : validateScopePayload(permissions)) || validateAccountAreas(permissions.areas);
+      if (scopeError) errors.push(scopeError);
+      if (
+        !(role === 'OBS' && !permissions.teams.length) &&
+        !permissionsContain(accountPermissions(currentUser.id), permissions)
+      )
+        errors.push('账号权限范围不能超出当前账号');
+      if (role === 'ATL') {
+        if (permissions.areas.length && (permissions.areas.length !== 1 || permissions.areas[0].areaLevel !== 'county')) {
+          errors.push('填写运动员生源地时请选择一个省、市、区县');
+        }
+        if (permissions.projects.length !== 1 || permissions.projects[0] === '*')
+          errors.push('运动员必须绑定一个具体项目');
+        if (permissions.teams.length !== 1 || permissions.teams[0].team === '*')
+          errors.push('运动员必须绑定一个具体队伍');
+        if (!['男', '女'].includes(gender)) errors.push('请选择运动员性别');
+      }
+      if (
+        role === 'OBS' &&
+        permissions.teams.some(
+          (team) =>
+            !db
+              .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+              .get(team.project, team.team)
+        )
+      ) {
+        return res.status(400).json({ message: '请选择有效的具体队伍。' });
+        }
+      if (role === 'SCC') {
+        if (!isCoachCategory(coachCategory)) errors.push('请选择有效的教练类别');
+        if (permissions.projects.includes('*')) errors.push('教练必须绑定具体项目，不能使用通配符');
+        if (
+          permissions.teams.some(
+            (team: { project: string; team: string }) => team.project === '*' || team.team === '*'
+          )
+        )
+          errors.push('教练必须绑定具体队伍，不能使用通配符');
+      }
+      const parentResult = Number.isFinite(parentUserId)
+        ? resolveParent(currentUser, role, parentUserId, permissions)
+        : { error: '请选择上级管理账号。', parent: null };
+      if (parentResult.error) errors.push(parentResult.error);
+      if (errors.length) return res.status(400).json({ message: [...new Set(errors)].join('；') });
+      if (db.prepare('SELECT id FROM users WHERE username = ?').get(username)) {
+        return res.status(409).json({ message: '该登录账号已存在。' });
+      }
+
+      db.exec('BEGIN');
+      try {
+        let athleteId: number | null = null;
+        const area = permissions.areas[0];
+        const project = permissions.projects[0] || '';
+        const team = permissions.teams[0]?.team || '';
+        if (role === 'ATL') {
+          const teamRow = db
+            .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+            .get(project, team) as { id: number } | undefined;
+          if (!teamRow) throw new Error('所选队伍不存在或已停用。');
+          const athleteResult = db
+            .prepare(
+              `INSERT INTO athletes (name, project, team, team_id, gender) VALUES (?, ?, ?, ?, ?)`
+            )
+            .run(displayNameResult.name, project, team, teamRow.id, gender);
+          athleteId = Number(athleteResult.lastInsertRowid);
+          if (area) upsertAthleteOrigin({
+            athleteId,
+            province: area.province,
+            city: area.city,
+            county: area.county,
+            source: 'manual',
+            quality: 'valid',
+          });
+          db.prepare(
+            `
+          INSERT INTO athlete_profiles (athlete_id, created_at)
+          VALUES (?, CURRENT_TIMESTAMP)
+        `
+          ).run(athleteId);
+        }
+        const userResult = db
+          .prepare(
+            `
+        INSERT INTO users (username, password_hash, display_name, role, athlete_id, active)
+        VALUES (?, ?, ?, ?, ?, 1)
+      `
+          )
+          .run(username, bcrypt.hashSync(password, 11), displayNameResult.name, role, athleteId);
+        const userId = Number(userResult.lastInsertRowid);
+        if (role === 'SCC') {
+          db.prepare('INSERT INTO coach_profiles (user_id, category) VALUES (?, ?)').run(
+            userId,
+            coachCategory
+          );
+        }
+        db.prepare(
+          `
+        INSERT INTO account_profiles (user_id, parent_user_id, account_code)
+        VALUES (?, ?, ?)
+      `
+        ).run(userId, parentUserId, accountCodeFor(userId, role, project));
+        replaceAccountScope({ userId, role, parentUserId, permissions, grantedBy: currentUser.id });
+        db.prepare(
+          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+        ).run(
+          currentUser.id,
+          'CREATE_ACCOUNT',
+          'user',
+          userId,
+          JSON.stringify({ username, role, parentUserId, permissions })
+        );
+        db.exec('COMMIT');
+        res.status(201).json({ message: '账号已创建并完成权限绑定。', id: userId });
+      } catch (error) {
+        db.exec('ROLLBACK');
+        const message =
+          error instanceof Error && error.message.includes('UNIQUE')
+            ? '姓名或账号已存在，请核对后再试。'
+            : error instanceof Error
+              ? error.message
+              : '创建账号失败。';
+        res.status(400).json({ message });
+      }
+    }
+  );
+
+  app.put(
+    '/api/access/accounts/:id',
+    requireAuth,
+    requireRole('REG', 'TD', 'DMD'),
+    (req, res) => {
+      const currentUser = req.authUser!;
+      const targetIdResult = z.coerce.number().int().positive().safeParse(req.params.id);
+      const input = accountAccessUpdateSchema.safeParse(req.body);
+      if (!targetIdResult.success || !input.success) {
+        return res.status(400).json({ message: '账号权限参数无效，请核对项目和队伍。' });
+      }
+      const targetId = targetIdResult.data;
+      const target = userById(targetId);
+      if (!target || !canManageAccount(currentUser, target)) {
+        return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
+      }
+      const { role } = input.data;
+      const parentUserId = role === 'OBS' ? currentUser.id : input.data.parentUserId;
+      const permissions = parseScopePayload(input.data);
+      if (target.role !== 'ATL') permissions.areas = [];
+      permissions.projects = [...new Set(permissions.teams.map((team) => team.project))];
+      const previousAreas = accountPermissions(targetId).areas;
+      const scopeError =
+        (role === 'OBS' && !permissions.teams.length ? '' : validateScopePayload(permissions)) || validateAccountAreas(permissions.areas, previousAreas);
+      if (!ROLES.includes(role) || !canManageRole(currentUser.role, role)) {
+        return res.status(400).json({ message: '目标角色层级无效。' });
+      }
+      if ((target.role === 'ATL') !== (role === 'ATL')) {
+        return res.status(400).json({ message: '运动员账号不能与管理岗位相互转换。' });
+      }
+      if (scopeError) return res.status(400).json({ message: scopeError });
+      if (
+        !(role === 'OBS' && !permissions.teams.length) &&
+        !permissionsContain(accountPermissions(currentUser.id), permissions)
+      ) {
+        return res.status(403).json({ message: '新的权限范围不能超出当前账号。' });
+      }
+      const parentResult = resolveParent(currentUser, role, parentUserId, permissions);
+      if (parentResult.error) return res.status(400).json({ message: parentResult.error });
+      if (parentUserId === targetId)
+        return res.status(400).json({ message: '上级账号不能选择本人。' });
+      if (target.role === 'ATL') {
+        if (
+          (permissions.areas.length > 0 &&
+            (permissions.areas.length !== 1 || permissions.areas[0].areaLevel !== 'county')) ||
+          permissions.projects.length !== 1 ||
+          permissions.projects[0] === '*' ||
+          permissions.teams.length !== 1 ||
+          permissions.teams[0].team === '*'
+        ) {
+          return res.status(400).json({ message: '运动员必须绑定一个具体项目和队伍，填写生源地时须选择区县。' });
+        }
+      }
+      if (
+        role === 'OBS' &&
+        permissions.teams.some(
+          (team) =>
+            !db
+              .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+              .get(team.project, team.team)
+        )
+      ) {
+        return res.status(400).json({ message: '请选择有效的具体队伍。' });
+      }
+      if (role === 'SCC') {
+        if (permissions.projects.includes('*')) {
+          return res.status(400).json({ message: '教练必须绑定具体项目，不能使用通配符。' });
+        }
+        if (
+          permissions.teams.some(
+            (team: { project: string; team: string }) => team.project === '*' || team.team === '*'
+          )
+        ) {
+          return res.status(400).json({ message: '教练必须绑定具体队伍，不能使用通配符。' });
+        }
+      }
+
+      db.exec('BEGIN');
+      try {
+        if (target.role === 'ATL' && target.athleteId) assertAthleteProjectChangeAllowed(db, target.athleteId, permissions.projects[0]);
+        db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role, targetId);
+        replaceAccountScope({
+          userId: targetId,
+          role,
+          parentUserId,
+          permissions,
+          grantedBy: currentUser.id,
+        });
+        if (target.role === 'ATL' && target.athleteId) {
+          const area = permissions.areas[0];
+          const project = permissions.projects[0];
+          const team = permissions.teams[0].team;
+          const teamRow = db
+            .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
+            .get(project, team) as { id: number } | undefined;
+          if (!teamRow) throw new Error('所选队伍不存在或已停用。');
+          db.prepare(
+            `UPDATE athletes SET project = ?, team_id = ?, team = ?, region = COALESCE(?, region),
+              city = COALESCE(?, city), county = COALESCE(?, county) WHERE id = ?`
+          ).run(project, teamRow.id, team, area?.province ?? null, area?.city ?? null, area?.county ?? null, target.athleteId);
+          if (area) upsertAthleteOrigin({
+            athleteId: target.athleteId,
+            province: area.province,
+            city: area.city,
+            county: area.county,
+            source: 'manual',
+            quality: 'valid',
+          });
+        }
+        db.prepare(
+          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+        ).run(
+          currentUser.id,
+          target.role === 'ATL' && permissions.areas.length && !athleteAccountAreaComplete(previousAreas)
+            ? 'COMPLETE_ATHLETE_AREA'
+            : 'UPDATE_ACCOUNT_ACCESS',
+          'user',
+          targetId,
+          JSON.stringify({ role, parentUserId, previousAreas, permissions })
+        );
+        db.exec('COMMIT');
+        res.json({ message: '角色、上级账号和数据范围已更新。' });
+      } catch (error) {
+        db.exec('ROLLBACK');
+        res
+          .status(error instanceof AthleteProjectChangeError ? 409 : 500)
+          .json({ message: error instanceof Error ? error.message : '权限更新失败。' });
+      }
+    }
+  );
+
+  app.delete(
+    '/api/access/accounts/:id',
+    requireAuth,
+    requireRole('REG', 'TD', 'DMD'),
+    (req, res) => {
+      const id = Number(req.params.id);
+      if (!Number.isSafeInteger(id) || id < 1)
+        return res.status(400).json({ message: '账号编号无效。' });
+      db.exec('BEGIN IMMEDIATE');
+      let committed = false;
+      try {
+        const actor = req.authUser!;
+        const target = userById(id);
+        if (!target || !canManageAccount(actor, target))
+          return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
+        if (db.prepare('SELECT 1 FROM account_profiles WHERE parent_user_id = ? LIMIT 1').get(id))
+          return res.status(409).json({ message: '该账号还有下级账号，请先为下级更换上级。' });
+        const athleteId = target.role === 'ATL' ? target.athleteId : null;
+        if (athleteId && db.prepare(
+          "SELECT 1 FROM users WHERE athlete_id = ? AND role = 'ATL' AND id <> ? AND username NOT LIKE ?"
+        ).get(athleteId, id, removedAccountUsernamePattern))
+          return res.status(409).json({ message: '该运动员还绑定了其他账号，请先核对账号归属。' });
+        for (const table of [
+          'user_project_permissions', 'user_team_permissions', 'user_area_permissions',
+          'coach_profiles', 'coach_work_status', 'account_profiles', 'user_dashboard_preferences',
+        ]) {
+          db.prepare(`DELETE FROM ${table} WHERE user_id = ?`).run(id);
+        }
+        db.prepare('DELETE FROM coach_athletes WHERE coach_user_id = ?').run(id);
+        db.prepare('DELETE FROM registration_requests WHERE username = ?').run(target.username);
+        if (athleteId) db.prepare('UPDATE athletes SET active = 0 WHERE id = ?').run(athleteId);
+        db.prepare(`
+          UPDATE users SET username = ?, display_name = '已删除账号', password_hash = '',
+            active = 0, session_version = session_version + 1 WHERE id = ?
+        `).run(`${removedAccountUsernamePrefix}${id}`, id);
+        db.prepare(
+          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
+        ).run(actor.id, 'DELETE_ACCOUNT', 'user', id);
+        db.exec('COMMIT');
+        committed = true;
+        res.json({ message: '账号已删除。' });
+      } catch {
+        res.status(500).json({ message: '账号删除失败，请重试。' });
+      } finally {
+        if (!committed) db.exec('ROLLBACK');
+      }
+    }
+  );
+
+  app.put(
+    '/api/access/accounts/:id/status',
+    requireAuth,
+    requireRole('REG', 'TD', 'DMD'),
+    (req, res) => {
+      const currentUser = req.authUser!;
+      const targetId = Number(req.params.id);
+      const target = userById(targetId);
+      if (!target || !canManageAccount(currentUser, target)) {
+        return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
+      }
+      const active = req.body?.active === true;
+      const result = db.prepare(`
+        UPDATE users SET active = ?, session_version = session_version + 1 WHERE id = ?
+          AND (? = 0 OR role <> 'ATL' OR EXISTS (
+            SELECT 1 FROM athletes WHERE id = users.athlete_id AND active = 1
+          ))
+      `).run(active ? 1 : 0, targetId, active ? 1 : 0);
+      if (!result.changes)
+        return res.status(409).json({ message: '请先恢复运动员档案。' });
+      db.prepare(
+        'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
+      ).run(
+        currentUser.id,
+        active ? 'ENABLE_ACCOUNT' : 'DISABLE_ACCOUNT',
+        'user',
+        targetId,
+        JSON.stringify({ active })
+      );
+      res.json({ message: active ? '账号已启用。' : '账号已停用。', active });
+    }
+  );
+
+  app.get('/api/access/audit-logs', requireAuth, requireRole('DMD'), (req, res) => {
+    const currentUser = req.authUser!;
+    const visibleIds = allAccountRows()
+      .filter((row) => row.id === currentUser.id || canManageAccount(currentUser, row))
+      .map((row) => row.id);
+    if (!visibleIds.length) return res.json({ logs: [] });
+    const placeholders = visibleIds.map(() => '?').join(',');
+    const logs = db
+      .prepare(
+        `
+      SELECT l.id, l.action, l.entity_type AS entityType, l.entity_id AS entityId,
+        l.detail, l.created_at AS createdAt,
+        u.id AS actorId, u.display_name AS actorName, u.username AS actorUsername
+      FROM audit_logs l
+      JOIN users u ON u.id = l.user_id
+      WHERE l.user_id IN (${placeholders})
+      ORDER BY l.id DESC LIMIT 200
+    `
+      )
+      .all(...visibleIds);
+    res.json({ logs });
+  });
+}

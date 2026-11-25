@@ -1,0 +1,9 @@
+source: https://github.com/Syo-M/codex-frontend-skills
+version: v2.0.0
+styling: minimal
+state: synchronized
+agents-guidance: synchronized
+identical: 51
+differing: 0
+missing: 0
+installed: 2026-09-15

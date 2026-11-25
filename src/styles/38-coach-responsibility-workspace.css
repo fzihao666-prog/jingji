@@ -1,0 +1,303 @@
+/* stylelint-disable no-descending-specificity -- 此文件按基础样式与后置页面精修的覆盖顺序组织。 */
+
+/* Coach responsibility workspace */
+.coach-bench-list > button.active {
+  border-color: #9fd3cd;
+  color: #147b75;
+  background: linear-gradient(105deg, #e6f6f2, #f7fbfa);
+  box-shadow: inset 3px 0 #229d94;
+}
+
+.coach-workspace-identity .editable-name-value {
+  color: #fff;
+}
+
+.coach-workspace-identity .name-edit-trigger {
+  color: #8bd8ce;
+}
+
+.coach-workspace-identity .name-edit-trigger:hover {
+  border-color: rgb(141 224 212 / 25%);
+  color: #fff;
+  background: rgb(255 255 255 / 9%);
+}
+
+.coach-scope-backdrop {
+  z-index: 110;
+}
+
+.coach-scope-modal {
+  width: min(980px, calc(100vw - 32px));
+  max-height: 90vh;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #fff;
+  box-shadow: 0 30px 90px rgb(3 29 38 / 30%);
+}
+
+.coach-scope-modal > header {
+  min-height: 105px;
+  padding: 18px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  color: #fff;
+  background: linear-gradient(110deg, #082f3e, #0a6366);
+}
+
+.coach-scope-modal > header span {
+  color: #71d5c6;
+  font:
+    800 8px Bahnschrift,
+    sans-serif;
+  letter-spacing: 0.15em;
+}
+
+.coach-scope-modal > header h2 {
+  margin-top: 5px;
+  font-size: 21px;
+}
+
+.coach-scope-modal > header p {
+  margin-top: 6px;
+  color: rgb(226 246 243 / 60%);
+  font-size: 9px;
+}
+
+.coach-scope-modal > header .icon-button {
+  color: #fff;
+}
+
+.coach-scope-toolbar {
+  min-height: 68px;
+  padding: 12px 17px;
+  border-bottom: 1px solid #dce6e7;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  background: #f7faf9;
+}
+
+.coach-scope-toolbar label {
+  height: 40px;
+  padding: 0 11px;
+  border: 1px solid #cbdadc;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #7d9298;
+  background: #fff;
+}
+
+.coach-scope-toolbar label:focus-within {
+  border-color: #75bdb7;
+  box-shadow: 0 0 0 3px rgb(27 157 149 / 9%);
+}
+
+.coach-scope-toolbar input {
+  min-width: 0;
+  width: 100%;
+  border: 0;
+  outline: 0;
+  color: var(--ink);
+  font-size: 10px;
+}
+
+.coach-scope-toolbar > div {
+  min-width: 92px;
+  display: flex;
+  align-items: baseline;
+  justify-content: flex-end;
+  gap: 4px;
+}
+
+.coach-scope-toolbar > div span {
+  color: #748990;
+  font-size: 8px;
+}
+
+.coach-scope-toolbar > div strong {
+  color: #146d68;
+  font:
+    900 20px Bahnschrift,
+    sans-serif;
+}
+
+.coach-scope-toolbar > div small {
+  color: #809297;
+  font-size: 8px;
+}
+
+.coach-scope-list {
+  max-height: calc(90vh - 245px);
+  min-height: 310px;
+  padding: 10px 15px;
+  overflow-y: auto;
+  display: grid;
+  align-content: start;
+  gap: 4px;
+}
+
+.coach-scope-list > label {
+  min-height: 57px;
+  padding: 7px 10px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  display: grid;
+  grid-template-columns: 19px 32px minmax(150px, 1fr) minmax(120px, 0.8fr);
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+  transition:
+    border-color 0.14s ease,
+    background 0.14s ease;
+}
+
+.coach-scope-list > label:hover {
+  border-color: #d4e5e2;
+  background: #f4f9f8;
+}
+
+.coach-scope-list > label.selected {
+  border-color: #a8d9d3;
+  background: #eaf7f4;
+}
+
+.coach-scope-list input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.coach-scope-list label > i {
+  width: 18px;
+  height: 18px;
+  border: 1px solid #b9c9cc;
+  border-radius: 5px;
+  display: grid;
+  place-items: center;
+  color: #fff;
+  background: #fff;
+}
+
+.coach-scope-list label.selected > i {
+  border-color: #209c92;
+  background: #209c92;
+}
+
+.coach-scope-avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  color: #176f6a;
+  background: #dff1ed;
+  font-size: 11px;
+  font-weight: 900;
+}
+
+.coach-scope-person,
+.coach-scope-region {
+  min-width: 0;
+}
+
+.coach-scope-person strong,
+.coach-scope-person small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coach-scope-person strong {
+  color: #173f4a;
+  font-size: 10px;
+}
+
+.coach-scope-person small {
+  margin-top: 4px;
+  color: #7d9197;
+  font-size: 8px;
+}
+
+.coach-scope-region {
+  overflow: hidden;
+  color: #627a82;
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.coach-scope-modal > footer {
+  min-height: 72px;
+  padding: 12px 18px;
+  border-top: 1px solid #dfe8e9;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+}
+
+.coach-scope-modal > footer p {
+  margin-right: auto;
+  color: #748990;
+  font-size: 9px;
+}
+
+@media (width <= 820px) {
+  .coach-scope-list > label {
+    grid-template-columns: 19px 32px minmax(0, 1fr);
+  }
+
+  .coach-scope-region {
+    grid-column: 3;
+  }
+}
+
+@media (width <= 560px) {
+  .coach-scope-modal {
+    width: calc(100vw - 14px);
+    max-height: 96vh;
+  }
+
+  .coach-scope-modal > header {
+    align-items: flex-start;
+  }
+
+  .coach-scope-modal > header h2 {
+    font-size: 17px;
+  }
+
+  .coach-scope-toolbar {
+    grid-template-columns: 1fr;
+  }
+
+  .coach-scope-toolbar > div {
+    justify-content: flex-start;
+  }
+
+  .coach-scope-list {
+    max-height: calc(96vh - 315px);
+  }
+
+  .coach-scope-list > label {
+    min-height: 76px;
+  }
+
+  .coach-scope-modal > footer {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .coach-scope-modal > footer p {
+    margin: 0 0 4px;
+  }
+
+  .coach-scope-modal > footer button {
+    width: 100%;
+  }
+}
+
