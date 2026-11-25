@@ -47,7 +47,7 @@ beforeAll(async () => {
     CREATE TABLE audit_logs (user_id INTEGER, action TEXT, entity_type TEXT, entity_id INTEGER, detail TEXT,
       created_at TEXT DEFAULT CURRENT_TIMESTAMP);
     CREATE TABLE project_teams (id INTEGER PRIMARY KEY, project TEXT, name TEXT, active INTEGER);
-    CREATE TABLE athletes (id INTEGER PRIMARY KEY, project TEXT, team TEXT, team_id INTEGER, region TEXT, city TEXT, county TEXT);
+    CREATE TABLE athletes (id INTEGER PRIMARY KEY, project TEXT, team TEXT, team_id INTEGER, region TEXT, city TEXT, county TEXT, active INTEGER DEFAULT 1);
     CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY, province TEXT, city TEXT, county TEXT);
     CREATE TABLE coach_athletes (coach_user_id INTEGER, athlete_id INTEGER);
   `);
@@ -101,7 +101,7 @@ beforeEach(() => {
   ).run();
   db.exec(`
     INSERT INTO project_teams VALUES (1,'ROWING','A队',1);
-    INSERT INTO athletes VALUES (2,'ROWING','A队',1,'四川','成都市','武侯区');
+    INSERT INTO athletes (id,project,team,team_id,region,city,county) VALUES (2,'ROWING','A队',1,'四川','成都市','武侯区');
     INSERT INTO athlete_origins VALUES (2,'四川','成都市','武侯区');
     UPDATE users SET athlete_id=2 WHERE id=2;
     INSERT INTO account_profiles VALUES (2,8,'test-account-code',NULL);
@@ -406,4 +406,19 @@ describe('特邀观察员账号配置', () => {
     });
     expect(response.status).toBe(400);
   });
+});
+
+
+it('运动员档案停用时拒绝重新启用账号', async () => {
+  db.exec('UPDATE athletes SET active = 0 WHERE id = 2; UPDATE users SET active = 0 WHERE id = 2;');
+  const enable = () => fetch(`${baseUrl}/api/access/accounts/2/status`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token(8)}` },
+    body: JSON.stringify({ active: true }),
+  });
+  expect((await enable()).status).toBe(409);
+  expect(db.prepare('SELECT active, session_version FROM users WHERE id = 2').get()).toEqual({ active: 0, session_version: 0 });
+  db.exec('UPDATE athletes SET active = 1 WHERE id = 2');
+  expect((await enable()).status).toBe(200);
+  expect(db.prepare('SELECT active, session_version FROM users WHERE id = 2').get()).toEqual({ active: 1, session_version: 1 });
 });

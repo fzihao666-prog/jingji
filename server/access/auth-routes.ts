@@ -137,9 +137,21 @@ export function registerAuthRoutes(
                   (item) => (item.project === '*' || item.project === project) && item.team === '*'
                 )
             );
-      res.json({ teams, canCreateProjects });
+      res.json({ teams, canCreateProjects, canViewInactive: currentUser.role !== 'SCC' });
     }
   );
+
+  app.get('/api/admin/teams/inactive', requireAuth, requireRole('REG', 'TD', 'DMD'), (req, res) => {
+    const permissions = accountPermissions(req.authUser!.id);
+    const teams = db.prepare(`
+      SELECT t.id, t.project, t.name,
+        (SELECT COUNT(*) FROM training_plans p WHERE p.team_id = t.id AND p.model = 'team') AS planCount,
+        (SELECT title FROM training_plans p WHERE p.team_id = t.id AND p.model = 'team' AND p.published_at IS NOT NULL
+          ORDER BY p.published_at DESC, p.id DESC LIMIT 1) AS latestPublishedPlan
+      FROM project_teams t WHERE t.active = 0 ORDER BY t.project, t.name
+    `).all() as Array<{ id: number; project: string; name: string; planCount: number; latestPublishedPlan: string | null }>;
+    res.json({ teams: teams.filter(t => permissionsAllowProjectTeam(permissions, t.project, t.name)) });
+  });
 
   app.post(
     '/api/admin/teams',
@@ -164,9 +176,13 @@ export function registerAuthRoutes(
         .get(project, name) as { id: number; active: number } | undefined;
       if (existing?.active) return res.status(409).json({ message: '该项目下已存在同名队伍。' });
       if (existing) {
+        if (req.body?.restore !== true)
+          return res.status(409).json({ code: 'TEAM_INACTIVE', message: '该项目下有已停用的同名队伍。' });
         db.prepare('UPDATE project_teams SET active = 1 WHERE id = ?').run(existing.id);
         return res.status(201).json({ message: '队伍已恢复。', id: existing.id });
       }
+      if (req.body?.restore === true)
+        return res.status(409).json({ message: '原队伍已变更，请重新操作。' });
       const result = db
         .prepare('INSERT INTO project_teams (project, name) VALUES (?, ?)')
         .run(project, name);
@@ -280,9 +296,9 @@ export function registerAuthRoutes(
           .get(team.project, team.name) as { count: number }
       ).count;
       if (athleteCount || pendingCount)
-        return res.status(409).json({ message: '该队伍仍有运动员或待审核申请，不能删除。' });
+        return res.status(409).json({ message: '该队伍仍有启用的运动员或待审核申请，不能停用。' });
       db.prepare('UPDATE project_teams SET active = 0 WHERE id = ?').run(id);
-      res.json({ message: '队伍已删除。' });
+      res.json({ message: '队伍已停用。' });
     }
   );
 

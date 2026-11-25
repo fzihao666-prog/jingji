@@ -1057,9 +1057,14 @@ export function registerAccessRoutes(app: Express) {
         return res.status(404).json({ message: '账号不存在或不在可管理范围内。' });
       }
       const active = req.body?.active === true;
-      db.prepare(
-        'UPDATE users SET active = ?, session_version = session_version + 1 WHERE id = ?'
-      ).run(active ? 1 : 0, targetId);
+      const result = db.prepare(`
+        UPDATE users SET active = ?, session_version = session_version + 1 WHERE id = ?
+          AND (? = 0 OR role <> 'ATL' OR EXISTS (
+            SELECT 1 FROM athletes WHERE id = users.athlete_id AND active = 1
+          ))
+      `).run(active ? 1 : 0, targetId, active ? 1 : 0);
+      if (!result.changes)
+        return res.status(409).json({ message: '请先恢复运动员档案。' });
       db.prepare(
         'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
       ).run(

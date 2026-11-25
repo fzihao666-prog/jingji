@@ -64,7 +64,7 @@ beforeAll(async () => {
     CREATE TABLE user_area_permissions (user_id INTEGER,area_level TEXT,province TEXT,city TEXT,county TEXT,granted_by INTEGER);
     CREATE TABLE user_project_permissions (user_id INTEGER,project TEXT,granted_by INTEGER);
     CREATE TABLE user_team_permissions (user_id INTEGER,project TEXT,team TEXT,granted_by INTEGER, created_at TEXT DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY(user_id, project, team));
-    CREATE TABLE training_plans (id INTEGER PRIMARY KEY, team_id INTEGER);
+    CREATE TABLE training_plans (id INTEGER PRIMARY KEY, team_id INTEGER, model TEXT, title TEXT, published_at TEXT);
     CREATE TABLE data_import_batches (id TEXT PRIMARY KEY, status TEXT);
     CREATE TABLE data_import_athlete_candidates (batch_id TEXT, project TEXT, team TEXT);
     CREATE TABLE account_profiles (user_id INTEGER PRIMARY KEY,parent_user_id INTEGER,account_code TEXT);
@@ -577,7 +577,7 @@ describe('队伍改名', () => {
     };
     expect((await merge()).status).toBe(403);
     db.exec("INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (1, 'ROWING', '同名冲突', 1)");
-    db.exec("INSERT INTO training_plans VALUES (99,99)");
+    db.exec("INSERT INTO training_plans (id, team_id) VALUES (99,99)");
     db.exec("CREATE TRIGGER reject_merge_audit BEFORE INSERT ON audit_logs BEGIN SELECT RAISE(ABORT, 'test rollback'); END");
     expect((await merge()).status).toBe(500);
     expect(db.prepare('SELECT team_id FROM athletes WHERE id = 99').get()).toEqual({ team_id: 99 });
@@ -591,4 +591,32 @@ describe('队伍改名', () => {
     expect(db.prepare("SELECT team FROM user_team_permissions WHERE project = 'ROWING'").all()).toEqual([{ team: '同名冲突' }]);
     expect(db.prepare("SELECT action FROM audit_logs").get()).toEqual({ action: 'MERGE_TEAM' });
   });
+});
+
+it('同名队伍需要明确确认才恢复，保留原队伍 ID 和停用运动员状态', async () => {
+  db.exec(`
+    UPDATE users SET role = 'DMD' WHERE id = 1;
+    INSERT INTO user_project_permissions VALUES (1, '*', 1);
+    INSERT INTO user_team_permissions (user_id, project, team, granted_by) VALUES (1, '*', '*', 1);
+    INSERT INTO project_teams (id, project, name, active) VALUES (97, 'ROWING', '停用测试队', 0);
+    INSERT INTO training_plans VALUES (97, 97, 'team', '历史计划', '2026-11-24');
+    INSERT INTO athletes (id, name, project, team, team_id, active) VALUES (97, '测试运动员', 'ROWING', '停用测试队', 97, 0);
+  `);
+  const { body } = await login('active_user', correctPassword);
+  const inactive = await fetch(`${baseUrl}/api/admin/teams/inactive`, {
+    headers: { authorization: `Bearer ${body.token}` },
+  });
+  expect(await inactive.json()).toMatchObject({
+    teams: expect.arrayContaining([{ id: 97, project: 'ROWING', name: '停用测试队', planCount: 1, latestPublishedPlan: '历史计划' }]),
+  });
+  const create = (restore: boolean) => fetch(`${baseUrl}/api/admin/teams`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${body.token}`, 'content-type': 'application/json' },
+    body: JSON.stringify({ project: 'ROWING', name: '停用测试队', restore }),
+  });
+  const conflict = await create(false);
+  expect(conflict.status).toBe(409);
+  expect(await conflict.json()).toMatchObject({ code: 'TEAM_INACTIVE' });
+  expect((await (await create(true)).json())).toMatchObject({ id: 97, message: '队伍已恢复。' });
+  expect(db.prepare('SELECT active FROM athletes WHERE id = 97').get()).toEqual({ active: 0 });
 });

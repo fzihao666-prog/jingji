@@ -6,6 +6,15 @@ import type { ProjectTeam } from '../types';
 import { ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 
 export function TeamsPage({ onChanged }: { onChanged: () => void }) {
+  const [canViewInactive, setCanViewInactive] = useState(false);
+  const [inactiveTeams, setInactiveTeams] = useState<Awaited<ReturnType<typeof api.inactiveTeams>>['teams'] | null>(null);
+  const showInactive = async () => {
+    try {
+      setInactiveTeams((await api.inactiveTeams()).teams);
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '停用队伍加载失败。');
+    }
+  };
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [canCreateProjects, setCanCreateProjects] = useState<Project[]>([]);
   const [project, setProject] = useState<Project>('ROWING');
@@ -34,7 +43,7 @@ export function TeamsPage({ onChanged }: { onChanged: () => void }) {
         result = await api.renameTeam(renameTarget.id, name);
       } catch (error) {
         if (!(error instanceof ApiRequestError) || error.code !== 'TEAM_MERGE_REQUIRED') throw error;
-        if (!window.confirm(`确认将“${renameTarget.name}”合并到“${name}”？运动员、教练授权及训练计划将转到目标队伍，原队伍停用。已删除的目标队伍会恢复。`)) return;
+        if (!window.confirm(`确认将“${renameTarget.name}”合并到“${name}”？运动员、教练授权及训练计划将转到目标队伍，原队伍停用。已停用的目标队伍会恢复。`)) return;
         result = await api.renameTeam(renameTarget.id, name, true);
       }
       await load();
@@ -54,6 +63,7 @@ export function TeamsPage({ onChanged }: { onChanged: () => void }) {
       const result = await api.adminTeams();
       setTeams(result.teams);
       setCanCreateProjects(result.canCreateProjects);
+      setCanViewInactive(result.canViewInactive);
       if (result.canCreateProjects.length && !result.canCreateProjects.includes(project))
         setProject(result.canCreateProjects[0]);
     } finally {
@@ -72,7 +82,12 @@ export function TeamsPage({ onChanged }: { onChanged: () => void }) {
     setCreateError('');
     setMessage('');
     try {
-      const result = await api.createTeam(project, name.trim());
+      const result = await api.createTeam(project, name.trim()).catch((error: unknown) => {
+        if (!(error instanceof ApiRequestError) || error.code !== 'TEAM_INACTIVE') throw error;
+        if (!window.confirm(`恢复原队伍“${name.trim()}”？原历史关联将保留，停用的队员需单独恢复。`)) return null;
+        return api.createTeam(project, name.trim(), true);
+      });
+      if (!result) return;
       setMessage(result.message);
       setName('');
       createDialog.current?.close();
@@ -87,14 +102,14 @@ export function TeamsPage({ onChanged }: { onChanged: () => void }) {
   };
 
   const remove = async (team: ProjectTeam) => {
-    if (!window.confirm(`确认删除“${team.name}”吗？`)) return;
+    if (!window.confirm(`确认停用“${team.name}”？队伍历史数据将保留。`)) return;
     setMessage('');
     try {
       const result = await api.deleteTeam(team.id);
       setMessage(result.message);
       await load();
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : '删除失败。');
+      setMessage(error instanceof Error ? error.message : '停用失败。');
     }
   };
 
@@ -120,7 +135,23 @@ export function TeamsPage({ onChanged }: { onChanged: () => void }) {
 
   return (
     <PageContainer className="teams-page">
-      <PageHeader variant="compact" title="队伍管理" />
+      <PageHeader variant="compact" title="队伍管理" actions={
+        canViewInactive && (
+          <button type="button" className="secondary-button" aria-pressed={inactiveTeams !== null}
+            onClick={() => inactiveTeams ? setInactiveTeams(null) : void showInactive()}>
+            已停用队伍
+          </button>
+        )
+      } />
+      {inactiveTeams && (
+        <section aria-label="已停用队伍">
+          {inactiveTeams.length ? <ul>{inactiveTeams.map(team => (
+            <li key={team.id}>{projectLabel(team.project)} · {team.name} · {team.planCount} 个队伍计划版本
+              {team.latestPublishedPlan && <div>最近发布计划：{team.latestPublishedPlan}</div>}
+            </li>
+          ))}</ul> : <p>暂无已停用队伍。</p>}
+        </section>
+      )}
 
       <div className="team-directory-toolbar">
         {teamCount}
@@ -278,7 +309,7 @@ export function TeamsPage({ onChanged }: { onChanged: () => void }) {
                             <strong>{team.name}</strong>
                             <small>
                               {team.athleteCount > 0
-                                ? `${team.athleteCount}名运动员 · 仍有运动员，不能删除`
+                                ? `${team.athleteCount}名运动员 · 仍有运动员，不能停用`
                                 : `${team.athleteCount}名运动员`}
                             </small>
                           </span>
@@ -304,8 +335,8 @@ export function TeamsPage({ onChanged }: { onChanged: () => void }) {
                                 className="icon-button"
                                 onClick={() => void remove(team)}
                                 disabled={team.athleteCount > 0}
-                                title={team.athleteCount ? '队伍仍有运动员，不能删除' : '删除队伍'}
-                                aria-label={`删除${team.name}`}
+                                title={team.athleteCount ? '队伍仍有运动员，不能停用' : '停用队伍'}
+                                aria-label={`停用${team.name}`}
                               >
                                 <Trash2 size={16} />
                               </button>
