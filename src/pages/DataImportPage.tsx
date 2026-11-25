@@ -149,7 +149,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
   const [batch, setBatch] = useState<DataImportBatch | null>(null);
   const [batches, setBatches] = useState<DataImportBatchSummary[]>([]);
   const [busy, setBusy] = useState<
-    'analyze' | 'save' | 'commit' | 'load' | 'template' | 'export' | 'discard' | 'cleanup' | 'errors' | ''
+    'analyze' | 'save' | 'commit' | 'load' | 'template' | 'discard' | 'cleanup' | 'errors' | ''
   >('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -353,20 +353,6 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
       setMessage('分用途模板已开始下载（含已有人员预填）。');
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '模板下载失败。');
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const exportUnifiedData = async (basicTeam?: string) => {
-    setBusy('export');
-    setError('');
-    setMessage('');
-    try {
-      await api.exportUnifiedData(project, basicTeam);
-      setMessage(basicTeam ? '本队基础数据已开始导出。' : '当前权限范围内的运动员数据已开始导出。');
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '统一数据导出失败。');
     } finally {
       setBusy('');
     }
@@ -956,7 +942,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
         </label>
       </section>
       <section className="data-import-template-panel" aria-labelledby="data-import-template-title">
-        <h2 id="data-import-template-title">模板下载与数据导出</h2>
+        <h2 id="data-import-template-title">模板下载</h2>
         <div className="data-import-hero-actions">
           <button
             type="button"
@@ -992,30 +978,6 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             <div>
               <strong>测试成绩模板</strong>
               <span>使用现有测试字段填写成绩</span>
-            </div>
-          </button>
-          <button
-            type="button"
-            className="data-import-template"
-            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
-            onClick={() => void exportUnifiedData(templateTeam)}
-          >
-            <Database size={19} aria-hidden="true" />
-            <div>
-              <strong>导出本队基础数据</strong>
-              <span>使用基础数据模板，保留注释和示例</span>
-            </div>
-          </button>
-          <button
-            type="button"
-            className="data-import-template"
-            disabled={Boolean(busy)}
-            onClick={() => void exportUnifiedData()}
-          >
-            <Database size={19} />
-            <div>
-              <strong>导出统一数据</strong>
-              <span>导出当前项目及权限范围内已入库数据</span>
             </div>
           </button>
         </div>
