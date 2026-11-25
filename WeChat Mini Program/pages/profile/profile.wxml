@@ -21,6 +21,7 @@
           <view class="profile-name">{{athleteName}}</view>
           <button wx:if="{{(canEditSelf || canCoachFill) && selectedAthleteId}}" class="hero-edit-button" hover-class="hero-edit-button-pressed" bindtap="editMyProfile" aria-label="编辑运动员资料"><text class="hero-edit-icon">✎</text><text>编辑</text></button>
         </view>
+        <text wx:if="{{selectedAthleteId}}" class="profile-line">运动员编号 {{selectedAthleteId}}</text>
         <text class="profile-line">{{athleteMeta}}</text><text class="profile-line">{{athleteSubline}}</text>
       </view>
     </view>

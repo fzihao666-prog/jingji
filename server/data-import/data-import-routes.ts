@@ -79,12 +79,13 @@ export function buildPurposeTemplate(
   metrics?: readonly ImportMetricDefinition[]
 ) {
   const sheetNames = PURPOSE_SHEETS[kind];
-  const workbook = buildImportWorkbook(sheetNames, { metrics, project, omitProfileTeam: kind === 'profile', coachView: kind !== 'profile' });
+  const workbook = buildImportWorkbook(sheetNames, { metrics, project, omitProfileTeam: kind === 'profile', coachView: kind !== 'profile', includeAthleteNumber: athletes.length > 0 });
   for (const sheetName of sheetNames) {
     const sheet = workbook.getWorksheet(sheetName)!;
     const headers = (sheet.getRow(3).values as ExcelJS.CellValue[]).slice(1).map(value => templateHeaderKey(String(value)));
     athletes.forEach((athlete, index) => {
       sheet.getRow(index + 4).values = headers.map(label => {
+        if (label === '系统运动员编号') return String(athlete.id);
         if (label === '姓名') return athlete.name;
         if (label === '所属队伍') return athlete.team;
         if (label === '运动项目') return project;
@@ -97,6 +98,7 @@ export function buildPurposeTemplate(
 
 export function buildImportErrorReport(batch: {
   filename: string;
+  athleteCandidates?: Array<{ name: string; team: string; sourceSheet: string; status: string; excluded: boolean; confirmed: boolean; messages: string[] }>;
   items: Array<{
     itemType: string;
     rawAthleteName: string;
@@ -138,6 +140,20 @@ export function buildImportErrorReport(batch: {
       item.itemType === 'invalid_row' ? '修正原文件重传 / 排除此行' : '在线校对 / 修正原文件重传 / 排除此行',
     ];
   });
+  const identityConflicts = batch.athleteCandidates?.filter(candidate =>
+    candidate.status === 'pending' && !candidate.excluded && !candidate.confirmed &&
+    candidate.messages.some(message => message.includes('系统运动员编号'))
+  ) ?? [];
+  if (identityConflicts.length) {
+    const people = workbook.addWorksheet('运动员编号待确认');
+    people.columns = [
+      { header: '工作表', width: 22 }, { header: '姓名', width: 18 },
+      { header: '队伍', width: 18 }, { header: '冲突原因', width: 65 },
+    ];
+    people.getRow(1).font = { bold: true };
+    for (const candidate of identityConflicts)
+      people.addRow([candidate.sourceSheet, candidate.name, candidate.team, candidate.messages.join('；')]);
+  }
   return workbook;
 }
 

@@ -105,8 +105,9 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
       expect(content).not.toContain('"虚构队员"');
       if (kind === 'profile') {
         expect(workbook.SheetNames).toEqual(['运动员基础档案']);
-        const rows = XLSX.utils.sheet_to_json(workbook.Sheets['运动员基础档案'], { header: 1 });
-        expect(rows[1]).toEqual(['模板虚构队员']);
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets['运动员基础档案'], { header: 1 }) as string[][];
+        expect(rows[1][0]).toBe('模板虚构队员');
+        expect(rows[1][rows[0].indexOf('系统运动员编号')]).toBe('799');
         for (const removed of ['运动员编号', '运动项目', '所属队伍'])
           expect((rows[0] as string[]).map(header => header.split('\n')[0])).not.toContain(removed);
       }
@@ -201,13 +202,13 @@ it('名单使用页面队伍，忽略旧队伍列并阻止关联其他队伍编�
       ['', '名单虚构新队员', 'HTTP甲队', '女'],
       [701, '虚构队员', 'HTTP乙队', '男'],
     ], '运动员基本资料', 'HTTP乙队');
-    expect(batch.athleteCandidates).toHaveLength(1);
-    expect(batch.athleteCandidates[0]).toMatchObject({ name: '名单虚构新队员', team: 'HTTP乙队' });
-    const conflict = batch.items.find(item => item.itemType === 'invalid_row');
-    expect(conflict).toMatchObject({ quality: 'error', athleteId: null });
-    expect(conflict?.messages.join('')).toContain('编号属于其他队伍');
+    expect(batch.athleteCandidates).toHaveLength(2);
+    expect(batch.athleteCandidates.find(person => person.name === '名单虚构新队员')).toMatchObject({ team: 'HTTP乙队' });
+    const conflict = batch.athleteCandidates.find(person => person.name === '虚构队员')!;
+    expect(conflict).toMatchObject({ status: 'pending', confirmed: false, matchedAthleteId: null });
+    expect(conflict.messages.join('')).toContain('请人工确认');
     expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(400);
-    expect((await request(`/batches/${batch.id}/items`, 'PUT', { corrections: [{ id: conflict!.id, resolution: 'skip' }] })).status).toBe(200);
+    expect((await request(`/batches/${batch.id}/athletes`, 'PUT', { corrections: [{ id: conflict.id, excluded: true }] })).status).toBe(200);
     expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
     expect(db.prepare("SELECT team FROM athletes WHERE name='名单虚构新队员'").get()).toMatchObject({ team: 'HTTP乙队' });
   } finally {
@@ -614,13 +615,25 @@ it('基础档案拒绝项目队伍冲突及没有真实测量日期的身高', a
   expect(db.prepare("SELECT id FROM athletes WHERE name='档案错误队伍'").get()).toBeUndefined();
 });
 
-it('基础档案按所选队伍和姓名直接关联，空白或旧编号无需人工核对', async () => {
-  for (const code of ['', '999999']) {
-    const batch = await upload([profileHeaders, [code, '虚构队员', '', '', '', `档案备注${code}`]], profileSheet, 'HTTP甲队');
-    expect(batch.athleteCandidates).toHaveLength(1);
-    expect(batch.athleteCandidates[0]).toMatchObject({ matchedAthleteId: 701, status: 'matched' });
-    expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
-  }
+it('基础档案兼容无编号旧表，未知编号须先人工确认', async () => {
+  const legacy = await upload([profileHeaders, ['', '虚构队员', '', '', '', '旧表档案备注']], profileSheet, 'HTTP甲队');
+  expect(legacy.athleteCandidates[0]).toMatchObject({ matchedAthleteId: 701, status: 'matched' });
+  expect((await request(`/batches/${legacy.id}/commit`, 'POST', {})).status).toBe(200);
+
+  const batch = await upload([profileHeaders, ['999999', '虚构队员', '', '', '', '编号待核对']], profileSheet, 'HTTP甲队');
+  const person = batch.athleteCandidates[0];
+  expect(person).toMatchObject({ status: 'pending', matchedAthleteId: null, confirmed: false });
+  const path = `/batches/${batch.id}`;
+  const report = await fetch(`${base}/api/data-import${path}/errors`, { headers: { authorization: `Bearer ${token}` } });
+  expect(report.status).toBe(200);
+  const conflicts = XLSX.read(await report.arrayBuffer()).Sheets['运动员编号待确认'];
+  expect(JSON.stringify(XLSX.utils.sheet_to_json(conflicts, { header: 1 }))).toContain('999999');
+  expect((await request(`${path}/athletes`, 'PUT', { autoMatch: true })).body.batch?.athleteCandidates[0].confirmed).toBe(false);
+  expect((await request(`${path}/commit`, 'POST', {})).status).toBe(400);
+  expect((await request(`${path}/athletes`, 'PUT', {
+    corrections: [{ id: person.id, matchedAthleteId: 701, confirmed: true }],
+  })).status).toBe(200);
+  expect((await request(`${path}/commit`, 'POST', {})).status).toBe(200);
 });
 
 it('举重与赛艇共用档案表头，按所选项目隔离同名队伍，并能回传实际下载的工作簿', async () => {
@@ -644,8 +657,9 @@ it('举重与赛艇共用档案表头，按所选项目隔离同名队伍，并�
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
   expect(rows[0]).toEqual((XLSX.utils.sheet_to_json(rowing.Sheets[profileSheet], { header: 1 }) as string[][])[0]);
   expect(rows).toHaveLength(2);
-  expect(rows[1]).toEqual(['举重虚构队员']);
+  expect(rows[1][0]).toBe('举重虚构队员');
   const athlete = db.prepare("SELECT id FROM athletes WHERE name='举重虚构队员' AND project='WEIGHTLIFTING'").get() as { id: number };
+  expect(rows[1][rows[0].indexOf('系统运动员编号')]).toBe(String(athlete.id));
   expect((await download('ROWING')).SheetNames).toContain('运动员基本资料');
 
   for (const [header, sample] of [['身高（cm）', 172.5], ['体重（kg）', 68],
@@ -948,7 +962,6 @@ it('教练自建测试项目可重复选用，FMS 七项与自定义字段均从
     form.set('team', 'HTTP甲队');
     return request('/analyze', 'POST', form);
   };
-  XLSX.utils.sheet_add_aoa(sheet, [['999999']], { origin: `A${spreadsheetRow}` });
   XLSX.utils.sheet_add_aoa(sheet, [['2026-11-19', 75, 3, 5, '1:02.5', 4, 3, 2, 2, 3, 3, 3, '阴性', '阳性', 2, 3, 3, '阴性', 1, 2, '阴性']], { origin: `D${spreadsheetRow}` });
   const invalid = await send();
   expect(invalid.status).toBe(200);
@@ -1276,7 +1289,7 @@ it('继续校对旧档案草稿时自动关联同队唯一同名者，并能直�
   const person = batch.athleteCandidates[0];
   db.prepare(`UPDATE data_import_athlete_candidates
     SET status='pending', matched_athlete_id=NULL, confirmed=0, messages_json=? WHERE id=?`)
-    .run(JSON.stringify(['系统运动员编号不在当前权限范围内，请人工确认']), person.id);
+    .run(JSON.stringify(['请选择所属队伍']), person.id);
   db.prepare('UPDATE data_import_items SET athlete_id=NULL WHERE batch_id=?').run(batch.id);
   const path = `/batches/${batch.id}`;
   const refreshed = await request(`${path}/athletes`, 'PUT', { autoMatch: true, expectedRevision: batch.revision });
@@ -1377,7 +1390,11 @@ it('标准模板支持补充档案、相同力量组填一行与常用体能宽�
   function fill(book: XLSX.WorkBook, sheetName: string, row: Record<string, string | number>, heading = 3) {
     const sheet = book.Sheets[sheetName];
     const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
-    XLSX.utils.sheet_add_aoa(sheet, [rows[heading - 1].map(value => row[String(value).split('\n')[0]] ?? null)], { origin: `A${heading + 1}` });
+    const headers = rows[heading - 1].map(value => String(value).split('\n')[0]);
+    const numberColumn = headers.indexOf('系统运动员编号');
+    const athleteRow = numberColumn < 0 ? -1 : rows.findIndex(cells => String(cells[numberColumn]) === '701');
+    XLSX.utils.sheet_add_aoa(sheet, [headers.map(key => key === '系统运动员编号' ? '701' : row[key] ?? null)],
+      { origin: `A${athleteRow >= heading ? athleteRow + 1 : heading + 1}` });
   }
   async function preview(book: XLSX.WorkBook) {
     const form = new FormData();
@@ -1440,11 +1457,15 @@ it('标准 FMS 表先保存单侧原始结果，补录后计算最终分且保�
   async function submit(values: Record<string, unknown>) {
     const book = await download();
     const sheet = book.Sheets['FMS测试'];
-    const columns = (XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][])[2].map(header => header.split('\n')[0]);
+    const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
+    const columns = rows[2].map(header => header.split('\n')[0]);
     expect(columns).toContain('肩部灵活性（左侧疼痛排查）');
     expect(columns).toContain('跨栏步（右）');
-    const row: Record<string, unknown> = { 姓名: '虚构队员', 测试日期: '2026-11-28', ...values };
-    XLSX.utils.sheet_add_aoa(sheet, [columns.map(column => row[column] ?? null)], { origin: 'A4' });
+    const numberColumn = columns.indexOf('系统运动员编号');
+    const athleteRow = rows.findIndex(cells => String(cells[numberColumn]) === '701');
+    expect(athleteRow).toBeGreaterThanOrEqual(3);
+    const row: Record<string, unknown> = { 系统运动员编号: '701', 姓名: '虚构队员', 测试日期: '2026-11-28', ...values };
+    XLSX.utils.sheet_add_aoa(sheet, [columns.map(column => row[column] ?? null)], { origin: `A${athleteRow + 1}` });
     const form = new FormData();
     form.set('project', 'ROWING');
     form.set('team', 'HTTP甲队');

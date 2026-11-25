@@ -652,7 +652,7 @@ export function PersonalPage(props: Props) {
             <option value="">选择运动员</option>
             {filteredAthletes.map((athlete) => (
               <option key={athlete.id} value={athlete.id}>
-                {athlete.name} · {athlete.team}
+                {athlete.name} · {athlete.team} · 编号 {athlete.id}
               </option>
             ))}
           </select>
@@ -710,6 +710,7 @@ export function PersonalPage(props: Props) {
                   {projectLabel(selectedAthlete.project)} · {selectedAthlete.team}
                 </span>
                 <h2>{selectedAthlete.name}</h2>
+                <p>运动员编号 {selectedAthlete.id}</p>
                 <p>
                   {props.user.role !== 'OBS' && <>{athleteLocation || '地区待补充'} · </>}{selectedAthlete.coaches || '未绑定教练'}
                 </p>

@@ -438,7 +438,7 @@ export function importTemplateFields(sheet: string, options?: { coachView?: bool
     let fieldChoices = key === '训练类型' && sheet === '训练课次' ? undefined : choices[key];
     if (key === '系统运动员编号') {
       requirement = '系统预填';
-      hint = '系统预填编号可留空；按所选项目、队伍和姓名关联。';
+      hint = '已有队员保留系统预填编号；旧表留空时按所选项目、队伍和姓名匹配。';
     }
     if (['姓名', '运动员'].includes(key)) {
       requirement = '条件必填';

@@ -160,16 +160,22 @@ export function activateRegistrationRequest(
         .prepare('SELECT id FROM project_teams WHERE project = ? AND name = ? AND active = 1')
         .get(request.project, request.team) as { id: number } | undefined;
       if (!team) throw new RegistrationActivationError('申请所属队伍不存在或已停用。');
-      // 系统自动开通只允许新建，绝不认领已有训练档案。
-      const athlete = reviewer
-        ? (db
-            .prepare(
-              `SELECT a.id, a.gender, a.birth_date FROM athletes a
-            WHERE a.name = ? AND a.project = ? AND a.team_id = ?`
-            )
-            .get(request.display_name, request.project, team.id) as
-            { id: number; gender: string | null; birth_date: string | null } | undefined)
-        : undefined;
+      const roster = db.prepare(`
+        SELECT id, gender, birth_date FROM athletes WHERE name = ? AND project = ? AND team_id = ?`
+      ).all(request.display_name, request.project, team.id) as Array<{
+        id: number; gender: string | null; birth_date: string | null;
+      }>;
+      if (!reviewer && roster.length)
+        throw new RegistrationActivationError('同名同队的运动员档案已存在，已暂停开通，请联系管理员核对身份后审核。');
+      const compatible = roster.filter(athlete =>
+        (!athlete.gender || !request.gender || athlete.gender === request.gender) &&
+        (!athlete.birth_date || !request.birth_date || athlete.birth_date === request.birth_date)
+      );
+      if (compatible.length > 1)
+        throw new RegistrationActivationError('同队有多个符合申请资料的档案，请按运动员编号核对后再审核。');
+      const athlete = compatible[0] ?? (roster.length === 1 ? roster[0] : undefined);
+      if (!athlete && roster.length)
+        throw new RegistrationActivationError('姓名与既有档案身份信息不一致，请联系管理员核对档案或申请信息。');
       if (athlete) {
         const linkedUser = db
           .prepare("SELECT id FROM users WHERE athlete_id = ? AND role = 'ATL'")
@@ -200,36 +206,20 @@ export function activateRegistrationRequest(
               `该姓名已存在于项目「${other.project} / ${other.team}」，与申请的项目「${request.project} / ${request.team}」不一致。请核对姓名或联系管理员。`
             );
         }
-        try {
-          const result = db
-            .prepare(
-              `INSERT INTO athletes (name, project, team, team_id, gender, birth_date, source, profile_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'incomplete')`
-            )
-            .run(
-              request.display_name,
-              request.project,
-              request.team,
-              team.id,
-              request.gender,
-              request.birth_date || null,
-              reviewer ? 'registration_verified' : 'self_registered'
-            );
-          athleteId = Number(result.lastInsertRowid);
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            'errcode' in error &&
-            error.errcode === 2067 && // SQLITE_CONSTRAINT_UNIQUE
-            db
-              .prepare('SELECT id FROM athletes WHERE name = ? AND project = ? AND team = ?')
-              .get(request.display_name, request.project, request.team)
-          ) {
-            throw new RegistrationActivationError(
-              '同名同队的运动员档案已存在，已暂停开通，请联系管理员核对身份后审核。'
-            );
-          }
-          throw error;
-        }
+        const result = db
+          .prepare(
+            `INSERT INTO athletes (name, project, team, team_id, gender, birth_date, source, profile_status) VALUES (?, ?, ?, ?, ?, ?, ?, 'incomplete')`
+          )
+          .run(
+            request.display_name,
+            request.project,
+            request.team,
+            team.id,
+            request.gender,
+            request.birth_date || null,
+            reviewer ? 'registration_verified' : 'self_registered'
+          );
+        athleteId = Number(result.lastInsertRowid);
       }
       const estimated = registrationOrigin(request.native_place);
       // 籍贯只能提供推测归属；已确认的正式归属永不被注册资料覆盖。
