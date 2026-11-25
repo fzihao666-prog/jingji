@@ -127,6 +127,7 @@ function createPageModule(url, api, extraMocks = {}) {
     '../../utils/daily-todos': dailyTodosModule,
     '../../utils/pagination': paginationModule,
     '../../utils/injury-metric': injuryMetricModule,
+    '../../utils/athlete-number': loadCjs(new URL('../utils/athlete-number.js', import.meta.url), {}),
     '../../utils/profile-views': profileViews,
     '../../utils/body-composition-groups': loadCjs(new URL('../utils/body-composition-groups.js', import.meta.url), {
       './format': formatModule,
@@ -432,10 +433,12 @@ it('观察员在原档案页读取训练与测试，跳过医疗请求并隐藏�
   api.painTrend = async () => { medicalCalls += 1; return {}; };
   api.wellnessTrends = async () => { medicalCalls += 1; return {}; };
   const { page } = createPageModule(new URL('./profile/profile.js', import.meta.url), api);
-  const person = { ...athlete, phone: 'private', healthStatus: 'private', coaches: '体能教练甲', headCoaches: '' };
+  const person = { ...athlete, eventItem: '女子双桨', phone: 'private', healthStatus: 'private', coaches: '体能教练甲', headCoaches: '' };
   const view = await page.loadPageData({ user: { role: 'OBS' }, selectedAthleteId: 1,
     athletes: [person], project: 'ROWING', from: '2026-10-01', to: '2026-10-31' }, () => true);
   expect(view.athleteName).toBe(athlete.name);
+  expect(view.primaryCells.find(cell => cell.label === '项目').value).toBe('赛艇 · 女子双桨');
+  expect([...view.primaryCells, ...view.moreCells].some(cell => cell.label === '当前小项')).toBe(false);
   expect(view.primaryCells.find(cell => cell.label === '负责教练').value).toBe('体能教练甲');
   expect(api.calls.injuryRecords).toBe(0);
   expect(medicalCalls).toBe(0);

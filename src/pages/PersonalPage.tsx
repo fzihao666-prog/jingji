@@ -498,9 +498,13 @@ export function PersonalPage(props: Props) {
           title: '个人信息',
           tone: 'personal',
           fields: [
-            { label: '运动项目', value: projectLabel(selectedAthlete.project) },
+            {
+              label: '运动项目',
+              value: [projectLabel(selectedAthlete.project), selectedAthlete.eventItem?.trim()]
+                .filter(Boolean)
+                .join(' · '),
+            },
             { label: '所属队伍', value: selectedAthlete.team },
-            { label: '具体小项', value: selectedAthlete.eventItem },
             { label: '代表单位', value: selectedAthlete.representativeUnit },
             { label: '负责教练', value: selectedAthlete.coaches || selectedAthlete.headCoaches || '—' },
             {

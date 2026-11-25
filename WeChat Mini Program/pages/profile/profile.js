@@ -48,8 +48,10 @@ function painTrendView(trend) {
 
 function profileView(athlete, injuryRecords, overview, benchmark, period) {
   const age = ageAt(athlete.birthDate, period.to);
+  const eventItem = athlete.eventItem?.trim() || athlete.currentEvent?.trim();
+  const sport = [athlete.project && projectLabel(athlete.project), eventItem].filter(Boolean).join(' · ');
   const cells = [
-    ['项目', athlete.project ? projectLabel(athlete.project) : '--'],
+    ['项目', sport || '--'],
     ['队伍', athlete.team || '--'],
     ['负责教练', athlete.coaches || athlete.headCoaches || '—'],
     ['性别', athlete.gender || '--'],
@@ -60,7 +62,6 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
     ['骨骼肌', athlete.skeletalMuscleKg == null ? '--' : `${number(athlete.skeletalMuscleKg)} kg`],
     ['技术等级', athlete.technicalLevel || '--'],
     ['运动员位置', athlete.athletePosition || '--'],
-    ['当前小项', athlete.eventItem || athlete.currentEvent || '--'],
     ['代表单位', athlete.representativeUnit || '--'],
     ['训练年限', athlete.trainingYears == null ? '--' : `${number(athlete.trainingYears)} 年`],
     ['训练阶段', athlete.trainingPhase || '--'],
@@ -70,7 +71,7 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
     ['成绩日期', athlete.bestResultDate || '--'],
     ['联系电话', athlete.phone ? maskPhone(athlete.phone) : '--']
   ].map(([label, value]) => ({ label, value })).filter(item => period.user?.role !== 'OBS' || !['健康状态', '联系电话'].includes(item.label));
-  const primaryLabels = new Set(['项目', '队伍', '负责教练', '性别', '年龄', '身高', '体重', '当前小项', '健康状态']);
+  const primaryLabels = new Set(['项目', '队伍', '负责教练', '性别', '年龄', '身高', '体重', '健康状态']);
   const primaryCells = cells.filter((item) => primaryLabels.has(item.label));
   const moreCells = cells.filter((item) => !primaryLabels.has(item.label));
 
@@ -110,7 +111,7 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
     athleteName: athlete.name || '档案资料待补充',
     athleteNumber: athlete.athleteNumber || (athlete.id ? formatAthleteNumber(athlete.id) : ''),
     athleteMeta: `${projectLabel(athlete.project)} · ${athlete.team || '--'}`,
-    athleteSubline: `${athlete.gender || '性别未录入'} · ${age == null ? '年龄未录入' : `${age}岁`} · ${athlete.eventItem || athlete.currentEvent || '小项未录入'}`,
+    athleteSubline: `${athlete.gender || '性别未录入'} · ${age == null ? '年龄未录入' : `${age}岁`}`,
     athleteInitial: athlete.name ? athlete.name.slice(0, 1) : '运',
     primaryCells,
     moreCells,
