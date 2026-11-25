@@ -560,7 +560,7 @@ export function registerDataImportRoutes(app: Express) {
     (req, res) => {
       const athleteIds = accessibleAthleteIds(req.authUser!);
       const items = athleteIds.length ? db.prepare(`
-        SELECT ts.project_code AS project, ts.test_type AS testType,
+        SELECT ts.test_type AS testType,
           tm.metric_code AS metricCode, COALESCE(md.label, tm.metric_code) AS metricName,
           tm.unit, ts.protocol, COALESCE(ts.protocol_version, '') AS protocolVersion,
           COUNT(*) AS measurementCount, MAX(ts.test_date) AS latestTestDate
@@ -573,9 +573,9 @@ export function registerDataImportRoutes(app: Express) {
           AND ts.is_demo = 0 AND tm.is_demo = 0
           AND ts.quality IN ('valid', 'partial') AND tm.quality IN ('valid', 'partial')
           AND tm.source = 'file_import'
-        GROUP BY ts.project_code, ts.test_type, tm.metric_code, tm.unit,
+        GROUP BY ts.test_type, tm.metric_code, tm.unit,
           ts.protocol, COALESCE(ts.protocol_version, '')
-        ORDER BY project, testType, metricName, metricCode, tm.unit, ts.protocol, protocolVersion
+        ORDER BY testType, metricName, metricCode, tm.unit, ts.protocol, protocolVersion
       `).all(JSON.stringify(athleteIds)) : [];
       res.setHeader('Cache-Control', 'no-store');
       res.json({ items });

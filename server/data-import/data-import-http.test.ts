@@ -1653,12 +1653,15 @@ it('基础档案日期接受常见分隔符，统一保存为 ISO 日期并拒�
   expect((await request(`/batches/${invalid.id}/commit`, 'POST', {})).status).toBe(400);
 });
 
-it('指标与标准按授权汇总已入库的测试指标，区分单位及协议', async () => {
+it('指标与标准按授权跨项目汇总导入指标并区分单位及协议', async () => {
   const teamId = (db.prepare("SELECT id FROM project_teams WHERE name='HTTP乙队'").get() as { id: number }).id;
   const hiddenAthlete = db.prepare("INSERT INTO athletes(name,project,team,team_id) VALUES('汇总边界样例','ROWING','HTTP乙队',?)").run(teamId);
+  const crossTeam = db.prepare("INSERT INTO project_teams(project,name) VALUES('VOLLEYBALL','汇总跨项目队')").run();
+  const crossAthlete = db.prepare("INSERT INTO athletes(name,project,team,team_id) VALUES('汇总跨项目样例','VOLLEYBALL','汇总跨项目队',?)").run(crossTeam.lastInsertRowid);
+  db.exec("INSERT INTO user_project_permissions(user_id,project,granted_by) VALUES(701,'VOLLEYBALL',701); INSERT INTO user_team_permissions(user_id,project,team,granted_by) VALUES(701,'VOLLEYBALL','汇总跨项目队',701)");
   const insertSession = db.prepare(`
     INSERT INTO test_sessions(athlete_id,test_date,test_type,project_code,project_status,protocol)
-    VALUES(?,?,'汇总测试样例','ROWING','confirmed',?)
+    VALUES(?,?,'汇总测试样例',?,'confirmed',?)
   `);
   const insertMetric = db.prepare(`
     INSERT INTO test_measurements(test_session_id,metric_code,value_num,unit,source)
@@ -1666,13 +1669,14 @@ it('指标与标准按授权汇总已入库的测试指标，区分单位及协�
   `);
   const sessionIds: Array<number | bigint> = [];
   try {
-    for (const [athleteId, protocol, unit, source] of [
-      [701, '标准一', 'kg', 'file_import'],
-      [701, '标准二', 'lb', 'file_import'],
-      [701, '手工样例', 'kg', 'manual'],
-      [hiddenAthlete.lastInsertRowid, '仅乙队', 'kg', 'file_import'],
+    for (const [athleteId, project, protocol, unit, source] of [
+      [701, 'ROWING', '标准一', 'kg', 'file_import'],
+      [crossAthlete.lastInsertRowid, 'VOLLEYBALL', '标准一', 'kg', 'file_import'],
+      [701, 'ROWING', '标准二', 'lb', 'file_import'],
+      [701, 'ROWING', '手工样例', 'kg', 'manual'],
+      [hiddenAthlete.lastInsertRowid, 'ROWING', '仅乙队', 'kg', 'file_import'],
     ] as const) {
-      const sessionId = insertSession.run(athleteId, `2026-11-0${sessionIds.length + 1}`, protocol).lastInsertRowid;
+      const sessionId = insertSession.run(athleteId, `2026-11-0${sessionIds.length + 1}`, project, protocol).lastInsertRowid;
       sessionIds.push(sessionId);
       insertMetric.run(sessionId, unit, source);
     }
@@ -1682,7 +1686,7 @@ it('指标与标准按授权汇总已入库的测试指标，区分单位及协�
     expect(response.status).toBe(200);
     const { items } = await response.json() as { items: Array<{ testType: string }> };
     expect(items.filter((item) => item.testType === '汇总测试样例')).toEqual([
-      expect.objectContaining({ metricCode: 'squat_kg', protocol: '标准一', unit: 'kg', measurementCount: 1 }),
+      expect.objectContaining({ metricCode: 'squat_kg', protocol: '标准一', unit: 'kg', measurementCount: 2 }),
       expect.objectContaining({ metricCode: 'squat_kg', protocol: '标准二', unit: 'lb', measurementCount: 1 }),
     ]);
   } finally {
@@ -1690,6 +1694,8 @@ it('指标与标准按授权汇总已入库的测试指标，区分单位及协�
       db.prepare('DELETE FROM test_measurements WHERE test_session_id=?').run(id);
       db.prepare('DELETE FROM test_sessions WHERE id=?').run(id);
     }
-    db.prepare('DELETE FROM athletes WHERE id=?').run(hiddenAthlete.lastInsertRowid);
+    db.prepare('DELETE FROM athletes WHERE id IN (?,?)').run(hiddenAthlete.lastInsertRowid, crossAthlete.lastInsertRowid);
+    db.prepare('DELETE FROM project_teams WHERE id=?').run(crossTeam.lastInsertRowid);
+    db.exec("DELETE FROM user_team_permissions WHERE user_id=701 AND project='VOLLEYBALL'; DELETE FROM user_project_permissions WHERE user_id=701 AND project='VOLLEYBALL'");
   }
 });

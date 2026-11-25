@@ -1041,7 +1041,6 @@ export const api = {
   },
   async dataManagementImportedTests() {
     return request<{ items: Array<{
-      project: string;
       testType: string;
       metricCode: string;
       metricName: string;

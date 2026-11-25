@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Database, Plus, RefreshCw, Tags } from 'lucide-react';
-import { projectLabel } from '../../shared/projects';
 import { api } from '../api';
 import type { User } from '../types';
 import { PageContainer, PageHeader } from '../components/PageLayout';
@@ -45,7 +44,7 @@ export function DataManagementPage({ user }: Props) {
   const [importedTestStatus, setImportedTestStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const testKeyword = importedTestSearch.trim().toLowerCase();
   const visibleImportedTests = importedTests.filter((item) =>
-    [projectLabel(item.project), item.testType, item.metricName, item.metricCode, item.unit, item.protocol, item.protocolVersion]
+    [item.testType, item.metricName, item.metricCode, item.unit, item.protocol, item.protocolVersion]
       .some((value) => value.toLowerCase().includes(testKeyword))
   );
   const editable = user.role === 'TD' || user.role === 'DMD';
@@ -220,21 +219,20 @@ export function DataManagementPage({ user }: Props) {
             <span>搜索导入指标</span>
             <input type="search" value={importedTestSearch}
               onChange={(event) => setImportedTestSearch(event.target.value)}
-              placeholder="运动项目、名称、编码或协议" />
+              placeholder="测试名称、指标编码或协议" />
           </label>
         </div>
         <div className="data-import-table-wrap" role="region" aria-label="已导入的测试项目与指标表" tabIndex={0}>
           <table className="data-import-table">
             <thead>
               <tr>
-                {['运动项目', '测试项目', '指标名称与编码', '单位', '测试协议', '入库测量数', '最近测试日期']
+                {['测试项目', '指标名称与编码', '单位', '测试协议', '入库测量数', '最近测试日期']
                   .map((label) => <th key={label} scope="col">{label}</th>)}
               </tr>
             </thead>
             <tbody>
               {visibleImportedTests.map((item) => (
-                <tr key={JSON.stringify([item.project, item.testType, item.metricCode, item.unit, item.protocol, item.protocolVersion])}>
-                  <td>{projectLabel(item.project)}</td>
+                <tr key={JSON.stringify([item.testType, item.metricCode, item.unit, item.protocol, item.protocolVersion])}>
                   <td>{item.testType}</td>
                   <td>{item.metricName}<br /><small>{item.metricCode}</small></td>
                   <td>{item.unit || '—'}</td>
@@ -244,7 +242,7 @@ export function DataManagementPage({ user }: Props) {
                 </tr>
               ))}
               {!visibleImportedTests.length && (
-                <tr><td colSpan={7}>
+                <tr><td colSpan={6}>
                   {importedTestStatus === 'loading' ? '正在读取导入指标…'
                     : importedTestStatus === 'error' ? '导入指标读取失败，请刷新页面重试。'
                     : importedTests.length ? '没有匹配的导入指标。' : '当前权限范围内暂无已入库的导入指标。'}
