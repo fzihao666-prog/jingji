@@ -1,3 +1,4 @@
+const { formatAthleteNumber, matchesAthleteNumber } = require('../../utils/athlete-number');
 const { projectOptions } = require('../../utils/project-label');
 
 Component({
@@ -21,7 +22,7 @@ Component({
     projectIndex: 0,
     projectItems: [],
     athleteIndex: 0,
-    athleteItems: [{ id: 0, name: '全部运动员（整体分析）' }],
+    athleteItems: [{ id: 0, name: '全部运动员（整体分析）', label: '全部运动员（整体分析）' }],
     teamIndex: 0,
     teamItems: [{ id: 0, name: '全部队伍' }],
     rangeOptions: [
@@ -38,12 +39,14 @@ Component({
     },
     'athletes, athleteId, allowAll, keyword': function updateAthleteIndex(athletes, athleteId, allowAll, keyword) {
       const kw = (keyword || '').trim().toLowerCase();
-      const filtered = kw
-        ? (athletes || []).filter((item) =>
-            (item.name || '').toLowerCase().includes(kw) || (item.team || '').toLowerCase().includes(kw)
-          )
-        : (athletes || []);
-      const athleteItems = (allowAll ? [{ id: 0, name: '全部运动员（整体分析）' }] : []).concat(filtered);
+      const filtered = (athletes || []).filter(item =>
+        !kw || matchesAthleteNumber(item.id, kw) ||
+        (item.name || '').toLowerCase().includes(kw) || (item.team || '').toLowerCase().includes(kw)
+      ).sort((left, right) => Number(left.id) - Number(right.id)).map(item => ({
+        ...item,
+        label: `${item.name} · ${formatAthleteNumber(item.id)}`
+      }));
+      const athleteItems = (allowAll ? [{ id: 0, name: '全部运动员（整体分析）', label: '全部运动员（整体分析）' }] : []).concat(filtered);
       const index = athleteItems.findIndex((item) => Number(item.id) === Number(athleteId));
       this.setData({ athleteItems, athleteIndex: index < 0 ? 0 : index });
     },

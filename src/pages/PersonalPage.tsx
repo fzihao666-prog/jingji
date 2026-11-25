@@ -1,3 +1,4 @@
+import { formatAthleteNumber, matchesAthleteNumber } from '../../shared/athlete-number';
 import type { EChartsOption } from 'echarts';
 import { CalendarRange, Save, Search } from 'lucide-react';
 import {
@@ -194,9 +195,9 @@ export function PersonalPage(props: Props) {
   );
   const filteredAthletes = useMemo(() => {
     const query = athleteQuery.trim().toLocaleLowerCase();
-    return query
-      ? visibleAthletes.filter((athlete) => athlete.name.toLocaleLowerCase().includes(query))
-      : visibleAthletes;
+    return visibleAthletes.filter((athlete) =>
+      !query || matchesAthleteNumber(athlete.id, query) || athlete.name.toLocaleLowerCase().includes(query)
+    ).sort((left, right) => left.id - right.id);
   }, [athleteQuery, visibleAthletes]);
   const selectedAthlete = useMemo(
     () =>
@@ -223,6 +224,7 @@ export function PersonalPage(props: Props) {
     event.preventDefault();
     const query = athleteQuery.trim().toLocaleLowerCase();
     const athlete =
+      filteredAthletes.find((item) => matchesAthleteNumber(item.id, query)) ||
       filteredAthletes.find((item) => item.name.toLocaleLowerCase() === query) ||
       filteredAthletes[0];
     if (athlete) switchAthlete(athlete.id);
@@ -624,8 +626,8 @@ export function PersonalPage(props: Props) {
             <input
               value={athleteQuery}
               onChange={(event) => setAthleteQuery(event.target.value)}
-              placeholder="搜索姓名，回车查看"
-              aria-label="搜索运动员"
+              placeholder="搜索姓名或编号，回车查看"
+              aria-label="按姓名或编号搜索运动员"
             />
           </form>
           <select
@@ -652,7 +654,7 @@ export function PersonalPage(props: Props) {
             <option value="">选择运动员</option>
             {filteredAthletes.map((athlete) => (
               <option key={athlete.id} value={athlete.id}>
-                {athlete.name} · {athlete.team} · 编号 {athlete.id}
+                {athlete.name} · {athlete.team} · 编号 {formatAthleteNumber(athlete.id)}
               </option>
             ))}
           </select>
@@ -710,7 +712,7 @@ export function PersonalPage(props: Props) {
                   {projectLabel(selectedAthlete.project)} · {selectedAthlete.team}
                 </span>
                 <h2>{selectedAthlete.name}</h2>
-                <p>运动员编号 {selectedAthlete.id}</p>
+                <p>运动员编号 {formatAthleteNumber(selectedAthlete.id)}</p>
                 <p>
                   {props.user.role !== 'OBS' && <>{athleteLocation || '地区待补充'} · </>}{selectedAthlete.coaches || '未绑定教练'}
                 </p>
