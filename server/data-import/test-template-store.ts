@@ -167,6 +167,16 @@ export function testTemplateGroups(db: DatabaseSync, project: string, catalog: T
     .filter(group => group.codes.every(code => available.has(code)));
 }
 
+export function basicTestProjects(db: DatabaseSync, project: string, catalog = testTemplateCatalog(db, project)) {
+  const byCode = new Map(catalog.map(metric => [metric.code, metric]));
+  return testTemplateGroups(db, project, catalog).filter(group => !group.common)
+    .flatMap(group => group.codes.map(code => {
+      const metric = byCode.get(code)!;
+      const field = metric.label.startsWith(group.name) ? metric.label.slice(group.name.length) : metric.label;
+      return { projectName: group.name, field, metric };
+    }));
+}
+
 function groupNameKey(value: string) {
   return value.normalize('NFKC').replace(/\s+/g, '').toLowerCase();
 }

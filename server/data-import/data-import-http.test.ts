@@ -640,12 +640,41 @@ it('基础数据工作簿一次导入档案、测试与FMS，复用同批人员�
   const exportedBook = XLSX.read(await exported.arrayBuffer(), { type: 'array' });
   expect(exportedBook.SheetNames).toEqual([ATHLETE_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET]);
   const exportedTests = XLSX.utils.sheet_to_json<unknown[]>(exportedBook.Sheets[BASIC_TEST_SHEET], { header: 1 });
-  expect(exportedTests.find(row => row[0] === '整表虚构新人')).toMatchObject({ 2: '引体向上', 3: 5 });
+  expect(exportedTests.find(row => row[0] === '整表虚构新人')).toMatchObject({ 2: '引体向上', 5: 5 });
   const screening = XLSX.utils.sheet_to_json<unknown[]>(exportedBook.Sheets[BASIC_SCREENING_SHEET], { header: 1 });
   expect(screening[2][0]).toBe('示例：示例甲');
   expect(screening.find(row => row[0] === '整表虚构新人')?.[10]).toBe('有痛');
   expect(exportedBook.Sheets[BASIC_TEST_SHEET].A1.c?.[0].t).toBeTruthy();
 
+});
+
+it('基础数据模板可使用自行创建的测试项目、指标与协议，并分列导出', async () => {
+  const created = await request('/test-template/groups?project=ROWING&team=HTTP甲队', 'POST', {
+    name: '虚构划船阶梯', protocol: '标准阻力', fields: [
+      { label: '峰值功率', unit: 'W', valueKind: 'number' },
+      { label: '持续时间', unit: 's', valueKind: 'time' },
+    ],
+  });
+  expect(created.status, JSON.stringify(created.body)).toBe(201);
+  const headers = [...BASIC_DOWNLOAD_SHEETS[1][1]];
+  expect(headers.slice(2, 5)).toEqual(['测试项目', '指标', '测试协议']);
+  const batch = await upload([headers,
+    ['虚构队员', '2026-10-27', '虚构划船阶梯', '峰值功率', '高阻力', 250, 'W'],
+    ['虚构队员', '2026-10-27', '虚构划船阶梯', '持续时间', '', 60, 's'],
+  ], BASIC_TEST_SHEET, 'HTTP甲队');
+  expect(batch.errorCount, JSON.stringify(batch.items.map(item => item.messages))).toBe(0);
+  expect(batch.items.map(item => item.payload.protocol)).toEqual(['高阻力', '标准阻力']);
+  const committed = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(committed.status, JSON.stringify(committed.body)).toBe(200);
+
+  const response = await fetch(`${base}/api/data-import/export?format=basic&${new URLSearchParams({ project: 'ROWING', team: 'HTTP甲队' })}`, { headers: { authorization: `Bearer ${token}` } });
+  expect(response.status).toBe(200);
+  const book = XLSX.read(await response.arrayBuffer());
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(book.Sheets[BASIC_TEST_SHEET], { header: 1 });
+  expect(rows.filter(row => row[2] === '虚构划船阶梯').map(row => row.slice(2, 6))).toEqual([
+    ['虚构划船阶梯', '峰值功率', '高阻力', 250],
+    ['虚构划船阶梯', '持续时间', '标准阻力', 60],
+  ]);
 });
 
 it('基础档案新增字段按正式模板入库并在档案显示，空白保留原值', async () => {

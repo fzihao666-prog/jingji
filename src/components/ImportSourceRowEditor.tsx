@@ -82,7 +82,7 @@ export function ImportSourceRowEditor({
               pending && Object.hasOwn(pending, header)
                 ? (pending[header] ?? '')
                 : (row.values[index] ?? '');
-            const metricNames = ['指标名称', '测试项目'].includes(key)
+            const metricNames = item.sourceSheet !== '体能与专项测试' && ['指标名称', '测试项目'].includes(key)
               ? metrics.map((metric) => `${metric.label}${metric.unit ? `（${metric.unit}）` : ''}`)
               : null;
             const choices = metricNames?.length ? metricNames : field?.choices;
@@ -90,7 +90,7 @@ export function ImportSourceRowEditor({
             return (
               <label key={`${header}-${index}`}>
                 <span>
-                  {field?.displayName || key}
+                  {item.sourceSheet === '体能与专项测试' && key === '指标名称' ? '测试项目' : field?.displayName || key}
                   {field?.unit ? `（${field.unit}）` : ''}
                 </span>
                 {choices?.length ? (

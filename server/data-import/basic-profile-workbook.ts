@@ -30,7 +30,7 @@ export const BASIC_SCREENING_HEADERS = [
 
 export const BASIC_DOWNLOAD_SHEETS = [
   [ATHLETE_PROFILE_SHEET, ATHLETE_PROFILE_HEADERS.filter(header => header !== '运动员编号' && header !== '身体测量日期')],
-  [BASIC_TEST_SHEET, ['姓名', ...BASIC_TEST_HEADERS.slice(2)]],
+  [BASIC_TEST_SHEET, ['姓名', '测试日期', '测试项目', '指标', '测试协议', ...BASIC_TEST_HEADERS.slice(4)]],
   [BASIC_SCREENING_SHEET, ['姓名', ...BASIC_SCREENING_HEADERS.slice(2)]],
 ] as const;
 

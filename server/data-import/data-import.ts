@@ -6,7 +6,7 @@ import {
 } from '../../shared/training-record-template.ts';
 import { readTrainingRecordDownload, type TrainingRecordDownload } from './test-template-store.ts';
 import {
-  readTestTemplateDownload, testTemplateTeamId, TEST_TEMPLATE_SHEET, TEST_TEMPLATE_META, TEST_TEMPLATE_FORMAT,
+  basicTestProjects, testTemplateCatalog, readTestTemplateDownload, testTemplateTeamId, TEST_TEMPLATE_SHEET, TEST_TEMPLATE_META, TEST_TEMPLATE_FORMAT,
   TEST_TEMPLATE_IDENTITY_HEADERS, type TestTemplateDownload,
 } from './test-template-store.ts';
 import { ATHLETE_PROFILE_HEADERS, ATHLETE_PROFILE_SHEET, BASIC_PROFILE_HEADERS, BASIC_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET } from './basic-profile-workbook.ts';
@@ -1229,7 +1229,9 @@ function parseStandardSheet(
     }
   }
   const items: ParsedImportItem[] = [];
-  const metricCatalog = sheet === '测试指标' ? readImportMetricDefinitions(project) : [];
+  const basicCatalog = basicTest ? testTemplateCatalog(db, project) : [];
+  const basicProjects = basicTest ? basicTestProjects(db, project, basicCatalog) : [];
+  const metricCatalog = sheet === '测试指标' && !basicTest ? readImportMetricDefinitions(project) : [];
   const year = workbookYear(filename);
   const nameColumn = header.columns.get(normalizedText('姓名')) ?? 0;
   const identityHeaders = new Set(['系统运动员编号', '运动员编号', '编号', '姓名', '所属队伍', '运动项目', '日期', '测量日期', '测试日期', '发生日期', '评估日期']);
@@ -1826,7 +1828,25 @@ function parseStandardSheet(
       const explicitTestType = standardText(row, header.columns, '测试类型');
       const rawCode = standardText(row, header.columns, '指标代码');
       // 明确指定测试类型的逐项记录保留原指标代码，兼容历史事实，不改写其归属。
-      const selected = rawCode ? undefined : resolveImportMetricName(standardText(row, header.columns, '指标名称'), standardText(row, header.columns, '单位'), metricCatalog);
+      const projectName = standardText(row, header.columns, '指标名称');
+      const field = basicTest ? standardText(row, header.columns, '指标') : '';
+      const protocol = basicTest ? standardText(row, header.columns, '测试协议', '协议') : standardText(row, header.columns, '协议');
+      const providedUnit = standardText(row, header.columns, '单位');
+      const grouped = basicProjects.filter(entry => normalizedText(entry.projectName) === normalizedText(projectName));
+      const options = grouped.length
+        ? grouped.map(({ field, metric }) => ({ ...metric, label: field }))
+        : basicCatalog;
+      const lookupName = grouped.length ? field || (grouped.length === 1 ? grouped[0].field : '') : projectName;
+      const sameProtocol = basicTest && protocol ? options.filter(metric => metric.protocol === protocol) : [];
+      const selected = rawCode ? undefined : (() => {
+        if (basicTest && !grouped.length && field && normalizedText(field) !== normalizedText(projectName))
+          return { error: '错误：测试项目与指标未在系统中配对，请先在「自定义测试成绩模板」中创建。' };
+        if (!basicTest) return resolveImportMetricName(projectName, providedUnit, metricCatalog);
+        const preferred = resolveImportMetricName(lookupName, providedUnit, sameProtocol);
+        return preferred.metric ? preferred : resolveImportMetricName(lookupName, providedUnit, options);
+      })();
+      const basicMetric = basicCatalog.find(metric => metric.code === selected?.metric?.code);
+      const configuredProtocol = basicMetric?.protocolVersion ? basicMetric.protocol : '';
       const metricCode = rawCode ? (explicitTestType ? rawCode : canonicalImportMetricCode(rawCode)) : selected?.metric?.code || '';
       const valueNum = readNumber('数值');
       const fitnessType = basicTest && (
@@ -1834,10 +1854,14 @@ function parseStandardSheet(
         COMMON_FITNESS_TEMPLATE_METRICS.some(([, code, , , type]) => code === metricCode && type === '体能测试')
       ) ? '体能测试' : '专项测试';
       const metricDefinition = db.prepare('SELECT unit FROM metric_definitions WHERE code = ? AND active = 1').get(metricCode) as { unit: string } | undefined;
-      const providedUnit = standardText(row, header.columns, '单位');
       const metricUnit = providedUnit || metricDefinition?.unit || '';
       const durationMin = readNumber('测试时长分钟');
-      if (selected?.error) messages.push(selected.error);
+      const errorColumn = grouped.length ? '指标' : '指标名称';
+      const errorAddress = cellAddress(rowIndex, header.columns.get(normalizedText(errorColumn)) ?? nameColumn);
+      const selectionError = selected?.error && basicTest
+        ? `错误：${rawSheet}!${errorAddress} ${selected.error.replace(/^错误：/, '')}`
+        : selected?.error;
+      if (selectionError) messages.push(selectionError);
       if (valueNum === null) messages.push('错误：测试数值不能为空');
       if (durationMin !== null && durationMin <= 0) messages.push('错误：测试时长分钟须大于0');
       const sideText = standardText(row, header.columns, '侧别');
@@ -1861,14 +1885,16 @@ function parseStandardSheet(
           eventDate: rowDate,
           testType: explicitTestType || (metricCode === 'arm_span_cm' && side === 'center' ? '身体测量' : fitnessType),
           metricCode,
-          metricLabel: selected?.metric?.label || standardText(row, header.columns, '指标名称') || metricCode,
+          metricLabel: basicMetric?.label || selected?.metric?.label || projectName || metricCode,
           valueNum,
           unit: metricUnit,
           side,
           payload: {
             ...base.payload,
-            metricSelectionError: selected?.error || '',
-            protocol: standardText(row, header.columns, '协议'),
+            metricSelectionError: selectionError || '',
+            protocol: protocol || configuredProtocol,
+            ...(basicTest && basicMetric?.protocolVersion && (!protocol || protocol === basicMetric.protocol)
+              ? { protocolVersion: basicMetric.protocolVersion } : {}),
             durationMin,
             targetValue: readNumber('目标值'),
             unitConflict: providedUnit && metricDefinition?.unit && providedUnit !== metricDefinition.unit ? `错误：单位须为${metricDefinition.unit}，不能静默换算` : '',

@@ -1050,7 +1050,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             <Download size={19} aria-hidden />
             <div>
               <strong>自定义测试成绩模板</strong>
-              <span>预览并配置本队测试指标</span>
+              <span>新建测试项目，也可用于基础数据模板</span>
             </div>
           </button>
         </div>
