@@ -9,7 +9,7 @@ import {
   readTestTemplateDownload, testTemplateTeamId, TEST_TEMPLATE_SHEET, TEST_TEMPLATE_META, TEST_TEMPLATE_FORMAT,
   TEST_TEMPLATE_IDENTITY_HEADERS, type TestTemplateDownload,
 } from './test-template-store.ts';
-import { BASIC_PROFILE_HEADERS, BASIC_PROFILE_SHEET } from './basic-profile-workbook.ts';
+import { ATHLETE_PROFILE_HEADERS, ATHLETE_PROFILE_SHEET, BASIC_PROFILE_HEADERS, BASIC_PROFILE_SHEET } from './basic-profile-workbook.ts';
 import { parseTrainingYears } from '../../shared/training-years.ts';
 import { saveSubmissionProvenance } from '../report/submission-provenance.ts';
 import { assertImportWorkbookSize } from './import-workbook-limits.ts';
@@ -929,7 +929,10 @@ function parseScoringSheet(matrix: Matrix, sheet: string, project: string, batch
   return items;
 }
 
+const isProfileSheet = (name: string) => name === BASIC_PROFILE_SHEET || name === ATHLETE_PROFILE_SHEET;
+
 const STANDARD_SHEETS = new Set([
+  ATHLETE_PROFILE_SHEET,
   BASIC_PROFILE_SHEET,
   COMPACT_ATHLETE_SHEET,
   ...UNIFIED_IMPORT_HEADERS.map(([name]) => name),
@@ -1170,7 +1173,8 @@ function parseStandardSheet(
   fallbackDate = defaultDate || new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Shanghai' }).format(new Date()),
   selectedTeam = ''
 ) {
-  const basicProfile = rawSheet === BASIC_PROFILE_SHEET;
+  const basicProfile = isProfileSheet(rawSheet);
+  const athleteProfile = rawSheet === ATHLETE_PROFILE_SHEET;
   if (basicProfile && !selectedTeam) throw new Error('上传运动员基础档案前请选择项目和队伍。');
   const sheet = basicProfile ? '运动员信息' : IMPORT_SHEET_ALIASES[rawSheet] || rawSheet;
   const header = standardHeader(matrix, sheet === COMPACT_ATHLETE_SHEET);
@@ -1182,7 +1186,8 @@ function parseStandardSheet(
     }
   }
   if (basicProfile) {
-    const knownHeaders = new Set([...BASIC_PROFILE_HEADERS, '运动员编号', '编号', '运动项目', '所属队伍'].map(normalizedText));
+    const knownHeaders = new Set([...BASIC_PROFILE_HEADERS, ...ATHLETE_PROFILE_HEADERS, '编号', '所属队伍']
+      .filter(label => label !== '录入检查').map(normalizedText));
     for (const label of header.columns.keys()) {
       if (!knownHeaders.has(label)) header.columns.delete(label);
     }
@@ -1202,6 +1207,9 @@ function parseStandardSheet(
   ).map(athlete => normalizedName(athlete.name)) : []);
   for (let rowIndex = header.rowIndex + 1; rowIndex < matrix.length; rowIndex += 1) {
     const rawRow = matrix[rowIndex] || [];
+    if (athleteProfile && (rawRow.every(value => !text(value) || /^示例[：:]/.test(text(value))) ||
+        (rowIndex === header.rowIndex + 1 && standardText(rawRow, header.columns, '姓名') === '填写档案中使用的姓名。' &&
+          standardText(rawRow, header.columns, '运动员编号').startsWith('使用队内固定唯一编号')))) continue;
     const row = header.identityColumns.size
       ? rawRow.map((value, index) => header.identityColumns.has(index) ? '' : value)
       : rawRow;
@@ -1248,7 +1256,9 @@ function parseStandardSheet(
         ? resolvePerson({ name: rawName, project, team: selectedTeam, athleteCode }, athletes).kind === 'matched'
         : existingProfileName && activeTeamNameMatches(athletes, project, selectedTeam!, rawName).length === 1)) continue;
     }
-    const rowHasContent = row.some((value) => text(value) !== '');
+    const rowHasContent = athleteProfile
+      ? [...header.columns.values()].some(column => text(row[column]) !== '')
+      : row.some(value => text(value) !== '');
     if (!rawName) {
       // 有内容但缺少姓名的行必须提示错误，不得静默丢弃业务数据。
       if (rowHasContent)
@@ -1386,11 +1396,11 @@ function parseStandardSheet(
         technicalLevel: normalizeTechnicalLevel(standardValue(row, header.columns, '技术等级')),
         position: standardText(row, header.columns, '位置号位'),
         healthStatus: standardText(row, header.columns, '身体状态'),
-        bestResult: standardText(row, header.columns, basicProfile ? '最好竞技成绩' : '最好成绩'),
-        eventItem: standardText(row, header.columns, '具体小项'),
-        representativeUnit: standardText(row, header.columns, '代表单位'),
+        bestResult: standardText(row, header.columns, rawSheet === BASIC_PROFILE_SHEET ? '最好竞技成绩' : '最好成绩'),
+        eventItem: standardText(row, header.columns, '小项／场上位置', '具体小项'),
+        representativeUnit: standardText(row, header.columns, '代表队伍', '代表单位'),
         trainingYears: trainingYears !== null && Number.isFinite(trainingYears) ? trainingYears : text(rawTrainingYears),
-        bestResultEvent: standardText(row, header.columns, '对应赛事'),
+        bestResultEvent: standardText(row, header.columns, '最好成绩对应赛事', '对应赛事'),
         bestResultDate: parseImportFullDate(rawBestResultDate) || text(rawBestResultDate),
         nativePlace: standardText(row, header.columns, '籍贯'),
         homeAddress: standardText(row, header.columns, '家庭住址'),
@@ -1405,11 +1415,14 @@ function parseStandardSheet(
         originCoach: standardText(row, header.columns, '输送教练'),
         specialties: standardText(row, header.columns, '优势项'),
         notes: standardText(row, header.columns, '备注'),
+        birthMonth: athleteProfile ? standardText(row, header.columns, '出生年月') : '',
+        trainingRestriction: athleteProfile ? standardText(row, header.columns, '当前训练限制') : '',
       };
       const hasProfileData = [payload.gender, payload.birthDate, payload.nativePlace,
         payload.education, payload.originUnit, payload.bestResult, payload.notes, payload.eventItem,
         payload.representativeUnit, payload.trainingYears, payload.bestResultEvent, payload.bestResultDate,
-        payload.technicalLevel, payload.startSportDate].some(isProvided);
+        payload.technicalLevel, payload.startSportDate, payload.birthMonth, payload.currentEvent,
+        payload.trainingRestriction].some(isProvided);
       if (!basicProfile || !existingProfileName || hasProfileData ||
           (athleteCode && resolvePerson({ name: rawName, project, team: selectedTeam, athleteCode }, athletes).kind !== 'matched')) items.push(
         itemBase({
@@ -2271,8 +2284,15 @@ function matrixForSheet(workbook: XLSX.WorkBook, sheetName: string, range: XLSX.
       }
     }
   }
-  if (sheetName === BASIC_PROFILE_SHEET || (IMPORT_SHEET_ALIASES[sheetName] || sheetName) === '运动员信息') {
+  if (isProfileSheet(sheetName) || (IMPORT_SHEET_ALIASES[sheetName] || sheetName) === '运动员信息') {
     const header = standardHeader(matrix);
+    const monthColumn = header?.columns.get('出生年月');
+    if (header && sheetName === ATHLETE_PROFILE_SHEET && monthColumn !== undefined) {
+      for (let row = header.rowIndex + 1; row < matrix.length; row += 1) {
+        const value = matrix[row][monthColumn];
+        if (value instanceof Date) matrix[row][monthColumn] = dateToIso(value).slice(0, 7);
+      }
+    }
     const column = header?.columns.get(sheetName === BASIC_PROFILE_SHEET ? '最好竞技成绩' : '最好成绩');
     if (header && column !== undefined) {
       for (let row = header.rowIndex + 1; row < matrix.length; row += 1) {
@@ -2401,7 +2421,11 @@ function detectItemConflict(item: DataImportItemView): DataImportConflict {
       )
       .get(item.athleteId) as Record<string, unknown> | undefined;
     if (!athlete) return empty;
-    const fields = databaseConflictFields(item, athlete);
+    const noteLines = String(athlete.notes ?? '').split(/\r?\n/);
+    const noteValue = (label: string) => noteLines.find(line => line.startsWith(`${label}：`))?.slice(label.length + 1) ?? '';
+    const fields = databaseConflictFields(item, {
+      ...athlete, birthMonth: noteValue('出生年月'), trainingRestriction: noteValue('当前训练限制'),
+    });
     return {
       exists: true,
       entityType: 'athlete',
@@ -2626,7 +2650,7 @@ function collectPersons(items: ParsedImportItem[]): Map<string, PersonRecord> {
       messages: [],
       matched: false,
     };
-    if (item.sourceSheet === BASIC_PROFILE_SHEET) person.sourceSheet = BASIC_PROFILE_SHEET;
+    if (isProfileSheet(item.sourceSheet)) person.sourceSheet = item.sourceSheet;
     person.gender = person.gender || text(payload.gender) || genderFromSheet;
     person.team = person.team || text(payload.team);
     person.birthDate = person.birthDate || text(payload.birthDate);
@@ -2792,6 +2816,9 @@ export function analyzeDataImport(input: {
       );
       type = `统一模板·${sheetName}`;
       note = '按稳定字段名识别模板，支持字段说明及列重排';
+    } else if (workbook.SheetNames.includes(ATHLETE_PROFILE_SHEET) && ['体能与专项测试', '功能筛查'].includes(sheetName)) {
+      ignoredSheets.push({ name: sheetName, reason: '此工作簿仅导入运动员档案；测试和筛查请使用测试成绩模板' });
+      continue;
     } else if (/个人档案/.test(sheetName)) {
       ignoredSheets.push({ name: sheetName, reason: '公式与图表展示页，不作为原始数据导入' });
       continue;
@@ -3402,7 +3429,7 @@ function validateImportItem(
         : '错误：姓名未填写，请补填运动员姓名。');
     if (item.itemType !== 'athlete_profile' && !validIsoDate(item.eventDate)) {
       const location = `${item.sourceSheet}!${text(payload.dateAddress) || item.sourceAddress}`;
-      if (item.sourceSheet === BASIC_PROFILE_SHEET)
+      if (isProfileSheet(item.sourceSheet))
         messages.push(`错误：${location} 身体测量日期无效或缺失，请填写实际测量日期，例如2026-11-23、2026/11/23或2026.11.23`);
       else
         messages.push(`错误：${location} 日期“${text(payload.rawDate) || item.eventDate}”无效或缺失，请按YYYY-MM-DD填写；默认日期仅补空白`);
@@ -3427,8 +3454,11 @@ function validateImportItem(
     if (gender && !['男', '女'].includes(gender)) messages.push('错误：性别只能填写男或女');
     const birthDate = text(payload.birthDate);
     if (birthDate && (!validIsoDate(birthDate) ||
-        (item.sourceSheet === BASIC_PROFILE_SHEET && !parseImportBirthDate(birthDate))))
+        (isProfileSheet(item.sourceSheet) && !parseImportBirthDate(birthDate))))
       profileError('出生日期', '请填写完整的年月日，且不能晚于今天');
+    const birthMonth = text(payload.birthMonth);
+    if (birthMonth && (!/^[1-9]\d{3}-(?:0[1-9]|1[0-2])$/.test(birthMonth) || !parseImportBirthDate(`${birthMonth}-01`)))
+      profileError('出生年月', '请按 YYYY-MM 填写，且不能晚于当前月份');
     if (isProvided(payload.trainingYears)) {
       const years = parseTrainingYears(payload.trainingYears);
       if (years === null || !Number.isFinite(years))
@@ -3560,7 +3590,7 @@ function validateImportItem(
     if (item.metricCode === 'body_composition') {
       if (!BODY_COMPOSITION_FIELDS.some(([key]) => isProvided(payload[key])))
         messages.push('错误：身体测量至少填写一个数值');
-      if (item.sourceSheet === BASIC_PROFILE_SHEET) {
+      if (isProfileSheet(item.sourceSheet)) {
         const height = optionalNumber(payload.heightCm);
         const weight = optionalNumber(payload.weightKg);
         if (height !== null) validateMetric('height_cm', height, messages);
@@ -4638,6 +4668,16 @@ const PROFILE_DETAIL_FIELDS: Array<[string, string, string]> = [
   ['notes', '备注', 'notes'],
 ];
 
+function importedProfileNotes(payload: Record<string, unknown>, existing: unknown) {
+  const fields = [['出生年月', text(payload.birthMonth)], ['当前训练限制', text(payload.trainingRestriction)]];
+  const provided = fields.filter(([, value]) => value);
+  if (!provided.length) return text(payload.notes);
+  const prior = text(payload.notes) || String(existing ?? '').trim();
+  const lines = prior ? prior.split(/\r?\n/) : [];
+  return [...lines.filter(line => !provided.some(([label]) => line.startsWith(`${label}：`))),
+    ...provided.map(([label, value]) => `${label}：${value}`)].join('\n');
+}
+
 /**
  * 运动员档案写入：区分新建 / 补全空字段 / 覆盖已有字段。
  * 空白一律视为未提供；档案非空资料按本次导入自动更新；
@@ -4710,7 +4750,7 @@ function upsertAthleteProfileItem(
   const detailSets: string[] = [];
   const detailParams: SqlValue[] = [];
   for (const [key, , column] of PROFILE_DETAIL_FIELDS) {
-    const newValue = text(p[key]);
+    const newValue = key === 'notes' ? importedProfileNotes(p, details?.notes) : text(p[key]);
     if (!isProvided(newValue)) continue;
     const currentValue = details?.[column];
     const current = currentValue === null || currentValue === undefined ? '' : String(currentValue);
@@ -4738,11 +4778,11 @@ function upsertAthleteProfileItem(
     ).run(
       item.athleteId,
       ...PROFILE_DETAIL_FIELDS.map(([key]) => {
-        const value = text(p[key]);
+        const value = key === 'notes' ? importedProfileNotes(p, '') : text(p[key]);
         return isProvided(value) ? value : key === 'trainingYears' ? null : '';
       })
     );
-    filled += PROFILE_DETAIL_FIELDS.filter(([key]) => isProvided(text(p[key]))).length;
+    filled += PROFILE_DETAIL_FIELDS.filter(([key]) => isProvided(key === 'notes' ? importedProfileNotes(p, '') : text(p[key]))).length;
   }
   const region = text(p.region);
   const city = text(p.city);

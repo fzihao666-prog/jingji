@@ -137,6 +137,8 @@ const schemas: Record<string, ReviewField[]> = {
   athlete_profile: [...textual({
     gender: '性别',
     birthDate: '出生日期',
+    birthMonth: '出生年月',
+    trainingRestriction: '当前训练限制',
     region: '省份',
     city: '城市',
     county: '区县',

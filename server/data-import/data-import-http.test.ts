@@ -13,6 +13,7 @@ vi.mock('../core/db.ts', async () => {
 });
 import { db } from '../core/db.ts';
 import { initializeDatabase } from '../core/db-initialize.ts';
+import { ATHLETE_PROFILE_HEADERS, ATHLETE_PROFILE_SHEET, BASIC_PROFILE_HEADERS } from './basic-profile-workbook.ts';
 import type { DataImportPreview } from './data-import.ts';
 import type { ImportStatistics } from '../../shared/import-statistics.js';
 
@@ -105,12 +106,10 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
       expect(content).toContain('模板虚构队员');
       expect(content).not.toContain('"虚构队员"');
       if (kind === 'profile') {
-        expect(workbook.SheetNames).toEqual(['运动员基础档案']);
-        const rows = XLSX.utils.sheet_to_json(workbook.Sheets['运动员基础档案'], { header: 1 }) as string[][];
-        expect(rows[1][0]).toBe('模板虚构队员');
-        expect(rows[1][rows[0].indexOf('系统运动员编号')]).toBe('ATL00799');
-        for (const removed of ['运动员编号', '运动项目', '所属队伍'])
-          expect((rows[0] as string[]).map(header => header.split('\n')[0])).not.toContain(removed);
+        expect(workbook.SheetNames).toEqual([ATHLETE_PROFILE_SHEET]);
+        const rows = XLSX.utils.sheet_to_json(workbook.Sheets[ATHLETE_PROFILE_SHEET], { header: 1 }) as string[][];
+        expect(rows[0]).toEqual([...ATHLETE_PROFILE_HEADERS]);
+        expect(rows[1]).toEqual(['ATL00799', '模板虚构队员']);
       }
     }
     const empty = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind: 'profile', project: 'ROWING', team: addedTeams[1] })}`, { headers: { authorization: `Bearer ${token}` } });
@@ -545,21 +544,50 @@ it('基础档案合并非空资料，新建人员归入所选队伍，身高按�
   );
 });
 
+it('运动员档案识别附件说明与示例并按新列入库', async () => {
+  const row = (fields: Record<string, unknown>) => ATHLETE_PROFILE_HEADERS.map(header => fields[header]);
+  const infos = [
+    row({ 运动员编号: '使用队内固定唯一编号。按文本保存，保留前导零。新增运动员不填写', 姓名: '填写档案中使用的姓名。' }),
+    row({ 运动员编号: '示例：ATL00001', 姓名: '示例：示例甲', 录入检查: '示例：留空' }),
+    row({ 录入检查: '自动检查结果' }),
+  ];
+  db.prepare("UPDATE athletes SET birth_date='2000-08-22' WHERE id=701").run();
+  try {
+    const batch = await upload([[...ATHLETE_PROFILE_HEADERS], ...infos, row({
+      运动员编号: 'ATL00701', 姓名: '虚构队员', 录入检查: '自动检查结果', 出生年月: '2000-08',
+      运动项目: '赛艇', 代表队伍: '虚构代表队', '小项／场上位置': '单人艇', 技术等级: '一级',
+      最好成绩: '7:22.50', 最好成绩对应赛事: '虚构赛事', 成绩日期: '2026-11-10',
+      备战赛事: '虚构目标赛事', 当前训练限制: '避免最大强度划行', '身高（cm）': 176,
+      '体重（kg）': 68.5, 身体测量日期: '2026-11-12',
+    })], ATHLETE_PROFILE_SHEET, 'HTTP甲队');
+    expect(batch.items.map(item => item.itemType)).toEqual(['athlete_profile', 'body_measurement']);
+    const result = await request(`/batches/${batch.id}/commit`, 'POST', {});
+    expect(result.status, JSON.stringify(result.body)).toBe(200);
+    expect(db.prepare('SELECT birth_date, team FROM athletes WHERE id=701').get())
+      .toEqual({ birth_date: '2000-08-22', team: 'HTTP甲队' });
+    expect(db.prepare('SELECT event_item, representative_unit, best_result, best_result_event, current_event, notes FROM athlete_profiles WHERE athlete_id=701').get())
+      .toEqual({ event_item: '单人艇', representative_unit: '虚构代表队', best_result: '7:22.50',
+        best_result_event: '虚构赛事', current_event: '虚构目标赛事', notes: '原备注\n出生年月：2000-08\n当前训练限制：避免最大强度划行' });
+    expect(db.prepare("SELECT height_cm, weight_kg FROM athlete_body_measurements WHERE athlete_id=701 AND measurement_date='2026-11-12'").get())
+      .toEqual({ height_cm: 176, weight_kg: 68.5 });
+    const invalid = await upload([[...ATHLETE_PROFILE_HEADERS], row({
+      姓名: '虚构队员', 出生年月: '2000-13', '身高（cm）': 176,
+    })], ATHLETE_PROFILE_SHEET, 'HTTP甲队');
+    expect(invalid.items.flatMap(item => item.messages).join(' ')).toMatch(/E2 出生年月.*身体测量日期/);
+    expect((await request(`/batches/${invalid.id}/commit`, 'POST', {})).status).toBe(400);
+  } finally {
+    db.prepare("UPDATE athletes SET birth_date='' WHERE id=701").run();
+    db.prepare("UPDATE athlete_profiles SET notes='原备注' WHERE athlete_id=701").run();
+  }
+});
+
 it('基础档案新增字段按正式模板入库并在档案显示，空白保留原值', async () => {
-  const download = await fetch(`${base}/api/data-import/template?kind=profile&project=ROWING&team=HTTP甲队`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  expect(download.status).toBe(200);
-  const book = XLSX.read(await download.arrayBuffer(), { type: 'array' });
-  const rows = XLSX.utils.sheet_to_json(book.Sheets[profileSheet], { header: 1 }) as unknown[][];
-  const headers = rows[0] as string[];
-  expect(headers).toEqual(expect.arrayContaining(['具体小项', '代表单位', '训练年限', '对应赛事', '成绩日期']));
+  const headers = [...BASIC_PROFILE_HEADERS];
   const filled = {
     具体小项: '虚构双桨', 代表单位: '虚构代表单位', 输送单位: '虚构输送单位',
     训练年限: '3年6个月', 最好竞技成绩: '6:42.50', 对应赛事: '虚构锦标赛', 成绩日期: '2026-10-18',
   };
-  const prefilled = rows.find(row => row[0] === '虚构队员')!;
-  const rowWith = (fields: Record<string, unknown>) => headers.map((header, index) => fields[header] ?? prefilled[index]);
+  const rowWith = (fields: Record<string, unknown>) => headers.map(header => fields[header] ?? (header === '姓名' ? '虚构队员' : header === '系统运动员编号' ? 'ATL00701' : undefined));
   db.prepare("INSERT INTO athlete_profiles(athlete_id,current_event,start_sport_date) VALUES(701,'虚构备战赛事','2020-01-01') ON CONFLICT(athlete_id) DO UPDATE SET current_event=excluded.current_event,start_sport_date=excluded.start_sport_date").run();
   const submit = async (fields: Record<string, unknown>) => {
     const batch = await upload([headers, rowWith(fields)], profileSheet, 'HTTP甲队');
@@ -654,14 +682,16 @@ it('举重与赛艇共用档案表头，按所选项目隔离同名队伍，并�
   };
   const rowing = await download('ROWING', 'HTTP甲队');
   const lifting = await download('WEIGHTLIFTING', 'HTTP甲队');
-  const sheet = lifting.Sheets[profileSheet];
+  const sheet = lifting.Sheets[ATHLETE_PROFILE_SHEET];
   const rows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as string[][];
-  expect(rows[0]).toEqual((XLSX.utils.sheet_to_json(rowing.Sheets[profileSheet], { header: 1 }) as string[][])[0]);
+  expect(rows[0]).toEqual((XLSX.utils.sheet_to_json(rowing.Sheets[ATHLETE_PROFILE_SHEET], { header: 1 }) as string[][])[0]);
   expect(rows).toHaveLength(2);
-  expect(rows[1][0]).toBe('举重虚构队员');
+  expect(rows[1][1]).toBe('举重虚构队员');
   const athlete = db.prepare("SELECT id FROM athletes WHERE name='举重虚构队员' AND project='WEIGHTLIFTING'").get() as { id: number };
-  expect(rows[1][rows[0].indexOf('系统运动员编号')]).toBe(formatAthleteNumber(athlete.id));
-  expect((await download('ROWING')).SheetNames).toContain('运动员基本资料');
+  expect(rows[1][rows[0].indexOf('运动员编号')]).toBe(formatAthleteNumber(athlete.id));
+  const empty = await download('ROWING');
+  expect(empty.SheetNames).toEqual([ATHLETE_PROFILE_SHEET]);
+  expect(XLSX.utils.sheet_to_json(empty.Sheets[ATHLETE_PROFILE_SHEET], { header: 1 })).toHaveLength(1);
 
   for (const [header, sample] of [['身高（cm）', 172.5], ['体重（kg）', 68],
     ['身体测量日期', new Date('2026-09-19T00:00:00Z')]] as const) {
@@ -1416,10 +1446,10 @@ it('标准模板支持补充档案、相同力量组填一行与常用体能宽�
   }
 
   const profile = await download('profile');
-  fill(profile, profileSheet, { 姓名: '虚构队员', 技术等级: '二级', 开始运动日期: '2018-09-01' }, 1);
+  fill(profile, ATHLETE_PROFILE_SHEET, { 运动员编号: 'ATL00701', 姓名: '虚构队员', 技术等级: '二级' }, 1);
   await submit(profile);
   expect(db.prepare('SELECT technical_level,start_sport_date FROM athlete_profiles WHERE athlete_id=701').get())
-    .toMatchObject({ technical_level: '二级运动员', start_sport_date: '2018-09-01' });
+    .toMatchObject({ technical_level: '二级运动员' });
 
   const training = await download('training');
   const sheet = training.Sheets['训练课次'];
@@ -1507,15 +1537,7 @@ it('基础档案旧单列最大力量保留实测日期', async () => {
 });
 
 it('基础档案最大力量分列填报，自动按标准测试默认日期入库', async () => {
-  const response = await fetch(`${base}/api/data-import/template?kind=profile&project=ROWING&team=HTTP甲队`, {
-    headers: { authorization: `Bearer ${token}` },
-  });
-  expect(response.status).toBe(200);
-  const book = XLSX.read(await response.arrayBuffer());
-  const headers = (XLSX.utils.sheet_to_json(book.Sheets[profileSheet], { header: 1 }) as string[][])[0];
-  expect(headers).toContain('最大力量项目');
-  expect(headers).toContain('最大力量\n实测1RM（kg）');
-  expect(headers).not.toContain('最大力量日期');
+  const headers = [...BASIC_PROFILE_HEADERS];
   const body = (action: string, weight: number) => headers.map(header => {
     const key = header.split('\n')[0];
     return key === '最大力量项目' ? action : key === '最大力量' ? weight : key === '姓名' ? '虚构队员' : '';

@@ -214,8 +214,8 @@ export function registerDataImportRoutes(app: Express) {
           .filter((athlete) => athlete.project === project && (!team || athlete.team === team))
           .map((athlete) => ({ id: athlete.id, name: athlete.name, team: athlete.team }));
         const metrics = kind === 'test' ? readImportMetricDefinitions(project) : undefined;
-        const workbook = kind === 'profile' && team
-          ? buildBasicProfileWorkbook(athletes)
+        const workbook = kind === 'profile'
+          ? buildBasicProfileWorkbook(team ? athletes : [])
           : buildPurposeTemplate(kind, project, athletes, metrics);
         workbook
           .xlsx.writeBuffer()
