@@ -1,3 +1,4 @@
+import ExcelJS from 'exceljs';
 import { formatAthleteNumber, parseAthleteNumber } from '../../shared/athlete-number.ts';
 import { readFileSync } from 'node:fs';
 
@@ -101,7 +102,8 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
     for (const kind of ['profile', 'training', 'test']) {
       const response = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind, project: 'ROWING', team: addedTeams[0] })}`, { headers: { authorization: `Bearer ${token}` } });
       expect(response.status).toBe(200);
-      const workbook = XLSX.read(await response.arrayBuffer(), { type: 'array' });
+      const buffer = await response.arrayBuffer();
+      const workbook = XLSX.read(buffer, { type: 'array' });
       const content = JSON.stringify(workbook.SheetNames.map(name => XLSX.utils.sheet_to_json(workbook.Sheets[name], { header: 1 })));
       expect(content).toContain('模板虚构队员');
       expect(content).not.toContain('"虚构队员"');
@@ -109,6 +111,9 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
         expect(workbook.SheetNames).toEqual([ATHLETE_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET]);
         const rows = XLSX.utils.sheet_to_json(workbook.Sheets[ATHLETE_PROFILE_SHEET], { header: 1 }) as string[][];
         expect(rows[0]).toEqual([...BASIC_DOWNLOAD_SHEETS[0][1]]);
+        const styled = new ExcelJS.Workbook();
+        await styled.xlsx.load(buffer);
+        expect(styled.getWorksheet(ATHLETE_PROFILE_SHEET)?.getColumn(rows[0].indexOf('出生年月') + 1).numFmt).toBe('@');
         expect(rows[1][0]).toContain('新队员由系统分配编号');
         expect(rows[2][0]).toBe('示例：示例甲');
         expect(rows[3][0]).toBe('模板虚构队员');

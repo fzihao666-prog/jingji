@@ -42,7 +42,7 @@ export function buildBasicProfileWorkbook(athletes: ReadonlyArray<{ name: string
     const sheet = workbook.addWorksheet(name, { views: [{ state: 'frozen', xSplit: 1, ySplit: 3 }] });
     sheet.columns = headers.map(header => ({
       header, width: header.includes('备注') || header.includes('限制') ? 29 : 20,
-      style: { numFmt: header.endsWith('日期') ? 'yyyy-mm-dd' : 'General' },
+      style: { numFmt: header === '出生年月' ? '@' : header.endsWith('日期') ? 'yyyy-mm-dd' : 'General' },
     }));
     const instructions = layout.notes.map(note => note.split("\n示例：")[0]);
     const examples = layout.notes.map(note => `示例：${note.split("\n示例：")[1]}`);
