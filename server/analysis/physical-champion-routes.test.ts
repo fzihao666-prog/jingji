@@ -449,6 +449,45 @@ describe('所有项目共用体能框架，冠军值按项目独立配置', () =
     ).toBe(404);
     expect(db.prepare('SELECT COUNT(*) AS n FROM radar_reference_values').get()).toEqual(before);
   });
+  it('非白名单项目可新增和修改冠军值，越项目编辑仍被拒绝', async () => {
+    const path = '/api/physical-champion/model-values';
+    const list = await call(
+      '/api/physical-champion?project=SWIMMING&from=2026-01-01&to=2026-01-31'
+    );
+    expect(list.status).toBe(200);
+    const before = physicalChampionPayloadSchema.parse(await list.json());
+    const group = before.groups[0];
+    const save = {
+      project: 'SWIMMING',
+      groupId: group.id,
+      effectiveFrom: '2026-01-01',
+      values: [{ key: 'vertical_jump', value: 50 }],
+    };
+    expect((await call(path, 'PUT', save, 9003)).status).toBe(200);
+    const row = db
+      .prepare(
+        "SELECT id,revision,value_num FROM radar_reference_values WHERE project='SWIMMING' AND metric_key='vertical_jump'"
+      )
+      .get() as { id: number; revision: number; value_num: number };
+    expect(row.value_num).toBe(50);
+    expect(
+      (
+        await call(
+          path,
+          'PUT',
+          {
+            project: 'SWIMMING',
+            values: [{ id: row.id, expectedRevision: row.revision, value: 60 }],
+          },
+          9003
+        )
+      ).status
+    ).toBe(200);
+    expect(
+      db.prepare('SELECT value_num,revision FROM radar_reference_values WHERE id=?').get(row.id)
+    ).toEqual({ value_num: 60, revision: row.revision + 1 });
+    expect((await call(path, 'PUT', save, 9007)).status).toBe(403);
+  });
 });
 
 it.each(['ROWING', 'CANOE_SPRINT', 'CANOE_SLALOM', 'CYCLING_ROAD', 'CYCLING_TRACK', 'VOLLEYBALL'])(

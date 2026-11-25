@@ -5,6 +5,8 @@ import {
   initializePhysicalChampionReferences,
   savePhysicalReferenceDraft,
   reviewPhysicalReference,
+  updatePhysicalChampionValues,
+  PhysicalReferenceError,
 } from './physical-champion-references.js';
 
 const databases: DatabaseSync[] = [];
@@ -115,6 +117,47 @@ describe('冠军参考值兼容迁移', () => {
     expect(db.prepare('SELECT count(*) AS count FROM reference_changes').get()).toEqual({
       count: 50,
     });
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
+  });
+  it('迁移后全部项目码可写入参考表，重复初始化仍幂等', () => {
+    const db = setup();
+    initializePhysicalChampionReferences(db);
+    initializePhysicalChampionReferences(db);
+    for (const project of ['SWIMMING', 'BASKETBALL', 'CANOE', 'SLALOM']) {
+      db.prepare(
+        "INSERT INTO radar_reference_sources(project,name,url,source_year,protocol,verified_at) VALUES(?,'迁移覆盖测试','',2026,'测试协议','测试')"
+      ).run(project);
+      const source = db
+        .prepare("SELECT id FROM radar_reference_sources WHERE project=? AND name='迁移覆盖测试'")
+        .get(project) as { id: number };
+      db.prepare(
+        "INSERT INTO radar_reference_values(source_id,project,radar_kind,metric_key,gender,applicability,value_num,unit) VALUES(?,?,'physical','vertical_jump','男','迁移测试',50,'cm')"
+      ).run(source.id, project);
+    }
+    expect(
+      db
+        .prepare(
+          "SELECT project FROM radar_reference_sources WHERE name='迁移覆盖测试' ORDER BY project"
+        )
+        .all()
+    ).toEqual([
+      { project: 'BASKETBALL' },
+      { project: 'CANOE' },
+      { project: 'SLALOM' },
+      { project: 'SWIMMING' },
+    ]);
+    expect(
+      db
+        .prepare(
+          "SELECT project,value_num FROM radar_reference_values WHERE applicability='迁移测试' ORDER BY project"
+        )
+        .all()
+    ).toEqual([
+      { project: 'BASKETBALL', value_num: 50 },
+      { project: 'CANOE', value_num: 50 },
+      { project: 'SLALOM', value_num: 50 },
+      { project: 'SWIMMING', value_num: 50 },
+    ]);
     expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([]);
   });
 });
@@ -424,4 +467,39 @@ it('48项估算基线补最小展示元数据且重复执行无改写', () => {
   const before = db.prepare('SELECT * FROM radar_reference_values').all();
   initializePhysicalChampionReferences(db);
   expect(db.prepare('SELECT * FROM radar_reference_values').all()).toEqual(before);
+});
+
+describe('来源写入被忽略后的防御', () => {
+  const blockSourceInsert = (db: DatabaseSync) =>
+    db.exec(
+      'CREATE TRIGGER block_source_insert BEFORE INSERT ON radar_reference_sources BEGIN SELECT RAISE(IGNORE); END'
+    );
+  const capture = (action: () => void) => {
+    try {
+      action();
+    } catch (error) {
+      return error;
+    }
+    throw new Error('预期保存失败但未抛出错误');
+  };
+  it('快捷编辑查不到来源时抛出领域错误', () => {
+    const db = managerSetup();
+    blockSourceInsert(db);
+    const error = capture(() =>
+      updatePhysicalChampionValues(db, actor, {
+        project: 'SWIMMING',
+        groupId: JSON.stringify(['男', 'open', 'open', 'adult', 'open', 'open']),
+        values: [{ key: 'vertical_jump', value: 50 }],
+      })
+    );
+    expect(error).toBeInstanceOf(PhysicalReferenceError);
+    expect((error as Error).message).toContain('该项目的手工参考来源无法创建');
+  });
+  it('参考版本维护查不到来源时抛出领域错误', () => {
+    const db = managerSetup();
+    blockSourceInsert(db);
+    const error = capture(() => savePhysicalReferenceDraft(db, actor, draft));
+    expect(error).toBeInstanceOf(PhysicalReferenceError);
+    expect((error as Error).message).toContain('该项目的参考来源无法创建');
+  });
 });
