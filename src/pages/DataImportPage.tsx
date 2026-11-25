@@ -1,3 +1,4 @@
+import { formatAthleteNumber } from '../../shared/athlete-number';
 import { TrainingRecordTemplatePanel } from '../components/TrainingRecordTemplatePanel';
 import { CollectionProgress } from '../components/CollectionProgress';
 import { TestTemplatePanel } from '../components/TestTemplatePanel';
@@ -1929,7 +1930,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
                                     <option value="new">新建运动员档案</option>
                                   )}
                                   {(suggestions.length ? suggestions : candidate.suggested).map(entry => (
-                                    <option key={entry.id} value={entry.id}>{entry.name} · {entry.team || '未分队'} · 编号 {entry.id}</option>
+                                    <option key={entry.id} value={entry.id}>{entry.name} · {entry.team || '未分队'} · 编号 {formatAthleteNumber(entry.id)}</option>
                                   ))}
                                 </select>
                               </div>

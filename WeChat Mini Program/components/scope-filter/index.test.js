@@ -2,19 +2,24 @@ import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { describe, expect, it } from 'vitest';
 
+const numberModule = { exports: {} };
+vm.runInNewContext(readFileSync(new URL('../../utils/athlete-number.js', import.meta.url), 'utf8'), {
+  module: numberModule,
+});
+
 function createFilter() {
   let definition;
   vm.runInNewContext(readFileSync(new URL('./index.js', import.meta.url), 'utf8'), {
     Component: (value) => { definition = value; },
-    require: () => ({ projectOptions: () => [] }),
+    require: (path) => path.endsWith('/athlete-number') ? numberModule.exports : { projectOptions: () => [] },
   });
   const events = [];
   const component = {
     ...definition.methods,
     data: { ...definition.data, athletes: [
+      { id: 3, name: 'Alice', team: '一队' },
       { id: 1, name: '张三', team: '一队' },
       { id: 2, name: '李四', team: '二队' },
-      { id: 3, name: 'Alice', team: '一队' },
     ], athleteId: 1, allowAll: false, keyword: '' },
     setData(patch) {
       Object.assign(this.data, patch);
@@ -31,10 +36,11 @@ function createFilter() {
 }
 
 describe('运动员搜索无需父页面回写关键词', () => {
-  it.each([['张', [1]], ['二队', [2]], [' ALICE ', [3]], ['', [1, 2, 3]]])('输入 %s 按姓名或队伍过滤', (keyword, expected) => {
+  it.each([['张', [1]], ['二队', [2]], [' ALICE ', [3]], ['2', [2]], [' atl-000002 ', [2]], ['', [1, 2, 3]]])('输入 %s 按姓名、编号或队伍过滤', (keyword, expected) => {
     const { component, events } = createFilter();
     component.onKeywordInput({ detail: { value: keyword } });
     expect(component.data.athleteItems.map((item) => item.id)).toEqual(expected);
+    expect(component.data.athleteItems.every(item => item.label.includes(`ATL-00000${item.id}`))).toBe(true);
     expect(component.data.athleteId).toBe(1);
     expect(events).toEqual([{ type: 'keywordchange', detail: { value: keyword } }]);
   });

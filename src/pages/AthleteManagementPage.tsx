@@ -1,3 +1,4 @@
+import { formatAthleteNumber, matchesAthleteNumber } from '../../shared/athlete-number';
 import { TECHNICAL_LEVELS as ALL_TECHNICAL_LEVELS } from '../../shared/athlete-technical-level';
 import {
   Activity,
@@ -344,7 +345,7 @@ export function AthleteManagementPage({
         if (advanced.createdTo && athlete.createdAt.slice(0, 10) > advanced.createdTo) return false;
         if (monthlyOnly && monthKey(athlete.createdAt) !== currentMonth) return false;
         if (!query) return true;
-        return [
+        return matchesAthleteNumber(athlete.id, query) || [
           athlete.name,
           athlete.project,
           athlete.team,
@@ -354,14 +355,12 @@ export function AthleteManagementPage({
           athlete.currentEvent,
           athlete.region,
           athlete.city,
-          // 支持按系统运动员编号精确查找（导入模板预填值）。
-          String(athlete.id),
         ].some((value) =>
           String(value || '')
             .toLocaleLowerCase()
             .includes(query)
         );
-      }),
+      }).sort((left, right) => left.id - right.id),
     [
       athletes,
       search,
@@ -650,7 +649,7 @@ export function AthleteManagementPage({
               setSearch(event.target.value);
               setPage(1);
             }}
-            placeholder="搜索姓名、队伍、教练、赛事或地区"
+            placeholder="搜索姓名、编号、队伍、教练、赛事或地区"
             aria-label="搜索运动员"
           />
         </label>
@@ -839,7 +838,7 @@ export function AthleteManagementPage({
                       <div className="athlete-person-details">
                         <strong>{athlete.name}</strong>
                         <div className="athlete-person-meta">
-                          <span title="系统运动员编号，导入模板预填值">编号 {athlete.id}</span>
+                          <span>编号 {formatAthleteNumber(athlete.id)}</span>
                           <span>{athlete.gender || '性别未填'}</span>
                           <span>{ageFromBirthDate(athlete.birthDate)} 岁</span>
                         </div>
