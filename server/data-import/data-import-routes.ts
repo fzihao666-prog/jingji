@@ -158,6 +158,17 @@ export function buildImportErrorReport(batch: {
   return workbook;
 }
 
+const athleteCorrectionsSchema = z.array(z.strictObject({
+  id: z.number().int().positive(),
+  name: z.string().optional(),
+  team: z.string().optional(),
+  gender: z.string().optional(),
+  matchedAthleteId: z.number().int().positive().nullable().optional(),
+  excluded: z.boolean().optional(),
+  confirmed: z.boolean().optional(),
+})).optional();
+const conflictPolicySchema = z.enum(['skip', 'update']).default('update');
+
 function expectedImportRevision(value: unknown): number {
   if (value === undefined) throw new ImportRequestError('请刷新导入页面后重试，缺少草稿修订号。', 428);
   const revision = typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
@@ -492,9 +503,9 @@ export function registerDataImportRoutes(app: Express) {
         const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
         if (!scope.allowed)
           return res.status(403).json({ message: '当前账号无权在该项目创建运动员。' });
-        if (req.body?.corrections !== undefined && !Array.isArray(req.body.corrections))
+        const corrections = athleteCorrectionsSchema.safeParse(req.body?.corrections);
+        if (!corrections.success)
           return res.status(400).json({ message: '人员修改格式无效。' });
-        const corrections = Array.isArray(req.body?.corrections) ? req.body.corrections : [];
         const updated = updateDataImportAthleteCandidates({
           expectedRevision: expectedImportRevision(req.body?.expectedRevision),
           authorizeBatch: () => { authorizeImportBatch(req.authUser!, cleanString(req.params.id)); },
@@ -504,7 +515,7 @@ export function registerDataImportRoutes(app: Express) {
           athletes: dataImportCandidates(req.authUser!).filter(
             (athlete) => athlete.project === batch.project && (!scope.team || scope.allowedTeams.has(athlete.team))
           ),
-          corrections,
+          corrections: corrections.data ?? [],
           autoMatch: req.body?.autoMatch === true,
         });
         res.json({ batch: updated });
@@ -522,8 +533,9 @@ export function registerDataImportRoutes(app: Express) {
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
       try {
-        const conflictPolicy =
-          cleanString(req.body?.conflictPolicy) === 'skip' ? 'skip' : 'update';
+        const conflictPolicy = conflictPolicySchema.safeParse(req.body?.conflictPolicy);
+        if (!conflictPolicy.success)
+          return res.status(400).json({ message: '冲突处理策略只能是 skip 或 update。' });
         const scope = authorizeImportBatch(req.authUser!, cleanString(req.params.id));
         const batch = getDataImportBatch(cleanString(req.params.id), req.authUser!.id);
         if (!scope.allowed)
@@ -536,7 +548,7 @@ export function registerDataImportRoutes(app: Express) {
           creatorRole: req.authUser!.role,
           athletes: dataImportCandidates(req.authUser!).filter(athlete => !scope.team || scope.allowedTeams.has(athlete.team) && athlete.project === batch.project),
           allowedTeams: scope.allowedTeams,
-          conflictPolicy,
+          conflictPolicy: conflictPolicy.data,
         });
         res.json({
           message:

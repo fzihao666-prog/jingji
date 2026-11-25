@@ -239,6 +239,45 @@ it('真实HTTP上传、校对、提交与重复提交使用最终值；未登录
   expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).body.createdRecords).toBe(1);
 });
 
+it('导入参数校验拒绝未知冲突策略并保留正式体重', async () => {
+  const date = '2053-01-01';
+  const initial = await upload([['姓名', '日期', '体重kg'], ['虚构队员', date, 70]]);
+  expect((await request(`/batches/${initial.id}/commit`, 'POST', {})).status).toBe(200);
+  const batch = await upload([['姓名', '日期', '体重kg'], ['虚构队员', date, 71]]);
+  const result = await request(`/batches/${batch.id}/commit`, 'POST', { conflictPolicy: 'skpi' });
+  const saved = db.prepare('SELECT weight_kg FROM athlete_body_measurements WHERE athlete_id=701 AND measurement_date=?').get(date);
+  expect({ status: result.status, saved }).toEqual({ status: 400, saved: { weight_kg: 70 } });
+  expect((await request(`/batches/${batch.id}`)).body.batch).toMatchObject({ status: 'reviewing', revision: batch.revision });
+});
+
+it.each(['excluded', 'confirmed'])('导入参数校验拒绝字符串布尔字段 %s', async (field) => {
+  const batch = await upload([['姓名', '日期', '体重kg'], [`校验新人${field}`, '2053-01-02', 70]], '身体测量', 'HTTP甲队');
+  const person = batch.athleteCandidates[0];
+  expect(person.status).toBe('pending');
+  const result = await request(`/batches/${batch.id}/athletes`, 'PUT', {
+    corrections: [{ id: person.id, [field]: 'false' }],
+  });
+  const saved = (await request(`/batches/${batch.id}`)).body.batch!;
+  expect({ status: result.status, revision: saved.revision, people: saved.athleteCandidates }).toEqual({
+    status: 400, revision: batch.revision, people: batch.athleteCandidates,
+  });
+});
+
+it('导入参数校验拒绝无效人员 ID 并回滚同次人员修改', async () => {
+  const batch = await upload([['姓名', '日期', '体重kg'], ['校验回滚新人', '2053-01-03', 70]], '身体测量', 'HTTP甲队');
+  const person = batch.athleteCandidates[0];
+  expect(person.status).toBe('pending');
+  const unknownId = 999999999;
+  const result = await request(`/batches/${batch.id}/athletes`, 'PUT', {
+    corrections: [{ id: person.id, excluded: true }, { id: unknownId, confirmed: true }],
+  });
+  expect(result.status).toBe(400);
+  expect(result.body.message).toContain(String(unknownId));
+  const saved = (await request(`/batches/${batch.id}`)).body.batch!;
+  expect(saved.revision).toBe(batch.revision);
+  expect(saved.athleteCandidates).toEqual(batch.athleteCandidates);
+});
+
 it('真实HTTP集中确认3名最小档案，不提前写正式表，提交失败整体回滚', async () => {
   const batch = await upload([['姓名', '所属队伍', '日期', '睡眠小时'], ...['虚构新人甲', '虚构新人乙', '虚构新人丙'].map(name => [name, 'HTTP甲队', '2026-10-02', 8])], '每日恢复');
   const people = await request(`/batches/${batch.id}/athletes`, 'PUT', { corrections: batch.athleteCandidates.map(person => ({ id: person.id, confirmed: true })) });

@@ -4253,7 +4253,8 @@ export function updateDataImportAthleteCandidates(input: {
     }
     for (const correction of corrections) {
       const current = batch.athleteCandidates.find((candidate) => candidate.id === correction.id);
-      if (!current || current.status !== 'pending') continue;
+      if (!current) throw new Error(`人员修改 ID ${correction.id} 不属于当前批次。`);
+      if (current.status !== 'pending') continue;
       const name = 'name' in correction ? text(correction.name) : current.name;
       const team = 'team' in correction ? text(correction.team) : current.team;
       const gender = 'gender' in correction ? text(correction.gender) : current.gender;
