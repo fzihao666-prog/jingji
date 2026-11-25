@@ -1039,6 +1039,19 @@ export const api = {
       `/api/data-import/metrics?${new URLSearchParams({ project })}`
     );
   },
+  async dataManagementImportedTests() {
+    return request<{ items: Array<{
+      project: string;
+      testType: string;
+      metricCode: string;
+      metricName: string;
+      unit: string;
+      protocol: string;
+      protocolVersion: string;
+      measurementCount: number;
+      latestTestDate: string;
+    }> }>('/api/data-management/imported-tests');
+  },
   async dataManagementMetrics() {
     return request<{
       metrics: Array<{

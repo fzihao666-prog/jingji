@@ -28,7 +28,7 @@ import {
   updateDataImportAthleteCandidates,
   updateDataImportItems,
 } from './data-import.ts';
-import { accountPermissions, permissionsAllowAthlete } from '../core/permissions.ts';
+import { accessibleAthleteIds, accountPermissions, permissionsAllowAthlete } from '../core/permissions.ts';
 import { strengthImportCandidates } from '../strength/strength-training-routes.ts';
 import { cleanString } from '../core/utils.ts';
 import { dataImportUpload } from '../core/uploads.ts';
@@ -550,6 +550,35 @@ export function registerDataImportRoutes(app: Express) {
           .status(error instanceof ImportRequestError ? error.status : 400)
           .json({ message: error instanceof Error ? error.message : '导入提交失败。' });
       }
+    }
+  );
+
+  app.get(
+    '/api/data-management/imported-tests',
+    requireAuth,
+    requireRole('SCC', 'REG', 'TD', 'DMD'),
+    (req, res) => {
+      const athleteIds = accessibleAthleteIds(req.authUser!);
+      const items = athleteIds.length ? db.prepare(`
+        SELECT ts.project_code AS project, ts.test_type AS testType,
+          tm.metric_code AS metricCode, COALESCE(md.label, tm.metric_code) AS metricName,
+          tm.unit, ts.protocol, COALESCE(ts.protocol_version, '') AS protocolVersion,
+          COUNT(*) AS measurementCount, MAX(ts.test_date) AS latestTestDate
+        FROM test_measurements tm
+        JOIN test_sessions ts ON ts.id = tm.test_session_id
+        JOIN athletes a ON a.id = ts.athlete_id AND a.project = ts.project_code
+        LEFT JOIN metric_definitions md ON md.code = tm.metric_code
+        WHERE ts.athlete_id IN (SELECT value FROM json_each(?))
+          AND ts.project_status = 'confirmed'
+          AND ts.is_demo = 0 AND tm.is_demo = 0
+          AND ts.quality IN ('valid', 'partial') AND tm.quality IN ('valid', 'partial')
+          AND tm.source = 'file_import'
+        GROUP BY ts.project_code, ts.test_type, tm.metric_code, tm.unit,
+          ts.protocol, COALESCE(ts.protocol_version, '')
+        ORDER BY project, testType, metricName, metricCode, tm.unit, ts.protocol, protocolVersion
+      `).all(JSON.stringify(athleteIds)) : [];
+      res.setHeader('Cache-Control', 'no-store');
+      res.json({ items });
     }
   );
 
