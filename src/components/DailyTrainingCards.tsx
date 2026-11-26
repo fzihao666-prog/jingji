@@ -1,9 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { DailyTrainingData, DailyTrainingRecord } from '../../shared/daily-training';
 import { api } from '../api';
 import type { Project } from '../types';
-import { dailyTrainingNumber, dailyTrainingSeries, dailyTrainingTrendOption } from './daily-training-chart';
-import { EChart } from './EChart';
+import { dailyTrainingNumber } from './daily-training-chart';
 import { ChartCard, ContentState } from './PageLayout';
 import './CustomTestTrendCard.css';
 
@@ -99,47 +98,6 @@ export function DailyTrainingTeamCard(scope: Scope) {
           </select>
         </label>
         {selected && <TeamAthleteRecords scope={scope} athleteId={selected.id} />}
-      </>}
-  </ChartCard>;
-}
-
-export function DailyTrainingPersonalCard({ athleteId, ...scope }: Scope & { athleteId: number }) {
-  const { result, retry } = useDailyTraining(scope, athleteId);
-  const [projectName, setProjectName] = useState('');
-  const [metricKey, setMetricKey] = useState('');
-  const rows = result?.data?.rows;
-  const projects = useMemo(() => Array.from(new Set(rows?.map(row => row.projectName))), [rows]);
-  const selectedProject = projects.includes(projectName) ? projectName : projects[0];
-  const selectedRows = useMemo(() => rows?.filter(row => row.projectName === selectedProject) ?? [], [rows, selectedProject]);
-  const series = useMemo(() => dailyTrainingSeries(selectedRows), [selectedRows]);
-  const selected = series.find(metric => metric.key === metricKey) ?? series[0];
-  return <ChartCard title="每日训练" actions={projects.length > 0 && <>
-    <label className="custom-test-trend-select">
-      <span>训练项目</span>
-      <select value={selectedProject} onChange={event => setProjectName(event.target.value)}>
-        {projects.map(name => <option key={name} value={name}>{name}</option>)}
-      </select>
-    </label>
-    {series.length > 0 && <label className="custom-test-trend-select">
-      <span>训练指标</span>
-      <select value={selected?.key} onChange={event => setMetricKey(event.target.value)}>
-        {series.map(metric => <option key={metric.key} value={metric.key}>{metric.label}</option>)}
-      </select>
-    </label>}
-  </>}>
-    {scope.teamId === null ? <ContentState kind="empty" title="该运动员暂无可用的队伍归属" />
-      : !result?.data ? <TrainingState error={result?.error} retry={retry} />
-      : !projects.length ? <ContentState kind="empty" title="所选日期内暂无每日训练记录" />
-      : <>
-        {result.data.truncated && <p>当前显示最近 1,000 条训练记录，可缩短日期范围。</p>}
-        {selected ? <>
-          <p className="custom-test-trend-summary" role="status">
-            {selectedProject} · {selected.label} · {selected.points.length} 条实测记录
-          </p>
-          <EChart option={dailyTrainingTrendOption(selected, scope.from, scope.to)}
-            label={`${selectedProject}的${selected.label}随训练日期变化`} />
-        </> : <ContentState kind="empty" title="该训练项目暂无可绘制的数值" />}
-        <details><summary>查看训练明细</summary><TrainingRecords rows={selectedRows} /></details>
       </>}
   </ChartCard>;
 }

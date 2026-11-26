@@ -18,7 +18,6 @@ import { projectLabel } from '../../shared/projects';
 import { trainingPeriodSummary } from '../../shared/training-period-summary';
 import { api } from '../api';
 import { EnodeTrends } from '../components/EnodeTrends';
-import { DailyTrainingPersonalCard } from '../components/DailyTrainingCards';
 import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
 import { sortTrendRows, TREND_CONNECTS_NULLS } from '../components/trend-connection';
@@ -804,12 +803,6 @@ export function PersonalPage(props: Props) {
                 </section>
               ))}
             </section>
-          </section>
-
-          <section className="personal-profile-section" aria-label="个人每日训练">
-            <DailyTrainingPersonalCard key={`${props.project}:${selectedAthlete.id}`}
-              project={props.project} teamId={selectedAthlete.teamId ?? null}
-              from={props.from} to={props.to} athleteId={selectedAthlete.id} />
           </section>
 
           <section className="personal-profile-section personal-test-section" aria-label="测试模块">
