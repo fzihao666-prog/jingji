@@ -15,8 +15,10 @@ export function dailyTrainingSeries(rows: DailyTrainingRecord[]) {
     ...Array.from(new Set(rows.filter(row => row.intensity !== null).map(row => row.intensityUnit ?? '')))
       .map(unit => ({ field: 'intensity', label: unit ? `强度（${unit}）` : '强度', unit } as const)),
     { field: 'durationMin', label: '时长（分钟）', unit: '分钟' },
+    { field: 'distanceKm', label: '距离（km）', unit: 'km' },
     { field: 'repetitions', label: '每组次数', unit: '次' },
     { field: 'sets', label: '组数', unit: '组' },
+    { field: 'rpe', label: 'RPE', unit: '' },
     { field: 'pre', label: 'PRE', unit: '' },
   ] as const;
   return metrics.flatMap(metric => {

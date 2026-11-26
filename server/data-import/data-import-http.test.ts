@@ -1913,3 +1913,38 @@ it('每日训练可下载原模板，经统一导入后在授权项目和队伍�
   expect((await fetch(`${base}/api/daily-training?${query}`, { headers })).status).toBe(403);
   expect((await fetch(`${base}/api/athletes/701/custom-training-details?${query}`, { headers })).status).toBe(403);
 });
+
+it('每日训练视图纳入历史训练课次和力量组次，并遵守导入队伍归属', async () => {
+  const legacy = await upload([
+    ['姓名', '日期', '训练内容', '时长分钟', '距离千米', 'RPE'],
+    ['虚构队员', '2025-11-22', '历史耐力训练', 36, 8.6, 6],
+  ], '训练课次');
+  expect((await request(`/batches/${legacy.id}/commit`, 'POST', {})).status).toBe(200);
+  const strength = await upload([
+    ['姓名', '日期', '课次名称', '动作', '实际次数', '实际重量kg', '组序'],
+    ['虚构队员', '2025-11-23', '历史力量课', '深蹲', 8, 0, 1],
+  ], '力量训练组次', 'HTTP甲队');
+  expect((await request(`/batches/${strength.id}/commit`, 'POST', {})).status).toBe(200);
+
+  const teamId = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get()?.id;
+  const headers = { authorization: `Bearer ${token}` };
+  const query = new URLSearchParams({ project: 'ROWING', teamId: String(teamId), from: '2025-11-22', to: '2025-11-23' });
+  const read = async () => {
+    const response = await fetch(`${base}/api/daily-training?${query}`, { headers });
+    expect(response.status).toBe(200);
+    return response.json();
+  };
+  expect(await read()).toMatchObject({ athletes: expect.arrayContaining([
+    expect.objectContaining({ id: 701, recordCount: 2, trainingDays: 2, durationMin: 36 }),
+  ]) });
+  query.set('athleteId', '701');
+  expect(await read()).toMatchObject({ rows: expect.arrayContaining([
+    expect.objectContaining({ projectName: '历史耐力训练', durationMin: 36, distanceKm: 8.6, rpe: 6, pre: null }),
+    expect.objectContaining({ projectName: '深蹲', intensity: 0, intensityUnit: 'kg', repetitions: 8, sets: 1 }),
+  ]) });
+  const otherTeam = db.prepare("SELECT id FROM project_teams WHERE name='HTTP乙队'").get()?.id;
+  db.prepare("UPDATE data_import_batches SET summary_json=json_set(summary_json,'$.teamId',?) WHERE id=?")
+    .run(Number(otherTeam), legacy.id);
+  const after = await read() as { rows: Array<{ projectName: string }> };
+  expect(after.rows.map(row => row.projectName)).not.toContain('历史耐力训练');
+});

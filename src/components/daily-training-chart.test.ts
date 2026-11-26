@@ -3,7 +3,8 @@ import type { DailyTrainingRecord } from '../../shared/daily-training';
 import { dailyTrainingSeries, dailyTrainingTrendOption } from './daily-training-chart';
 
 const record: DailyTrainingRecord = {
-  id: 1, date: '2025-11-25', projectName: '杠铃深蹲',
+  id: 1, setGroupId: null, date: '2025-11-25', projectName: '杠铃深蹲',
+  distanceKm: null, rpe: null,
   intensity: 0, intensityUnit: 'kg', repetitions: null, sets: null, durationMin: null, pre: null,
 };
 

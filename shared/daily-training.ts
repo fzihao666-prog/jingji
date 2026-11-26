@@ -2,9 +2,12 @@ export const DAILY_TRAINING_SHEET = '每日训练';
 
 export type DailyTrainingRecord = {
   id: number;
+  setGroupId: number | null;
   date: string;
   projectName: string;
   durationMin: number | null;
+  distanceKm: number | null;
+  rpe: number | null;
   intensity: number | null;
   intensityUnit: string | null;
   repetitions: number | null;

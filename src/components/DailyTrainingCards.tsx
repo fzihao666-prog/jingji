@@ -40,15 +40,17 @@ function TrainingRecords({ rows }: { rows: DailyTrainingRecord[] }) {
   return <div className="table-scroll">
     <table className="data-table">
       <caption>每日训练记录</caption>
-      <thead><tr>{['日期', '训练项目', '强度', '每组次数', '组数', '时长（分钟）', 'PRE'].map(label =>
+      <thead><tr>{['日期', '训练项目', '强度', '每组次数', '组数', '时长（分钟）', '距离（km）', 'RPE', 'PRE'].map(label =>
         <th key={label} scope="col">{label}</th>)}</tr></thead>
-      <tbody>{rows.map(row => <tr key={row.id}>
+      <tbody>{rows.map(row => <tr key={`${row.id}:${row.setGroupId ?? ''}`}>
         <td><time dateTime={row.date}>{row.date}</time></td>
         <td>{row.projectName}</td>
         <td>{dailyTrainingNumber(row.intensity, row.intensityUnit ?? '')}</td>
         <td>{dailyTrainingNumber(row.repetitions)}</td>
         <td>{dailyTrainingNumber(row.sets)}</td>
         <td>{dailyTrainingNumber(row.durationMin)}</td>
+        <td>{dailyTrainingNumber(row.distanceKm)}</td>
+        <td>{dailyTrainingNumber(row.rpe)}</td>
         <td>{dailyTrainingNumber(row.pre)}</td>
       </tr>)}</tbody>
     </table>
@@ -78,12 +80,12 @@ export function DailyTrainingTeamCard(scope: Scope) {
       : <>
         <div className="table-scroll"><table className="data-table">
           <caption>队员训练汇总</caption>
-          <thead><tr>{['运动员', '训练记录', '训练天数', '已记录时长（分钟）', '最近训练日'].map(label =>
+          <thead><tr>{['运动员', '训练课次', '训练天数', '已记录时长（分钟）', '最近训练日'].map(label =>
             <th key={label} scope="col">{label}</th>)}</tr></thead>
           <tbody>{athletes.map(athlete => <tr key={athlete.id}>
             <th scope="row">{athlete.name}</th>
             <td><meter min={0} max={max} value={athlete.recordCount}
-                aria-label={`${athlete.name}的训练记录数`} /> {dailyTrainingNumber(athlete.recordCount)} 条</td>
+                aria-label={`${athlete.name}的训练课次数`} /> {dailyTrainingNumber(athlete.recordCount)} 课</td>
             <td>{dailyTrainingNumber(athlete.trainingDays)}</td>
             <td>{dailyTrainingNumber(athlete.durationMin)}</td>
             <td>{athlete.latestDate ?? '—'}</td>
