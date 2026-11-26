@@ -1578,7 +1578,7 @@ it('修正待建档姓名后可直接关联同队已有档案', async () => {
   expect((await request(`/batches/${batch.id}/commit`, 'POST', {})).status).toBe(200);
 });
 
-it('停用档案阻止重复建档，授权管理者重新打开草稿后可显式恢复', async () => {
+it('停用档案阻止重复建档，授权管理者重新打开草稿后自动关联恢复', async () => {
   const name = '停用草稿队员';
   const athlete = db.prepare(`INSERT INTO athletes (name,project,team,team_id,active)
     SELECT ?,project,name,id,0 FROM project_teams WHERE project='ROWING' AND name='HTTP甲队'`).run(name);
@@ -1596,12 +1596,8 @@ it('停用档案阻止重复建档，授权管理者重新打开草稿后可显�
     const refreshed = await request(`${path}/athletes`, 'PUT', { autoMatch: true });
     expect(refreshed.status).toBe(200);
     const [person] = refreshed.body.batch!.athleteCandidates;
-    expect(person).toMatchObject({ confirmed: false, matchedAthleteId: null, suggested: [{ id: athleteId }] });
+    expect(person).toMatchObject({ confirmed: true, matchedAthleteId: athleteId });
     expect(db.prepare('SELECT active FROM athletes WHERE id=?').get(athleteId)).toEqual({ active: 0 });
-    const confirmed = await request(`${path}/athletes`, 'PUT', {
-      corrections: [{ id: person.id, matchedAthleteId: athleteId, confirmed: true }],
-    });
-    expect(confirmed.status).toBe(200);
     const committed = await request(`${path}/commit`, 'POST', {});
     expect(committed.status, JSON.stringify(committed.body)).toBe(200);
     expect(committed.body).toMatchObject({ createdAthletes: 0, linkedAthletes: 1 });

@@ -1200,8 +1200,8 @@ it('已入库文件重传可恢复已停用运动员并补回缺失记录，保�
   expect(next.status).toBe('reviewing');
   expect(next.id).not.toBe(original.id);
   const person = next.athleteCandidates.find(person => person.name === '张某')!;
-  expect(person.confirmed).toBe(false);
-  updateDataImportAthleteCandidates({ batchId: next.id, userId: USER_ID, athletes: current, allowedTeams: input.allowedTeams, corrections: [{ id: person.id, matchedAthleteId: 1, confirmed: true }] });
+  expect(person).toMatchObject({ confirmed: true, matchedAthleteId: 1 });
+  expect(db.prepare('SELECT active FROM athletes WHERE id = 1').get()).toEqual({ active: 0 });
   const result = commitDataImport({ batchId: next.id, userId: USER_ID, creatorRole: 'TD', athletes: current, allowedTeams: input.allowedTeams, conflictPolicy: 'skip' });
   expect(result.createdRecords).toBe(1);
   expect(result.skipped).toBeGreaterThanOrEqual(1);
@@ -1216,7 +1216,7 @@ it('恢复停用档案不启用登录账号，权限被收回时拒绝提交', (
   db.prepare("INSERT INTO users (id, username, password_hash, display_name, role, athlete_id, active) VALUES (99, 'inactive-athlete', 'x', '测试账号', 'ATL', 1, 0)").run();
   const current = [{ ...athletes[0], active: false }, athletes[1]];
   const batch = analyze({ 训练课次: [['系统运动员编号', '姓名', '日期', '时长分钟'], [1, '张某', '2025-09-11', 60]] }, { athletes: current });
-  updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, athletes: current, allowedTeams: new Set(['A队']), corrections: [{ id: batch.athleteCandidates[0].id, matchedAthleteId: 1, confirmed: true }] });
+  expect(batch.athleteCandidates[0]).toMatchObject({ status: 'pending', matchedAthleteId: 1, confirmed: true });
   expect(() => commitDataImport({ batchId: batch.id, userId: USER_ID, creatorRole: 'TD', athletes: [athletes[1]], allowedTeams: new Set(['B队']), conflictPolicy: 'skip' })).toThrow();
   expect(db.prepare('SELECT active FROM athletes WHERE id = 1').get()).toEqual({ active: 0 });
   commitDataImport({ batchId: batch.id, userId: USER_ID, creatorRole: 'TD', athletes: current, allowedTeams: new Set(['A队']), conflictPolicy: 'skip' });
@@ -1224,11 +1224,22 @@ it('恢复停用档案不启用登录账号，权限被收回时拒绝提交', (
   expect(db.prepare("SELECT COUNT(*) AS count FROM audit_logs WHERE action = 'RESTORE_ATHLETE_FROM_IMPORT'").get()).toEqual({ count: 1 });
 });
 
+it('停用档案编号与姓名冲突时仍要求人工确认', () => {
+  db.prepare('UPDATE athletes SET active = 0 WHERE id = 1').run();
+  const current = [{ ...athletes[0], active: false }, athletes[1]];
+  const batch = analyze({
+    训练课次: [['系统运动员编号', '姓名', '日期', '时长分钟'], [1, '赵某', '2025-09-11', 60]],
+  }, { athletes: current });
+  expect(batch.athleteCandidates[0]).toMatchObject({ matchedAthleteId: null, confirmed: false });
+  expect(() => commitDataImport({ batchId: batch.id, userId: USER_ID, creatorRole: 'TD', athletes: current, allowedTeams: new Set(['A队', 'B队']), conflictPolicy: 'skip' })).toThrow('人员确认');
+  expect(db.prepare('SELECT active FROM athletes WHERE id = 1').get()).toEqual({ active: 0 });
+});
+
 it('恢复后的业务写入失败时，档案恢复和审计同事务回滚', () => {
   db.prepare('UPDATE athletes SET active = 0 WHERE id = 1').run();
   const current = [{ ...athletes[0], active: false }];
   const batch = analyze({ 训练课次: [['系统运动员编号', '姓名', '日期', '时长分钟'], [1, '张某', '2025-09-12', 60]] }, { athletes: current });
-  updateDataImportAthleteCandidates({ batchId: batch.id, userId: USER_ID, athletes: current, allowedTeams: new Set(['A队']), corrections: [{ id: batch.athleteCandidates[0].id, matchedAthleteId: 1, confirmed: true }] });
+  expect(batch.athleteCandidates[0]).toMatchObject({ status: 'pending', matchedAthleteId: 1, confirmed: true });
   db.exec("CREATE TRIGGER reject_import_insert BEFORE INSERT ON training_sessions BEGIN SELECT RAISE(ABORT, '模拟写入失败'); END");
   try {
     expect(() => commitDataImport({ batchId: batch.id, userId: USER_ID, creatorRole: 'TD', athletes: current, allowedTeams: new Set(['A队']), conflictPolicy: 'skip' })).toThrow();
@@ -1239,7 +1250,7 @@ it('恢复后的业务写入失败时，档案恢复和审计同事务回滚', (
   }
 });
 
-it('重传同一文件沿用已提交的人员关联，只让已停用人员重新确认', () => {
+it('重传同一文件沿用已提交的人员关联，并自动关联已停用人员', () => {
   const buffer = workbookBuffer({ 运动员信息: [['系统运动员编号', '姓名', '所属队伍'], ['', '张某', 'A队'], ['', '赵某', 'B队']] });
   const input = { buffer, filename: '历史人员映射.xlsx', mimetype: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', project: PROJECT, userId: USER_ID, athletes, allowedTeams: new Set(['A队', 'B队']) };
   const first = analyzeDataImport(input);
@@ -1249,7 +1260,7 @@ it('重传同一文件沿用已提交的人员关联，只让已停用人员重�
   const current = [{ ...athletes[0], active: false }, athletes[1], athletes[2]];
   const next = analyzeDataImport({ ...input, athletes: current });
   expect(next.athleteCandidates.find(person => person.name === '赵某')).toMatchObject({ status: 'matched', matchedAthleteId: 2, confirmed: true });
-  expect(next.athleteCandidates.find(person => person.name === '张某')).toMatchObject({ status: 'pending', confirmed: false });
+  expect(next.athleteCandidates.find(person => person.name === '张某')).toMatchObject({ status: 'pending', matchedAthleteId: 1, confirmed: true });
   const revoked = analyzeDataImport({ ...input, athletes: [current[0], current[2]], reparse: true });
   expect(revoked.athleteCandidates.find(person => person.name === '赵某')).toMatchObject({ status: 'pending', matchedAthleteId: null, confirmed: false });
 });

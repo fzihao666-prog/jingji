@@ -388,6 +388,7 @@ function toSuggestion(athlete: ImportAthlete & { birthDate?: string }): DataImpo
   };
 }
 
+const autoRestorePersonMessage = '提交导入后将自动启用原档案并保留历史数据。';
 const inactiveImportPersonMessage = '该运动员档案已停用。选择原档案并确认导入后，将恢复档案和历史数据，登录账号状态仍按原设置。';
 
 function activeTeamNameMatches(athletes: ImportAthlete[], project: string, team: string, name: string) {
@@ -2253,9 +2254,9 @@ function parseDailyTrainingSheet(matrix: Matrix, project: string, team: string, 
       DAILY_TRAINING_HEADERS.some(label => headers.filter(header => header === normalizedText(label)).length !== 1))
     throw new Error('每日训练模板表头无效，请使用「模板下载」中的每日训练模板。');
   const columns = DAILY_TRAINING_HEADERS.map(label => headers.indexOf(normalizedText(label)));
-  const roster = new Set(db.prepare('SELECT id FROM athletes WHERE project=? AND team_id=? AND active=1')
+  const roster = new Set(db.prepare('SELECT id FROM athletes WHERE project=? AND team_id=?')
     .all(project, teamId).map(row => Number(row.id)));
-  const candidates = athletes.filter(athlete => roster.has(athlete.id) && athlete.project === project && athlete.team === team && athlete.active !== false);
+  const candidates = athletes.filter(athlete => roster.has(athlete.id) && athlete.project === project && athlete.team === team);
   const nextOrders = new Map<string, number>();
   const highestOrder = db.prepare('SELECT COALESCE(MAX(session_order),0) AS highest FROM training_sessions WHERE athlete_id=? AND session_date=?');
   const today = currentImportDate();
@@ -2951,7 +2952,7 @@ export function analyzeDataImport(input: {
       throw new Error('训练记录模板识别信息缺失，请重新下载。');
     if (trainingTemplate.project !== input.project || trainingTemplate.teamId !== testTemplateTeamId(db, input.project, team))
       throw new Error('训练记录模板的项目或队伍与当前选择不一致。');
-    const ids = new Set(db.prepare('SELECT id FROM athletes WHERE project=? AND team_id=? AND active=1')
+    const ids = new Set(db.prepare('SELECT id FROM athletes WHERE project=? AND team_id=?')
       .all(input.project, trainingTemplate.teamId).map(row => Number(row.id)));
     input.athletes = input.athletes.filter(athlete => ids.has(athlete.id)).map(athlete => ({ ...athlete, team }));
   }
@@ -3164,9 +3165,19 @@ export function analyzeDataImport(input: {
       person.athleteCode ? input.athletes : matchingAthletes
     );
     if (resolution.kind === 'matched' && resolution.athlete.active === false) {
-      person.suggested = [toSuggestion(resolution.athlete)];
-      person.team = person.team || resolution.athlete.team;
-      person.messages.push(inactiveImportPersonMessage);
+      const athlete = resolution.athlete;
+      // 维持待处理状态，以便提交事务执行恢复和审计。
+      if ((!allowedTeams || allowedTeams.has(athlete.team)) &&
+          (!person.team || person.team === athlete.team) &&
+          (!person.gender || !athlete.gender || person.gender === athlete.gender) &&
+          (!person.birthDate || !athlete.birthDate || person.birthDate === athlete.birthDate)) {
+        person.matchedAthleteId = athlete.id;
+        person.team = athlete.team;
+        person.messages.push(autoRestorePersonMessage);
+      } else {
+        person.suggested = [toSuggestion(athlete)];
+        person.messages.push(inactiveImportPersonMessage);
+      }
     } else if (resolution.kind === 'matched') {
       person.matched = true;
       person.matchedAthleteId = resolution.athlete.id;
@@ -3200,7 +3211,7 @@ export function analyzeDataImport(input: {
   for (const item of items) {
     const person = personOf(item);
     if (!person) continue;
-    item.athleteId = person.matched ? person.matchedAthleteId : null;
+    item.athleteId = person.matchedAthleteId;
     if (item.itemType === 'athlete_profile' && person.team && !text(item.payload.team))
       item.payload = { ...item.payload, team: person.team };
   }
@@ -3273,7 +3284,7 @@ export function analyzeDataImport(input: {
         person.matched ? 'matched' : 'pending',
         person.matchedAthleteId,
         JSON.stringify(person.suggested),
-        person.matched || person.readyToCreate ? 1 : 0,
+        person.matchedAthleteId || person.readyToCreate ? 1 : 0,
         person.sourceSheet,
         JSON.stringify(
           person.messages.length
@@ -3725,7 +3736,7 @@ function validateImportItem(
       if (!text(payload.content)) messages.push('错误：请填写训练内容。');
       if (item.eventDate > currentImportDate()) messages.push('错误：训练日期不能晚于今天。');
       if (!db.prepare(`SELECT 1 FROM athletes a JOIN project_teams t ON t.id=a.team_id
-        WHERE a.id=? AND a.active=1 AND a.project=? AND t.project=a.project AND t.active=1 AND t.id=? AND t.name=?`)
+        WHERE a.id=? AND a.project=? AND t.project=a.project AND t.active=1 AND t.id=? AND t.name=?`)
         .get(item.athleteId, project, Number(payload.trainingRecordTeamId), text(payload.team)))
         messages.push('错误：运动员不在每日训练的导入队伍内，请重新上传。');
     }
@@ -4399,9 +4410,18 @@ export function updateDataImportAthleteCandidates(input: {
         if (matches.length === 1) {
           corrections.push({ id: candidate.id, matchedAthleteId: matches[0].id, confirmed: true });
         } else if (!matches.length) {
-          const inactive = input.athletes.filter(athlete => athlete.active === false &&
+          const inactiveMatches = input.athletes.filter(athlete => athlete.active === false &&
             athlete.project === candidate.project && athlete.team === candidate.team &&
-            normalizedName(athlete.name) === normalizedName(candidate.name)).map(toSuggestion);
+            normalizedName(athlete.name) === normalizedName(candidate.name));
+          const [target] = inactiveMatches;
+          if (inactiveMatches.length === 1 && (!candidate.gender || !target.gender || candidate.gender === target.gender) &&
+              batch.items.filter(item => dataImportPersonKey(item) === candidate.normalizedName).every(item =>
+                !text(item.payload.athleteCode) && (!text(item.payload.birthDate) || !target.birthDate ||
+                  text(item.payload.birthDate) === target.birthDate))) {
+            corrections.push({ id: candidate.id, matchedAthleteId: target.id, confirmed: true });
+            continue;
+          }
+          const inactive = inactiveMatches.map(toSuggestion);
           if (inactive.length && (candidate.confirmed || candidate.messages[0] !== inactiveImportPersonMessage ||
             JSON.stringify(candidate.suggested) !== JSON.stringify(inactive))) {
             flagInactive.run(JSON.stringify(inactive), JSON.stringify([inactiveImportPersonMessage]), candidate.id, input.batchId);
