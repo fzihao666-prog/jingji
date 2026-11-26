@@ -518,10 +518,7 @@ export function PersonalPage(props: Props) {
             },
             {
               label: '训练年限',
-              value:
-                selectedAthlete.trainingYears == null
-                  ? trainingExperience(selectedAthlete.startSportDate, props.to)
-                  : `${selectedAthlete.trainingYears} 年`,
+              value: trainingExperience(selectedAthlete.startSportDate, props.to),
             },
             { label: '技术等级', value: selectedAthlete.technicalLevel },
             {

@@ -433,10 +433,11 @@ it('观察员在原档案页读取训练与测试，跳过医疗请求并隐藏�
   api.painTrend = async () => { medicalCalls += 1; return {}; };
   api.wellnessTrends = async () => { medicalCalls += 1; return {}; };
   const { page } = createPageModule(new URL('./profile/profile.js', import.meta.url), api);
-  const person = { ...athlete, eventItem: '女子双桨', phone: 'private', healthStatus: 'private', coaches: '体能教练甲', headCoaches: '' };
+  const person = { ...athlete, eventItem: '女子双桨', startSportDate: '2020-10-15', trainingYears: 99, phone: 'private', healthStatus: 'private', coaches: '体能教练甲', headCoaches: '' };
   const view = await page.loadPageData({ user: { role: 'OBS' }, selectedAthleteId: 1,
     athletes: [person], project: 'ROWING', from: '2026-10-01', to: '2026-10-31' }, () => true);
   expect(view.athleteName).toBe(athlete.name);
+  expect(view.moreCells.find(cell => cell.label === '训练年限').value).toBe('6年');
   expect(view.primaryCells.find(cell => cell.label === '项目').value).toBe('赛艇 · 女子双桨');
   expect([...view.primaryCells, ...view.moreCells].some(cell => cell.label === '当前小项')).toBe(false);
   expect(view.primaryCells.find(cell => cell.label === '负责教练').value).toBe('体能教练甲');
