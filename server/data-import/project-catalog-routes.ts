@@ -24,6 +24,12 @@ import {
 import type { AuthUser } from '../core/shared-server.ts';
 import { testTemplateCatalog, testTemplateGroups } from './test-template-store.ts';
 import { originalTestProjectSql, readTestProjectFields } from './test-project-names.ts';
+import {
+  projectCatalogSettingsLookup,
+  readProjectCatalogSettings,
+  saveProjectCatalogSettings,
+} from '../core/project-catalog-settings.ts';
+import { DAILY_TRAINING_SHEET } from '../../shared/daily-training.ts';
 
 const name = z
   .string()
@@ -42,6 +48,31 @@ const mappingBody = z
   })
   .strict();
 const path = '/api/data-management/project-catalog';
+const projectBody = z
+  .object({
+    kind: z.enum(['training', 'test']),
+    source: name,
+    name,
+    fields: z
+      .array(
+        z
+          .object({
+            source: name,
+            name,
+            unit: z.string().trim().max(24),
+            protocol: z.string().trim().max(160),
+            version: z
+              .string()
+              .trim()
+              .regex(/^(?:[1-9]\d{0,8})?$/),
+          })
+          .strict()
+      )
+      .max(60)
+      .refine((fields) => new Set(fields.map((field) => field.source)).size === fields.length)
+      .optional(),
+  })
+  .strict();
 
 function projectCatalog(user: AuthUser): ProjectNameCatalog {
   const mappings = readProjectNameMappings(db);
@@ -157,26 +188,17 @@ function projectCatalog(user: AuthUser): ProjectNameCatalog {
   const sessions = db
     .prepare(
       `
-    SELECT COALESCE(NULLIF(s.content,''),NULLIF(s.training_type,''),'训练课次') AS projectName, s.source, COUNT(*) AS count
+    SELECT COALESCE(NULLIF(s.content,''),NULLIF(s.training_type,''),'训练课次') AS projectName,
+      s.source, COUNT(*) AS count, COUNT(CASE WHEN s.duration_reported=1 THEN 1 END) AS duration,
+      COUNT(CASE WHEN s.distance_reported=1 THEN 1 END) AS distance, COUNT(s.rpe) AS rpe,
+      COUNT(s.srpe) AS srpe, COUNT(s.average_heart_rate) AS averageHeartRate, COUNT(s.max_heart_rate) AS maxHeartRate
     ${training} GROUP BY projectName,s.source
   `
     )
-    .all(allowed) as Array<{ projectName: string; source: string; count: number }>;
-  const sourceLabel = (source: string) => (/import/.test(source) ? '教练导入' : '系统记录');
-  for (const row of sessions)
-    addProject('training', row.projectName, sourceLabel(row.source), row.count);
-  const sessionValues = db
-    .prepare(
-      `
-    SELECT s.source, COUNT(CASE WHEN s.duration_reported=1 THEN 1 END) AS duration,
-      COUNT(CASE WHEN s.distance_reported=1 THEN 1 END) AS distance,
-      COUNT(s.rpe) AS rpe, COUNT(s.srpe) AS srpe,
-      COUNT(s.average_heart_rate) AS averageHeartRate, COUNT(s.max_heart_rate) AS maxHeartRate
-    ${training} GROUP BY s.source
-  `
-    )
     .all(allowed) as Array<{
+    projectName: string;
     source: string;
+    count: number;
     duration: number;
     distance: number;
     rpe: number;
@@ -184,7 +206,10 @@ function projectCatalog(user: AuthUser): ProjectNameCatalog {
     averageHeartRate: number;
     maxHeartRate: number;
   }>;
-  for (const row of sessionValues) {
+  const sourceLabel = (source: string) => (/import/.test(source) ? '教练导入' : '系统记录');
+  for (const row of sessions) {
+    const source = sourceLabel(row.source);
+    addProject('training', row.projectName, source, row.count);
     for (const [label, unit, count] of [
       ['时长', '分钟', row.duration],
       ['距离', 'km', row.distance],
@@ -193,33 +218,47 @@ function projectCatalog(user: AuthUser): ProjectNameCatalog {
       ['平均心率', '次/分', row.averageHeartRate],
       ['最大心率', '次/分', row.maxHeartRate],
     ] as const) {
-      if (count) addMetric('training', label, unit, '', '', '', sourceLabel(row.source), count);
+      if (count) addMetric('training', label, unit, row.projectName, '', '', source, count);
     }
   }
   const exercises = db
     .prepare(
       `
-    SELECT r.exercise_name AS name, r.source, COUNT(DISTINCT s.id) AS count
+    SELECT r.exercise_name AS name, r.source, COUNT(DISTINCT s.id) AS count,
+      COUNT(CASE WHEN r.completed=1 THEN 1 END) AS completedSets
     FROM strength_result_sets r JOIN training_sessions s ON s.id=r.training_session_id
     JOIN athletes a ON a.id=s.athlete_id AND a.project=s.project_code
     WHERE s.athlete_id IN (SELECT value FROM json_each(?)) AND s.is_demo=0 AND s.project_status='confirmed'
       AND s.quality IN ('valid','partial') GROUP BY r.exercise_name,r.source
   `
     )
-    .all(allowed) as Array<{ name: string; source: string; count: number }>;
-  for (const row of exercises) addProject('training', row.name, sourceLabel(row.source), row.count);
+    .all(allowed) as Array<{ name: string; source: string; count: number; completedSets: number }>;
+  for (const row of exercises) {
+    const source = sourceLabel(row.source);
+    addProject('training', row.name, source, row.count);
+    if (row.completedSets) {
+      addMetric('training', '强度', 'kg', row.name, '', '', source, row.completedSets);
+      addMetric('training', '次数', '次', row.name, '', '', source, row.completedSets);
+    }
+  }
   const details = db
     .prepare(
       `
-    SELECT d.template_name AS projectName,d.field AS name,d.unit,COUNT(*) AS count
+    SELECT CASE WHEN d.template_name=? THEN COALESCE(NULLIF(s.content,''),d.template_name)
+      ELSE d.template_name END AS projectName,d.field AS name,d.unit,COUNT(*) AS count
     FROM training_record_details d JOIN training_record_session_scope scope ON scope.session_id=d.session_id AND scope.team_id=d.team_id
     JOIN training_sessions s ON s.id=d.session_id JOIN athletes a ON a.id=s.athlete_id AND a.project=s.project_code
     WHERE s.athlete_id IN (SELECT value FROM json_each(?)) AND s.is_demo=0 AND s.project_status='confirmed'
       AND s.quality IN ('valid','partial') AND a.team_id=d.team_id
-    GROUP BY d.template_name,d.field,d.unit
+    GROUP BY projectName,d.field,d.unit
   `
     )
-    .all(allowed) as Array<{ projectName: string; name: string; unit: string; count: number }>;
+    .all(DAILY_TRAINING_SHEET, allowed) as Array<{
+    projectName: string;
+    name: string;
+    unit: string;
+    count: number;
+  }>;
   for (const row of details) {
     addProject('training', row.projectName, '教练导入');
     addMetric('training', row.name, row.unit, row.projectName, '', '', '教练导入', row.count);
@@ -273,12 +312,19 @@ function projectCatalog(user: AuthUser): ProjectNameCatalog {
     }
   }
   for (const rule of mappings) addProject(rule.kind, rule.target, '名称映射');
+  for (const setting of readProjectCatalogSettings(db))
+    addProject(setting.kind, setting.name, '项目配置');
+  const settingsFor = projectCatalogSettingsLookup(db);
   return {
     projects: [...projects.values()].sort(
       (a, b) => b.recordCount - a.recordCount || a.name.localeCompare(b.name, 'zh-CN')
     ),
     metrics: [...metrics.values()].sort((a, b) => a.name.localeCompare(b.name, 'zh-CN')),
     mappings,
+    settings: [...projects.values()].flatMap((project) => {
+      const setting = settingsFor(project.kind, project.name);
+      return setting ? [{ ...setting, name: project.name }] : [];
+    }),
   };
 }
 
@@ -286,6 +332,29 @@ export function registerProjectCatalogRoutes(app: Express) {
   app.get(path, requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
     res.setHeader('Cache-Control', 'no-store');
     return res.json(projectCatalog(req.authUser!));
+  });
+  app.put(`${path}/projects`, requireAuth, requireRole('TD', 'DMD'), (req, res) => {
+    const input = projectBody.safeParse(req.body);
+    if (!input.success)
+      return res
+        .status(400)
+        .json({ message: '请检查项目名称、字段、单位、协议与版本。版本填写正整数或留空。' });
+    const { source, ...settings } = input.data;
+    if (
+      !projectCatalog(req.authUser!).projects.some(
+        (project) => project.kind === settings.kind && project.name === source
+      )
+    )
+      return res.status(404).json({ message: '未找到可编辑的项目，请刷新目录。' });
+    try {
+      saveProjectCatalogSettings(db, req.authUser!.id, source, settings);
+      res.setHeader('Cache-Control', 'no-store');
+      return res.json({ message: '项目已保存。' });
+    } catch (error) {
+      if (error instanceof ProjectNameMappingError)
+        return res.status(409).json({ message: error.message });
+      throw error;
+    }
   });
   app.put(`${path}/mappings`, requireAuth, requireRole('TD', 'DMD'), (req, res) => {
     const input = mappingBody.safeParse(req.body);

@@ -2041,3 +2041,77 @@ it('项目改名保存映射，历史训练和测试按标准名展示并保留�
     db.exec("UPDATE users SET role='SCC' WHERE id=701");
   }
 });
+
+it('项目编辑保存指标单位、协议和版本，新导入使用新定义并保留历史实测', async () => {
+  const name = '目录编辑专项';
+  const testHeaders = [...BASIC_DOWNLOAD_SHEETS[1][1]];
+  const before = await upload([
+    testHeaders, ['虚构队员', '2025-10-16', name, '用时', '手计时', 4.5, 's'],
+  ], BASIC_TEST_SHEET, 'HTTP甲队');
+  expect((await request(`/batches/${before.id}/commit`, 'POST', {})).status).toBe(200);
+  const path = `${base}/api/data-management/project-catalog`;
+  const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+  const settings = {
+    kind: 'test', source: name, name: '目录编辑冲刺',
+    fields: [{ source: '用时', name: '冲刺用时', unit: 'ms', protocol: '光电门', version: '2' }],
+  };
+  const edit = () => fetch(`${path}/projects`, { method: 'PUT', headers, body: JSON.stringify(settings) });
+  expect((await edit()).status).toBe(403);
+  db.exec("UPDATE users SET role='TD' WHERE id=701");
+  try {
+    const saved = await edit();
+    expect(saved.status, await saved.text()).toBe(200);
+    const catalog = await fetch(path, { headers });
+    expect(await catalog.json()).toMatchObject({ settings: expect.arrayContaining([
+      { kind: settings.kind, name: settings.name, fields: settings.fields },
+    ]) });
+    const after = await upload([
+      testHeaders, ['虚构队员', '2025-10-17', name, '用时', '', 4300, ''],
+    ], BASIC_TEST_SHEET, 'HTTP甲队');
+    expect(after.errorCount, JSON.stringify(after.items.map(item => item.messages))).toBe(0);
+    expect((await request(`/batches/${after.id}/commit`, 'POST', {})).status).toBe(200);
+    expect(db.prepare(`SELECT m.unit, s.protocol, s.protocol_version AS version, m.value_num AS value
+      FROM test_measurements m JOIN test_sessions s ON s.id=m.test_session_id
+      WHERE m.data_import_batch_id IN (?,?) ORDER BY s.test_date`).all(before.id, after.id)).toEqual([
+      { unit: 's', protocol: '手计时', version: '', value: 4.5 },
+      { unit: 'ms', protocol: '光电门', version: '2', value: 4300 },
+    ]);
+  } finally {
+    db.exec("UPDATE users SET role='SCC' WHERE id=701");
+  }
+});
+
+it('每日训练项目设置提供强度单位并保留每次导入使用的协议版本', async () => {
+  const name = '目录编辑力量';
+  const headers = ['姓名', '录入检查', '训练日期', '训练内容', '强度（数值）', '强度单位', '次数', '组数', '时长（分钟）', 'PRE'];
+  const addSession = (date: string, amount: number, unit: string) =>
+    upload([headers, [], [], ['虚构队员', null, date, name, amount, unit]], '每日训练', 'HTTP甲队');
+  const before = await addSession('2025-10-18', 50, 'kg');
+  expect((await request(`/batches/${before.id}/commit`, 'POST', {})).status).toBe(200);
+  const field = { source: '强度', name: '实测重量', unit: 'kg', protocol: '杠铃盘标重', version: '3' };
+  const auth = { authorization: `Bearer ${token}` };
+  db.exec("UPDATE users SET role='TD' WHERE id=701");
+  try {
+    const save = await fetch(`${base}/api/data-management/project-catalog/projects`, {
+      method: 'PUT', headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ kind: 'training', source: name, name, fields: [field] }),
+    });
+    expect(save.status, await save.text()).toBe(200);
+    const after = await addSession('2025-10-19', 60, '');
+    expect(after.errorCount, JSON.stringify(after.items)).toBe(0);
+    expect((await request(`/batches/${after.id}/commit`, 'POST', {})).status).toBe(200);
+    const teamId = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get()?.id;
+    const scope = new URLSearchParams({ project: 'ROWING', teamId: String(teamId), athleteId: '701',
+      from: '2025-10-18', to: '2025-10-19' });
+    const data = await fetch(`${base}/api/daily-training?${scope}`, { headers: auth });
+    expect(data.status).toBe(200);
+    const { rows } = await data.json() as import('../../shared/daily-training.ts').DailyTrainingData;
+    expect(rows).toMatchObject([
+      { projectName: name, intensity: 60, intensityUnit: 'kg', fields: [field] },
+      { projectName: name, intensity: 50, intensityUnit: 'kg' },
+    ]);
+    expect(rows[1].fields).toBeUndefined();
+  } finally {
+    db.exec("UPDATE users SET role='SCC' WHERE id=701");
+  }
+});

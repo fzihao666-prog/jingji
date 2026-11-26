@@ -110,12 +110,21 @@ export function registerDailyTrainingRoutes(app: Express) {
       FROM recent s JOIN imported_sets r ON r.training_session_id=s.id AND r.completed=1
       GROUP BY s.id, r.exercise_name, r.actual_weight_kg, r.actual_reps
     )
-    SELECT id, setGroupId, date, projectName, durationMin, distanceKm, rpe, intensity, intensityUnit, repetitions, sets, pre
-    FROM entries ORDER BY date DESC, sessionOrder DESC, id DESC, setGroupId LIMIT ?
-    `).all(...bindings, recordLimit + 1, DAILY_TRAINING_SHEET, recordLimit + 1) as DailyTrainingData['rows'];
+    SELECT e.id,e.setGroupId,e.date,e.projectName,e.durationMin,e.distanceKm,e.rpe,e.intensity,
+      e.intensityUnit,e.repetitions,e.sets,e.pre, CASE WHEN e.setGroupId IS NULL THEN (
+      SELECT json_extract(CASE WHEN json_valid(i.payload_json) THEN i.payload_json ELSE '{}' END, '$.trainingProjectFields')
+      FROM data_import_items i JOIN data_import_batches b ON b.id=i.batch_id AND b.status='committed'
+      JOIN recent s ON s.id=e.id AND s.project_code=b.project AND s.athlete_id=i.athlete_id
+      WHERE i.committed_entity_type='training_session' AND i.committed_entity_id=e.id AND i.source_sheet=?
+      ORDER BY i.id DESC LIMIT 1
+    ) END AS fieldsJson
+    FROM entries e ORDER BY date DESC, sessionOrder DESC, id DESC, setGroupId LIMIT ?
+    `).all(...bindings, recordLimit + 1, DAILY_TRAINING_SHEET, DAILY_TRAINING_SHEET, recordLimit + 1) as Array<
+      Omit<DailyTrainingData['rows'][number], 'fields'> & { fieldsJson: string | null }>;
     const resolve = projectNameResolver(readProjectNameMappings(db));
-    return res.json({ athletes: [], rows: rows.slice(0, recordLimit).map(row => ({
+    return res.json({ athletes: [], rows: rows.slice(0, recordLimit).map(({ fieldsJson, ...row }) => ({
       ...row, projectName: resolve('training', row.projectName),
+      ...(fieldsJson ? { fields: JSON.parse(fieldsJson) as DailyTrainingData['rows'][number]['fields'] } : {}),
     })), truncated: rows.length > recordLimit } satisfies DailyTrainingData);
   });
 }

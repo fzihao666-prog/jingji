@@ -12,22 +12,31 @@ export function dailyTrainingNumber(value: number | null, unit = '') {
 
 export function dailyTrainingSeries(rows: DailyTrainingRecord[]) {
   const metrics = [
-    ...Array.from(new Set(rows.filter(row => row.intensity !== null).map(row => row.intensityUnit ?? '')))
-      .map(unit => ({ field: 'intensity', label: unit ? `强度（${unit}）` : '强度', unit } as const)),
-    { field: 'durationMin', label: '时长（分钟）', unit: '分钟' },
-    { field: 'distanceKm', label: '距离（km）', unit: 'km' },
-    { field: 'repetitions', label: '每组次数', unit: '次' },
-    { field: 'sets', label: '组数', unit: '组' },
-    { field: 'rpe', label: 'RPE', unit: '' },
-    { field: 'pre', label: 'PRE', unit: '' },
+    { field: 'intensity', source: '强度', label: '强度', unit: '' },
+    { field: 'durationMin', source: '时长', label: '时长（分钟）', unit: '分钟' },
+    { field: 'distanceKm', source: '距离', label: '距离（km）', unit: 'km' },
+    { field: 'repetitions', source: '次数', label: '每组次数', unit: '次' },
+    { field: 'sets', source: '组数', label: '组数', unit: '组' },
+    { field: 'rpe', source: 'RPE', label: 'RPE', unit: '' },
+    { field: 'pre', source: 'PRE', label: 'PRE', unit: '' },
   ] as const;
   return metrics.flatMap(metric => {
-    const points = rows.flatMap(row => {
+    const groups = new Map<string, { key: string; label: string; unit: string; points: Array<{ date: string; value: number }> }>();
+    for (const row of rows) {
       const value = row[metric.field];
-      return value === null || (metric.field === 'intensity' && (row.intensityUnit ?? '') !== metric.unit)
-        ? [] : [{ date: row.date, value }];
-    }).sort((a, b) => a.date.localeCompare(b.date));
-    return points.length ? [{ ...metric, key: JSON.stringify([metric.field, metric.unit]), points }] : [];
+      if (value === null) continue;
+      const unit = metric.field === 'intensity' ? row.intensityUnit ?? '' : metric.unit;
+      const definition = row.fields?.find(field => field.source === metric.source);
+      const label = definition || metric.field === 'intensity'
+        ? [`${definition?.name ?? metric.label}${unit ? `（${unit}）` : ''}`,
+            definition?.protocol, definition?.version && `版本 ${definition.version}`].filter(Boolean).join(' · ')
+        : metric.label;
+      const key = JSON.stringify([metric.field, unit, definition?.name ?? '', definition?.protocol ?? '', definition?.version ?? '']);
+      const group = groups.get(key) ?? { key, label, unit, points: [] };
+      group.points.push({ date: row.date, value });
+      groups.set(key, group);
+    }
+    return [...groups.values()].map(group => ({ ...group, points: group.points.sort((a, b) => a.date.localeCompare(b.date)) }));
   });
 }
 

@@ -29,3 +29,12 @@ it('跨缺测日期断线，按日期排序', () => {
     ] }],
   });
 });
+
+it('训练强度的版本和协议从导入快照读取并分组', () => {
+  const field = { source: '强度', name: '实测重量', unit: 'kg', protocol: '杠铃盘标重', version: '2' };
+  const series = dailyTrainingSeries([record, { ...record, id: 2, intensity: 45, fields: [field] },
+    { ...record, id: 3, intensity: 50, fields: [{ ...field, version: '3' }] }]);
+  expect(series.map(entry => [entry.label, entry.points.map(point => point.value)])).toEqual([
+    ['强度（kg）', [0]], ['实测重量（kg） · 杠铃盘标重 · 版本 2', [45]], ['实测重量（kg） · 杠铃盘标重 · 版本 3', [50]],
+  ]);
+});

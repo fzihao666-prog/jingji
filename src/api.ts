@@ -1,7 +1,7 @@
 import type { TrainingRecordTemplate } from '../shared/training-record-template';
 import type { DailyTrainingData } from '../shared/daily-training';
 import type { CustomTestTrend } from '../shared/custom-test-trend';
-import type { ProjectNameCatalog, ProjectNameMapping } from '../shared/project-name-catalog';
+import type { ProjectCatalogSettings, ProjectNameCatalog, ProjectNameMapping } from '../shared/project-name-catalog';
 import type { TestTemplateGroup, TestTemplateGroupInput, TestTemplateMetric, TestTemplateMetricInput, TestTemplatePreview } from '../shared/test-template';
 import type { BasicSubmissionReport, SubmissionReport } from '../shared/submission-report';
 import type { TeamTrainingColumnMapping, TeamTrainingImportResult, TeamTrainingPeriod, TeamTrainingBoard } from '../shared/team-training-stats';
@@ -1021,6 +1021,11 @@ export const api = {
   },
   projectNameCatalog(signal?: AbortSignal) {
     return request<ProjectNameCatalog>('/api/data-management/project-catalog', { signal });
+  },
+  saveProjectCatalog(body: Omit<ProjectCatalogSettings, 'fields'> & { source: string; fields?: ProjectCatalogSettings['fields'] }) {
+    return request<{ message: string }>('/api/data-management/project-catalog/projects', {
+      method: 'PUT', body: JSON.stringify(body),
+    });
   },
   saveProjectNameMapping(rule: ProjectNameMapping & { previousSource?: string }) {
     return request<{ message: string }>('/api/data-management/project-catalog/mappings', {

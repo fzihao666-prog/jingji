@@ -6,6 +6,20 @@ export type ProjectNameMapping = {
   target: string;
 };
 
+export type ProjectCatalogField = {
+  source: string;
+  name: string;
+  unit: string;
+  protocol: string;
+  version: string;
+};
+
+export type ProjectCatalogSettings = {
+  kind: ProjectNameKind;
+  name: string;
+  fields: ProjectCatalogField[];
+};
+
 export type ProjectNameCatalog = {
   projects: Array<{
     kind: ProjectNameKind;
@@ -24,4 +38,5 @@ export type ProjectNameCatalog = {
     sources: string[];
   }>;
   mappings: ProjectNameMapping[];
+  settings: ProjectCatalogSettings[];
 };

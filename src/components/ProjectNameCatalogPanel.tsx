@@ -2,16 +2,15 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { Pencil, Plus, Save } from 'lucide-react';
 import type { ProjectNameCatalog, ProjectNameMapping } from '../../shared/project-name-catalog';
 import { api } from '../api';
+import { ProjectCatalogEditor } from './ProjectCatalogEditor';
 
 const views = {
   trainingProjects: '训练项目',
-  trainingMetrics: '训练指标',
   testProjects: '测试项目',
-  testMetrics: '测试指标',
   mappings: '名称映射',
 } as const;
 type View = keyof typeof views;
-type Draft = ProjectNameMapping & { previousSource?: string; rename?: boolean };
+type Draft = ProjectNameMapping & { previousSource?: string };
 const kindLabel = { training: '训练项目', test: '测试项目' };
 
 export function ProjectNameCatalogPanel({
@@ -31,6 +30,7 @@ export function ProjectNameCatalogPanel({
   const [loadError, setLoadError] = useState('');
   const [message, setMessage] = useState('');
   const [draft, setDraft] = useState<Draft>();
+  const [editing, setEditing] = useState<ProjectNameCatalog['projects'][number]>();
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   useEffect(() => {
@@ -57,6 +57,7 @@ export function ProjectNameCatalogPanel({
   };
   const close = () => {
     setDraft(undefined);
+    setEditing(undefined);
     setSaveError('');
     searchRef.current?.focus();
   };
@@ -101,35 +102,22 @@ export function ProjectNameCatalogPanel({
             .map((rule) => rule.source)
         )
     ) ?? [];
-  const metrics =
-    catalog?.metrics.filter(
-      (entry) =>
-        entry.kind === kind &&
-        includes(entry.name, entry.unit, entry.projectName, entry.protocol, entry.version)
-    ) ?? [];
   const mappings =
     catalog?.mappings.filter((rule) => includes(kindLabel[rule.kind], rule.source, rule.target)) ??
     [];
   const showingMappings = view === 'mappings';
-  const showingMetrics = view.endsWith('Metrics');
-  const count = showingMappings
-    ? mappings.length
-    : showingMetrics
-      ? metrics.length
-      : projects.length;
+  const count = showingMappings ? mappings.length : projects.length;
   const columns = showingMappings
     ? ['项目类型', '原始名称', '标准名称']
-    : showingMetrics
-      ? ['指标名称', '所属项目', '单位', '协议与版本', '来源', '记录数']
-      : ['项目名称', '来源', '记录数'];
-  const showActions = editable && !showingMetrics;
+    : ['项目名称', '来源', '记录数'];
+  const showActions = editable;
 
   return (
     <section className="data-import-review" aria-labelledby={title}>
       <div className="data-import-review-head">
         <div>
           <h2 id={title}>训练与测试项目及指标</h2>
-          <p>改名后，历史展示和后续导入使用标准名称。名称映射可随时编辑。</p>
+          <p>在项目内维护名称、指标、单位、协议与版本。名称映射可随时编辑。</p>
         </div>
         {editable && showingMappings && (
           <button
@@ -150,6 +138,8 @@ export function ProjectNameCatalogPanel({
             onChange={(event) => {
               setView(event.target.value as View);
               setSearch('');
+              setEditing(undefined);
+              setDraft(undefined);
             }}
           >
             {Object.entries(views).map(([value, label]) => (
@@ -170,13 +160,22 @@ export function ProjectNameCatalogPanel({
         </label>
       </div>
       {message && <p role="status">{message}</p>}
+      {editing && catalog && (
+        <ProjectCatalogEditor
+          key={JSON.stringify([editing.kind, editing.name])}
+          project={editing}
+          catalog={catalog}
+          onClose={close}
+          onSaved={() => {
+            close();
+            setMessage('项目已保存。');
+            setRetry((count) => count + 1);
+          }}
+        />
+      )}
       {draft && (
-        <form
-          className="metric-dictionary-filters"
-          onSubmit={submit}
-          aria-label={draft.rename ? '修改项目名称' : '编辑名称映射'}
-        >
-          {!draft.rename && !draft.previousSource && (
+        <form className="metric-dictionary-filters" onSubmit={submit} aria-label="编辑名称映射">
+          {!draft.previousSource && (
             <label className="data-import-date">
               <span>项目类型</span>
               <select
@@ -197,7 +196,6 @@ export function ProjectNameCatalogPanel({
           <label className="data-import-date">
             <span>原始名称</span>
             <input
-              readOnly={draft.rename}
               disabled={saving}
               maxLength={120}
               required
@@ -298,47 +296,31 @@ export function ProjectNameCatalogPanel({
                       )}
                     </tr>
                   ))
-                : showingMetrics
-                  ? metrics.map((entry) => (
-                      <tr key={JSON.stringify(entry)}>
-                        <th scope="row">{entry.name}</th>
-                        <td>{entry.projectName || '—'}</td>
-                        <td>{entry.unit || '—'}</td>
+                : projects.map((entry) => (
+                    <tr key={entry.name}>
+                      <th scope="row">{entry.name}</th>
+                      <td>{entry.sources.join('、')}</td>
+                      <td>{entry.recordCount}</td>
+                      {showActions && (
                         <td>
-                          {[entry.protocol, entry.version].filter(Boolean).join(' · ') || '—'}
+                          <button
+                            type="button"
+                            className="secondary-button"
+                            disabled={saving}
+                            aria-label={`编辑${entry.name}`}
+                            onClick={() => {
+                              setDraft(undefined);
+                              setMessage('');
+                              setEditing(entry);
+                            }}
+                          >
+                            <Pencil size={16} aria-hidden="true" />
+                            编辑
+                          </button>
                         </td>
-                        <td>{entry.sources.join('、')}</td>
-                        <td>{entry.recordCount}</td>
-                      </tr>
-                    ))
-                  : projects.map((entry) => (
-                      <tr key={entry.name}>
-                        <th scope="row">{entry.name}</th>
-                        <td>{entry.sources.join('、')}</td>
-                        <td>{entry.recordCount}</td>
-                        {showActions && (
-                          <td>
-                            <button
-                              type="button"
-                              className="secondary-button"
-                              disabled={saving}
-                              aria-label={`修改${entry.name}的名称`}
-                              onClick={() =>
-                                begin({
-                                  kind: entry.kind,
-                                  source: entry.name,
-                                  target: entry.name,
-                                  rename: true,
-                                })
-                              }
-                            >
-                              <Pencil size={16} aria-hidden="true" />
-                              改名
-                            </button>
-                          </td>
-                        )}
-                      </tr>
-                    ))}
+                      )}
+                    </tr>
+                  ))}
               {!count && (
                 <tr>
                   <td colSpan={columns.length + Number(showActions)}>暂无匹配的{views[view]}。</td>

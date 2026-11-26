@@ -33,7 +33,8 @@ export function saveProjectNameMapping(
   previousSource?: string
 ) {
   const { kind, source, target } = mapping;
-  db.exec('BEGIN IMMEDIATE');
+  const ownTransaction = !db.isTransaction;
+  if (ownTransaction) db.exec('BEGIN IMMEDIATE');
   try {
     const previous = readProjectNameMappings(db);
     if (
@@ -69,10 +70,10 @@ export function saveProjectNameMapping(
         after: mapping,
       })
     );
-    db.exec('COMMIT');
+    if (ownTransaction) db.exec('COMMIT');
     return next;
   } catch (error) {
-    db.exec('ROLLBACK');
+    if (ownTransaction) db.exec('ROLLBACK');
     throw error;
   }
 }

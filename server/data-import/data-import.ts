@@ -19,6 +19,7 @@ import { trainingContext } from '../../shared/training-context.ts';
 import { ACTIVITY_LABELS, SPORT_RULES_VERSION } from '../../shared/sport-rules.ts';
 import { DAILY_TRAINING_SHEET } from '../../shared/daily-training.ts';
 import { projectNameResolver, readProjectNameMappings } from '../core/project-name-mappings.ts';
+import { projectCatalogSettingsLookup } from '../core/project-catalog-settings.ts';
 import { findTestSession, saveTestSession } from '../core/test-session-store.ts';
 import { normalizeProject } from '../../shared/projects.ts';
 import { importStatistics, type ImportStatistics } from '../../shared/import-statistics.js';
@@ -1236,6 +1237,7 @@ function parseStandardSheet(
   const basicProjects = basicTest ? basicTestProjects(db, project, basicCatalog) : [];
   const metricCatalog = sheet === '测试指标' && !basicTest ? readImportMetricDefinitions(project) : [];
   const resolveTestProject = sheet === '测试指标' ? projectNameResolver(readProjectNameMappings(db)) : undefined;
+  const testSettings = basicTest ? projectCatalogSettingsLookup(db) : undefined;
   const year = workbookYear(filename);
   const nameColumn = header.columns.get(normalizedText('姓名')) ?? 0;
   const identityHeaders = new Set(['系统运动员编号', '运动员编号', '编号', '姓名', '所属队伍', '运动项目', '日期', '测量日期', '测试日期', '发生日期', '评估日期']);
@@ -1838,6 +1840,10 @@ function parseStandardSheet(
       const field = basicTest ? standardText(row, header.columns, '指标') : '';
       const protocol = basicTest ? standardText(row, header.columns, '测试协议', '协议') : standardText(row, header.columns, '协议');
       const providedUnit = standardText(row, header.columns, '单位');
+      const definitions = !rawCode ? testSettings?.('test', projectName)?.fields ?? [] : [];
+      const configured = definitions.find(definition => (
+        field ? definition.source === field || definition.name === field : definitions.length === 1
+      ) && (!providedUnit || providedUnit === definition.unit) && (!protocol || protocol === definition.protocol));
       const grouped = basicProjects.filter(entry => normalizedText(entry.projectName) === normalizedText(projectName));
       const options = grouped.length
         ? grouped.map(({ field, metric }) => ({ ...metric, label: field }))
@@ -1859,21 +1865,23 @@ function parseStandardSheet(
       const canCreateTest = basicTest && !rawCode && !selected?.metric && projectName &&
         (grouped.length === 0 || (field && grouped.some(entry => entry.metric.code.startsWith('custom_import_')))) &&
         !options.some(metric => resolveImportMetricName(lookupName, '', [metric]).metric);
-      const newTestField: ImportedTestField | undefined = canCreateTest
-        ? { projectName: grouped[0]?.projectName ?? projectName, field: field || '成绩' } : undefined;
+      const newTestField: ImportedTestField | undefined = configured
+        ? { projectName: grouped[0]?.projectName ?? projectName, field: configured.source, definition: configured }
+        : canCreateTest ? { projectName: grouped[0]?.projectName ?? projectName, field: field || '成绩' } : undefined;
       const configuredProtocol = basicMetric?.protocolVersion || basicMetric?.protocol === '实测1RM' ? basicMetric.protocol : '';
-      const metricCode = rawCode ? (explicitTestType ? rawCode : canonicalImportMetricCode(rawCode)) : selected?.metric?.code || (newTestField ? importedTestFieldCode(project, newTestField) : '');
+      const metricCode = rawCode ? (explicitTestType ? rawCode : canonicalImportMetricCode(rawCode))
+        : newTestField ? importedTestFieldCode(project, newTestField) : selected?.metric?.code || '';
       const valueNum = readNumber('数值');
       const basicTestType = basicTest
         ? COMMON_FITNESS_TEMPLATE_METRICS.find(([, code]) => code === metricCode)?.[4] ??
           (FITNESS_TEMPLATE_METRICS.some(([, code]) => code === metricCode) ? '体能测试' : '专项测试')
         : '专项测试';
       const metricDefinition = db.prepare('SELECT unit FROM metric_definitions WHERE code = ? AND active = 1').get(metricCode) as { unit: string } | undefined;
-      const metricUnit = providedUnit || metricDefinition?.unit || '';
+      const metricUnit = providedUnit || configured?.unit || metricDefinition?.unit || '';
       const durationMin = readNumber('测试时长分钟');
       const errorColumn = grouped.length ? '指标' : '指标名称';
       const errorAddress = cellAddress(rowIndex, header.columns.get(normalizedText(errorColumn)) ?? nameColumn);
-      const newTestError = newTestField && (projectName.length > 40 || newTestField.field.length > 40 ||
+      const newTestError = newTestField && !configured && (projectName.length > 40 || newTestField.field.length > 40 ||
         providedUnit.length > 24 || protocol.length > 160)
         ? '测试项目、指标、单位或协议名称过长（最多 40、40、24、160 字）。' : '';
       const lookupError = newTestField ? newTestError : selected?.error;
@@ -1904,7 +1912,7 @@ function parseStandardSheet(
           eventDate: rowDate,
           testType: explicitTestType || (metricCode === 'arm_span_cm' && side === 'center' ? '身体测量' : basicTestType),
           metricCode,
-          metricLabel: newTestField ? `${newTestField.projectName}${newTestField.field}` : basicMetric?.label || selected?.metric?.label || projectName || metricCode,
+          metricLabel: newTestField ? `${newTestField.projectName}${configured?.name ?? newTestField.field}` : basicMetric?.label || selected?.metric?.label || projectName || metricCode,
           valueNum,
           unit: metricUnit,
           side,
@@ -1913,9 +1921,9 @@ function parseStandardSheet(
             // 保留原称，名称映射可以在导入后继续调整。
             ...(basicTest || resolvedProjectName !== projectName ? { rawTestProjectName: projectName } : {}),
             metricSelectionError: selectionError || '',
-            ...(newTestField ? { newTestField, protocolVersion: protocol ? '' : '1' } : {}),
-            protocol: protocol || configuredProtocol,
-            ...(basicTest && basicMetric?.protocolVersion && (!protocol || protocol === basicMetric.protocol)
+            ...(newTestField ? { newTestField, protocolVersion: configured ? configured.version || '1' : protocol ? '' : '1' } : {}),
+            protocol: configured?.protocol ?? (protocol || configuredProtocol),
+            ...(!configured && basicTest && basicMetric?.protocolVersion && (!protocol || protocol === basicMetric.protocol)
               ? { protocolVersion: basicMetric.protocolVersion } : {}),
             durationMin,
             targetValue: readNumber('目标值'),
@@ -2251,6 +2259,7 @@ function parseDailyTrainingSheet(matrix: Matrix, project: string, team: string, 
   const nextOrders = new Map<string, number>();
   const highestOrder = db.prepare('SELECT COALESCE(MAX(session_order),0) AS highest FROM training_sessions WHERE athlete_id=? AND session_date=?');
   const today = currentImportDate();
+  const trainingSettings = projectCatalogSettingsLookup(db);
   const items: ParsedImportItem[] = [];
   // 第 2、3 行是列说明和示例；录入检查中的公式值不参与业务解析。
   for (let index = 3; index < matrix.length; index++) {
@@ -2260,7 +2269,9 @@ function parseDailyTrainingSheet(matrix: Matrix, project: string, team: string, 
     const athleteName = text(name);
     const trainingContent = text(content);
     const eventDate = parseImportFullDate(date);
-    const intensityUnit = text(unit);
+    const fields = trainingSettings('training', trainingContent)?.fields ?? [];
+    const intensityField = fields.find(field => field.source === '强度');
+    const intensityUnit = text(unit) || (text(intensity) ? intensityField?.unit ?? '' : '');
     const messages: string[] = [];
     const error = (column: number, message: string) =>
       messages.push(`错误：${DAILY_TRAINING_SHEET}!${cellAddress(index, columns[column])} ${message}`);
@@ -2283,6 +2294,15 @@ function parseDailyTrainingSheet(matrix: Matrix, project: string, team: string, 
     const setCount = readNumber(7, sets, positiveInteger, '组数须为正整数。');
     const durationMin = readNumber(8, duration, value => value > 0 && value <= 1440, '时长须为大于 0 且不超过 1440 的分钟数。');
     const preValue = readNumber(9, pre, Number.isFinite, 'PRE 只填数字。');
+    const reportedUnits = new Map([
+      ['强度', intensityValue === null ? null : intensityUnit],
+      ['次数', repetitionCount === null ? null : '次'],
+      ['组数', setCount === null ? null : '组'],
+      ['时长', durationMin === null ? null : '分钟'],
+      ['PRE', preValue === null ? null : ''],
+    ]);
+    const trainingProjectFields = fields.filter(field => reportedUnits.has(field.source) &&
+      reportedUnits.get(field.source) !== null && (!field.unit || field.unit === reportedUnits.get(field.source)));
     const source = { sourceSheet: DAILY_TRAINING_SHEET, sourceAddress: cellAddress(index, columns[0]),
       rawAthleteName: athleteName, eventDate, sessionLabel: trainingContent };
     if (messages.length || person.kind !== 'matched') {
@@ -2312,6 +2332,7 @@ function parseDailyTrainingSheet(matrix: Matrix, project: string, team: string, 
         durationMin, durationReported: durationMin !== null,
         trainingRecordTeamId: teamId, trainingRecordName: DAILY_TRAINING_SHEET,
         trainingRecordRowDetails: details, trainingRecordHasDetails: details.length > 0,
+        ...(trainingProjectFields.length ? { trainingProjectFields } : {}),
       },
     }));
   }

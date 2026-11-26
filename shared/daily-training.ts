@@ -1,3 +1,5 @@
+import type { ProjectCatalogField } from './project-name-catalog.js';
+
 export const DAILY_TRAINING_SHEET = '每日训练';
 
 export type DailyTrainingRecord = {
@@ -13,6 +15,7 @@ export type DailyTrainingRecord = {
   repetitions: number | null;
   sets: number | null;
   pre: number | null;
+  fields?: ProjectCatalogField[];
 };
 
 export type DailyTrainingAthlete = {
