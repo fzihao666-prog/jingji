@@ -1,6 +1,7 @@
 import { buildPhysicalChampion } from './physical-champion-service.ts';
 import { PHYSICAL_CHAMPION_DIMENSIONS } from '../../shared/physical-champion.ts';
 import { registerCustomTestTrendRoutes } from './custom-test-trend-routes.ts';
+import { registerDailyTrainingRoutes } from './daily-training-routes.ts';
 import { registerPhysicalChampionRoutes } from './physical-champion-routes.ts';
 import { z } from 'zod';
 import type { Express } from 'express';
@@ -205,6 +206,7 @@ export function firstRadarMeasurement(
 export function registerAnalysisRoutes(app: Express) {
   registerPhysicalChampionRoutes(app);
   registerCustomTestTrendRoutes(app);
+  registerDailyTrainingRoutes(app);
   app.get('/api/overview/teams', requireAuth, (req, res) => {
     const user = req.authUser!;
     const project = cleanString(req.query.project);

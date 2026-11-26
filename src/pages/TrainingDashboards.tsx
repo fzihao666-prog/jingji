@@ -19,6 +19,7 @@ import {
 import { api } from '../api';
 import { PhysicalChampionModel } from '../components/PhysicalChampionModel';
 import { PhysicalTestModule } from '../components/PhysicalTestModule';
+import { DailyTrainingTeamCard } from '../components/DailyTrainingCards';
 import { AthleteAnalysisSelector } from '../components/AthleteAnalysisSelector';
 import {
   AppCard,
@@ -542,6 +543,9 @@ export function StrengthTrainingDashboard({
           </>
         }
       />
+
+      <DailyTrainingTeamCard key={`${project}:${teamId ?? ''}`} project={project}
+        teamId={teamId ?? null} from={from} to={to} />
 
       {loading ? (
         <ContentState

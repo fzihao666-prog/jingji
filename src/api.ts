@@ -1,4 +1,5 @@
 import type { TrainingRecordTemplate } from '../shared/training-record-template';
+import type { DailyTrainingData } from '../shared/daily-training';
 import type { CustomTestTrend } from '../shared/custom-test-trend';
 import type { TestTemplateGroup, TestTemplateGroupInput, TestTemplateMetric, TestTemplateMetricInput, TestTemplatePreview } from '../shared/test-template';
 import type { BasicSubmissionReport, SubmissionReport } from '../shared/submission-report';
@@ -954,6 +955,11 @@ export const api = {
       metrics: Array<{ code: string; label: string; inTemplate: boolean; measured: number; missing: Person[];
         coverage: { total: number; completed: number } | null }> }>(
       `/api/data-import/test-template/progress?${new URLSearchParams({ project, team, from, to })}`, { signal, ...(expected ? { method: 'PUT', body: JSON.stringify(expected) } : {}) });
+  },
+  dailyTraining(project: Project, teamId: number, from: string, to: string, athleteId?: number, signal?: AbortSignal) {
+    const params = new URLSearchParams({ project, teamId: String(teamId), from, to });
+    if (athleteId !== undefined) params.set('athleteId', String(athleteId));
+    return request<DailyTrainingData>(`/api/daily-training?${params}`, { signal });
   },
   customTrainingDetails(athleteId: number, project: Project, teamId: number, from: string, to: string, signal?: AbortSignal) {
     const params = new URLSearchParams({ project, teamId: String(teamId), from, to });

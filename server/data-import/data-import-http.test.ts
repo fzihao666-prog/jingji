@@ -1872,6 +1872,9 @@ it('每日训练可下载原模板，经统一导入后在授权项目和队伍�
   ['2025-11-26', '虚构训练动作', 42.5, 'kg', 8, 4, 15, 7].forEach((value, index) => {
     sheet.getRow(4).getCell(index + 3).value = value;
   });
+  sheet.getCell('A5').value = '虚构队员';
+  sheet.getCell('C5').value = '2025-11-26';
+  sheet.getCell('D5').value = '仅填写训练内容';
   const form = new FormData();
   form.append('file', new Blob([await workbook.xlsx.writeBuffer()]), '每日训练模板.xlsx');
   form.append('project', 'ROWING');
@@ -1879,7 +1882,7 @@ it('每日训练可下载原模板，经统一导入后在授权项目和队伍�
   const preview = await request('/analyze', 'POST', form);
   expect(preview.status, JSON.stringify(preview.body)).toBe(200);
   const batch = preview.body.batch!;
-  expect(batch.items).toHaveLength(1);
+  expect(batch.items).toHaveLength(2);
   const result = await request(`/batches/${batch.id}/commit`, 'POST', {});
   expect(result.status, JSON.stringify(result.body)).toBe(200);
   const teamId = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get()?.id;
@@ -1890,7 +1893,23 @@ it('每日训练可下载原模板，经统一导入后在授权项目和队伍�
     { template: '每日训练', session: '虚构训练动作', field: '强度', unit: 'kg', value: 42.5 },
     { template: '每日训练', session: '虚构训练动作', field: 'PRE', value: 7 },
   ].map(row => expect.objectContaining(row))) });
+  const rosterResponse = await fetch(`${base}/api/daily-training?${query}`, { headers });
+  expect(rosterResponse.status).toBe(200);
+  expect(await rosterResponse.json()).toMatchObject({ athletes: expect.arrayContaining([
+    expect.objectContaining({ id: 701, recordCount: 2, trainingDays: 1, durationMin: 15 }),
+  ]) });
+  query.set('athleteId', '701');
+  const recordsResponse = await fetch(`${base}/api/daily-training?${query}`, { headers });
+  expect(recordsResponse.status).toBe(200);
+  expect(await recordsResponse.json()).toMatchObject({ rows: [
+    expect.objectContaining({ projectName: '仅填写训练内容', durationMin: null, intensity: null, pre: null }),
+    expect.objectContaining({ projectName: '虚构训练动作', date: '2025-11-26',
+      intensity: 42.5, intensityUnit: 'kg', repetitions: 8, sets: 4, durationMin: 15, pre: 7 }),
+  ] });
   const otherTeam = db.prepare("SELECT id FROM project_teams WHERE name='HTTP乙队'").get()?.id;
   query.set('teamId', String(otherTeam));
+  expect((await fetch(`${base}/api/daily-training?${query}`, { headers })).status).toBe(403);
+  query.delete('athleteId');
+  expect((await fetch(`${base}/api/daily-training?${query}`, { headers })).status).toBe(403);
   expect((await fetch(`${base}/api/athletes/701/custom-training-details?${query}`, { headers })).status).toBe(403);
 });

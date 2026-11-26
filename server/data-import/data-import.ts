@@ -17,6 +17,7 @@ import { isIdentityField } from '../core/identity-removal.ts';
 import { COMPACT_ATHLETE_SHEET, COMPACT_ATHLETE_COLUMNS, compactAthleteHeaderKey } from '../../shared/compact-athlete-template.ts';
 import { trainingContext } from '../../shared/training-context.ts';
 import { ACTIVITY_LABELS, SPORT_RULES_VERSION } from '../../shared/sport-rules.ts';
+import { DAILY_TRAINING_SHEET } from '../../shared/daily-training.ts';
 import { findTestSession, saveTestSession } from '../core/test-session-store.ts';
 import { normalizeProject } from '../../shared/projects.ts';
 import { importStatistics, type ImportStatistics } from '../../shared/import-statistics.js';
@@ -2224,7 +2225,6 @@ function refreshImportConflicts(items: Array<ParsedImportItem | DataImportItemVi
 
 type TrainingRecordDetail = { template?: string; order: number; field: string; unit: string; number: number | null; text: string | null };
 
-const DAILY_TRAINING_SHEET = '每日训练';
 const DAILY_TRAINING_HEADERS = ['姓名', '录入检查', '训练日期', '训练内容', '强度（数值）', '强度单位', '次数', '组数', '时长（分钟）', 'PRE'];
 
 function parseDailyTrainingSheet(matrix: Matrix, project: string, team: string, athletes: ImportAthlete[]) {
