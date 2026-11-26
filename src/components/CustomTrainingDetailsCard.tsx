@@ -46,7 +46,7 @@ export function CustomTrainingDetailsCard({ project, teamId, athleteId, from, to
           grid: { left: 52, right: 16, top: 32, bottom: 36 },
           xAxis: { type: 'category', data: rows.map(label), axisLabel: { hideOverlap: true } },
           yAxis: { type: 'value', name: selected.unit, scale: true },
-          series: [{ type: 'line', data: rows.map(row => row.value), connectNulls: false, showSymbol: true }],
+          series: [{ type: 'line', data: rows.map(row => row.value), connectNulls: true, showSymbol: true }],
         }} />}
         <div className="table-scroll"><table className="data-table">
           <caption>{selected.field}{selected.unit && `（${selected.unit}）`}</caption>

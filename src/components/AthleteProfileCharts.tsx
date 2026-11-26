@@ -25,6 +25,7 @@ import type { BodyCompositionTrendKey } from '../../shared/body-composition-tren
 import { projectLabel } from '../../shared/projects';
 import type { BodyCompositionRecord, OverviewAthleteProfile } from '../types';
 import { formatNumber, percentage } from '../utils';
+import { sortTrendRows, TREND_CONNECTS_NULLS } from './trend-connection';
 import './EChart.css';
 
 function average(values: Array<number | null | undefined>) {
@@ -1214,6 +1215,7 @@ function BodyCompositionMicroTrends({ records }: { records: BodyCompositionRecor
                   strokeWidth={3}
                   dot={{ r: 4, fill: '#fff', strokeWidth: 2 }}
                   activeDot={{ r: 4 }}
+                  connectNulls={TREND_CONNECTS_NULLS}
                   isAnimationActive={false}
                 />
               </LineChart>
@@ -1319,7 +1321,10 @@ function SegmentalLeanBalance({ segments }: { segments: SegmentMeasure[] }) {
 }
 
 function BodyCompositionTimeline({ records }: { records: BodyCompositionRecord[] }) {
-  const weightRecords = records.filter((record) => record.weightKg !== null);
+  const weightRecords = sortTrendRows(
+    records.filter((record) => record.weightKg !== null),
+    (record) => record.measurementDate
+  );
   if (weightRecords.length < 2)
     return <BodyAtlasEmpty detail="至少需要两次含体重的实测，才会绘制复测轨迹。" />;
   const values = weightRecords.map((record) => record.weightKg as number);

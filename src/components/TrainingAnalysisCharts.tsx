@@ -26,6 +26,7 @@ import {
   trainingLoadCategory as classifyTrainingLoad,
 } from '../../shared/training-content-category';
 import './EChart.css';
+import { sortTrendRows, TREND_CONNECTS_NULLS } from './trend-connection';
 import { OVERVIEW_METRIC_MAP } from '../../shared/overview-metrics';
 import { STRENGTH_INTENSITY_ZONES } from '../../shared/strength-training';
 
@@ -95,7 +96,7 @@ export function TrainingVolumeChart({
       }
       rows.set(date, target);
     }
-    return [...rows.values()].map((row) => ({
+    return sortTrendRows([...rows.values()], (row) => row.date).map((row) => ({
       ...row,
       label:
         effectiveGranularity === 'month'
@@ -241,6 +242,7 @@ export function TrainingVolumeChart({
                 stroke: '#fff',
                 strokeWidth: 2,
               }}
+              connectNulls={TREND_CONNECTS_NULLS}
             />
           </ComposedChart>
         </ResponsiveContainer>
@@ -639,7 +641,7 @@ export function TrainingVolumeDashboard({
                       strokeWidth: 2,
                     }}
                     activeDot={{ r: 5 }}
-                    connectNulls={false}
+                    connectNulls={TREND_CONNECTS_NULLS}
                   />
                   <Line
                     type="monotone"
@@ -654,7 +656,7 @@ export function TrainingVolumeDashboard({
                       strokeWidth: 2,
                     }}
                     activeDot={{ r: 5 }}
-                    connectNulls={false}
+                    connectNulls={TREND_CONNECTS_NULLS}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -732,7 +734,7 @@ export function TrainingVolumeDashboard({
                     stroke="none"
                     fill="#b86447"
                     fillOpacity={0.18}
-                    connectNulls={false}
+                    connectNulls={TREND_CONNECTS_NULLS}
                     isAnimationActive={false}
                     tooltipType="none"
                   />
@@ -749,7 +751,7 @@ export function TrainingVolumeDashboard({
                       strokeWidth: 2,
                     }}
                     activeDot={{ r: 5 }}
-                    connectNulls={false}
+                    connectNulls={TREND_CONNECTS_NULLS}
                     isAnimationActive={false}
                   />
                 </ComposedChart>

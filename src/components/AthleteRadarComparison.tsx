@@ -4,6 +4,7 @@ import type { AthleteRadarDimension, AthleteRadarModel, AthleteTestSeries } from
 import { formatNumber } from '../utils';
 import { EChart } from './EChart';
 import { ContentState } from './PageLayout';
+import { sortTrendRows } from './trend-connection';
 
 type Props = {
   model: AthleteRadarModel | null;
@@ -241,7 +242,7 @@ function AthleteTestResults({ series }: { series: AthleteTestSeries[] }) {
     ].filter(Boolean).join(' · ');
   const describe = (metric: AthleteTestSeries) =>
     [metric.label, metric.unit, conditions(metric)].filter(Boolean).join(' · ');
-  const points = selected ? [...selected.points].reverse() : [];
+  const points = selected ? sortTrendRows(selected.points, (point) => point.date) : [];
   return (
     <section className="athlete-test-results" aria-label="当前周期实测成绩">
       <h4>当前周期实测成绩</h4>
@@ -274,7 +275,7 @@ function AthleteTestResults({ series }: { series: AthleteTestSeries[] }) {
                 grid: { left: 12, right: 16, top: 20, bottom: 16, containLabel: true },
                 xAxis: { type: 'category', data: points.map(({ date }) => date) },
                 yAxis: { type: 'value', scale: true, name: selected.unit },
-                series: [{ type: 'line', data: points.map(({ value }) => value) }],
+                series: [{ type: 'line', data: points.map(({ value }) => value), connectNulls: true }],
               }}
             />
           </div>

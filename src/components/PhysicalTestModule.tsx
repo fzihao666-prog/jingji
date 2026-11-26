@@ -19,6 +19,7 @@ import {
   type StrengthMetricKey,
 } from '../../shared/strength-model';
 import { ChartCard, ContentState } from './PageLayout';
+import { TREND_CONNECTS_NULLS } from './trend-connection';
 import './PhysicalTestModule.css';
 
 type Props = {
@@ -255,7 +256,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
                     stroke="#0d9488"
                     strokeWidth={hasKnownProtocol ? 2.6 : 0}
                     dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
-                    connectNulls={false}
+                    connectNulls={TREND_CONNECTS_NULLS}
                   />
                   {athleteId && (
                     <Line
@@ -266,7 +267,7 @@ export function PhysicalTestModule({ tests, project, from, to, athleteId, athlet
                       strokeWidth={hasKnownProtocol ? 2.2 : 0}
                       strokeDasharray="6 3"
                       dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
-                      connectNulls={false}
+                      connectNulls={TREND_CONNECTS_NULLS}
                     />
                   )}
                 </ComposedChart>

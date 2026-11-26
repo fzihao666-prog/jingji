@@ -23,6 +23,7 @@ import {
 import type { TrainingRecord } from '../types';
 import type { DailyPerformancePoint, RadarDimension } from '../overview-analytics';
 import { formatNumber, percentage } from '../utils';
+import { TREND_CONNECTS_NULLS } from './trend-connection';
 import './EChart.css';
 
 const chartColors = ['#176f7f', '#22a99a', '#71c5aa', '#e5a72e', '#e36146', '#6a7285', '#8b6fb0'];
@@ -39,7 +40,9 @@ export function LoadTrendChart({ records }: { records: TrainingRecord[] }) {
     entry.duration += record.durationMin;
     byDate.set(record.date, entry);
   }
-  const data = [...byDate.values()];
+  const data = [...byDate.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(([, value]) => value);
   const display = { data: [...(data.length ? [...data] : [{ date: '—', srpe: null, duration: null }])], isPlaceholder: data.length === 0 };
 
   return (
@@ -76,6 +79,7 @@ export function LoadTrendChart({ records }: { records: TrainingRecord[] }) {
             stroke="#137e80"
             strokeWidth={2.4}
             fill="url(#loadFill)"
+            connectNulls={TREND_CONNECTS_NULLS}
           />
         </AreaChart>
       </ResponsiveContainer>
@@ -441,7 +445,7 @@ export function ProfessionalLoadChart({
             stroke="#dc6049"
             strokeWidth={2.2}
             dot={{ r: 2.6 }}
-            connectNulls={false}
+            connectNulls={TREND_CONNECTS_NULLS}
           />
         </ComposedChart>
       </ResponsiveContainer>

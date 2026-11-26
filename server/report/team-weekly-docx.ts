@@ -207,7 +207,7 @@ function chartXml(chart: WeeklyChart) {
     series.length > 1
       ? `<c:legend><c:legendPos val="b"/><c:layout/><c:overlay val="0"/>${chartText(900)}</c:legend>`
       : '';
-  return `${decl}<c:chartSpace xmlns:c="${C}" xmlns:a="${A}" xmlns:r="${R}"><c:lang val="zh-CN"/><c:chart><c:autoTitleDeleted val="1"/><c:plotArea><c:layout/><c:${kind}>${line ? '<c:grouping val="standard"/>' : `<c:barDir val="${horizontal ? 'bar' : 'col'}"/><c:grouping val="clustered"/>`}${body}${labels}${line ? '' : '<c:gapWidth val="100"/><c:overlap val="0"/>'}<c:axId val="1"/><c:axId val="2"/></c:${kind}>${axes}<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart><c:spPr>${fill(theme.white)}<a:ln><a:noFill/></a:ln></c:spPr>${font}<c:externalData r:id="data"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`;
+  return `${decl}<c:chartSpace xmlns:c="${C}" xmlns:a="${A}" xmlns:r="${R}"><c:lang val="zh-CN"/><c:chart><c:autoTitleDeleted val="1"/><c:plotArea><c:layout/><c:${kind}>${line ? '<c:grouping val="standard"/>' : `<c:barDir val="${horizontal ? 'bar' : 'col'}"/><c:grouping val="clustered"/>`}${body}${labels}${line ? '' : '<c:gapWidth val="100"/><c:overlap val="0"/>'}<c:axId val="1"/><c:axId val="2"/></c:${kind}>${axes}<c:spPr><a:noFill/><a:ln><a:noFill/></a:ln></c:spPr></c:plotArea>${legend}<c:plotVisOnly val="1"/><c:dispBlanksAs val="${line ? 'span' : 'gap'}"/></c:chart><c:spPr>${fill(theme.white)}<a:ln><a:noFill/></a:ln></c:spPr>${font}<c:externalData r:id="data"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`;
 }
 function drawing(id: number, rid: string, width: number, height: number) {
   const cx = Math.round(width * 914400),

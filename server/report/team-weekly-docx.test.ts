@@ -170,11 +170,13 @@ it('综合报告无数据也保留13个原生图表、全部日期/名单与空�
   const zip = await JSZip.loadAsync(await renderTeamWeeklyDocx(report));
   const parts = Object.keys(zip.files).filter((p) => /charts\/chart\d+\.xml$/.test(p));
   expect(parts).toHaveLength(13);
+  const xmls: string[] = [];
   for (const part of parts) {
     const xml = await zip.file(part)!.async('string');
+    xmls.push(xml);
     expect(xml).toContain('<c:catAx>');
     expect(xml).toContain('<c:valAx>');
-    expect(xml).toContain('<c:dispBlanksAs val="gap"/>');
+    expect(xml).toMatch(/<c:dispBlanksAs val="(gap|span)"\/>/);
     expect(xml).not.toContain('<c:v>0</c:v>');
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(
@@ -191,6 +193,9 @@ it('综合报告无数据也保留13个原生图表、全部日期/名单与空�
         expect(sheet.getCell(row, column).value).toBeNull();
     }
   }
+  const lineCount = charts.filter((chart) => chart.kind === 'line').length;
+  expect(xmls.filter((xml) => xml.includes('val="span"')).length).toBe(lineCount);
+  expect(xmls.filter((xml) => xml.includes('val="gap"')).length).toBe(charts.length - lineCount);
   const document = await zip.file('word/document.xml')!.async('string');
   expect(document).toContain('编辑数据');
   expect(document).not.toContain('不生成空图');

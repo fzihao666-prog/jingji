@@ -20,6 +20,7 @@ import { api } from '../api';
 import { EnodeTrends } from '../components/EnodeTrends';
 import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
+import { sortTrendRows, TREND_CONNECTS_NULLS } from '../components/trend-connection';
 import type {
   Athlete,
   AthleteRadarModelsPayload,
@@ -1176,7 +1177,7 @@ function WellnessTrendCards({
                       </dl>
                       <EChart
                         option={wellnessTrendOption(trend, from, to)}
-                        label={`${trend.label}每日变化：当前运动员${hasTeamMean ? '与团队平均' : ''}；最近记录 ${wellnessValue(latest.personalValue, trend)}，${change === null ? '暂无周期对比' : `较首条记录变化 ${wellnessValue(change, trend)}`}。缺失日期不连线。`}
+                        label={`${trend.label}每日变化：当前运动员${hasTeamMean ? '与团队平均' : ''}；最近记录 ${wellnessValue(latest.personalValue, trend)}，${change === null ? '暂无周期对比' : `较首条记录变化 ${wellnessValue(change, trend)}`}。跨缺失日期连接前后真实记录。`}
                       />
                       <p className="personal-wellness-axis-note">横轴：日期 · 纵轴：{axisLabel}</p>
                       <div
@@ -1252,7 +1253,8 @@ function wellnessValue(value: number, trend: WellnessTrend) {
 function wellnessTrendOption(trend: WellnessTrend, from: string, to: string): EChartsOption {
   const fromTime = Date.parse(`${from}T00:00:00Z`);
   const toTime = Date.parse(`${to}T00:00:00Z`);
-  const hasTeamMean = trend.points.some((point) => point.teamMean !== null);
+  const points = sortTrendRows(trend.points, (point) => point.date);
+  const hasTeamMean = points.some((point) => point.teamMean !== null);
   return {
     animation: false,
     useUTC: true,
@@ -1303,13 +1305,13 @@ function wellnessTrendOption(trend: WellnessTrend, from: string, to: string): EC
         id: trend.key,
         name: '当前运动员',
         type: 'line',
-        connectNulls: false,
+        connectNulls: TREND_CONNECTS_NULLS,
         symbol: 'circle',
         symbolSize: 7,
         lineStyle: { width: 3, color: '#176f7f' },
         itemStyle: { color: '#176f7f' },
         areaStyle: { color: 'rgb(23 111 127 / 10%)' },
-        data: trend.points.map((point) => [
+        data: points.map((point) => [
           Date.parse(`${point.date}T00:00:00Z`),
           point.personalValue,
         ]),
@@ -1320,12 +1322,12 @@ function wellnessTrendOption(trend: WellnessTrend, from: string, to: string): EC
               id: `${trend.key}-team`,
               name: '团队平均',
               type: 'line' as const,
-              connectNulls: false,
+              connectNulls: TREND_CONNECTS_NULLS,
               symbol: 'emptyCircle',
               symbolSize: 6,
               lineStyle: { width: 2.5, type: 'dashed' as const, color: '#8a651e' },
               itemStyle: { color: '#8a651e' },
-              data: trend.points.map((point) => [
+              data: points.map((point) => [
                 Date.parse(`${point.date}T00:00:00Z`),
                 point.teamMean,
               ]),
@@ -1405,7 +1407,7 @@ function ProfilePhysiologyRecords({
         type: 'line',
         data: points.map((record) => [dateValue(record.date), record.value]),
         smooth: false,
-        connectNulls: false,
+        connectNulls: TREND_CONNECTS_NULLS,
         showSymbol: true,
         symbol: 'circle',
         symbolSize: 8,

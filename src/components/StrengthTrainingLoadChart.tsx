@@ -9,6 +9,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { StrengthTrainingSession } from '../types';
+import { TREND_CONNECTS_NULLS } from './trend-connection';
 import './EChart.css';
 
 type Props = {
@@ -123,7 +124,7 @@ export function StrengthTrainingLoadChart({ sessions }: Props) {
               stroke="#d1813f"
               strokeWidth={2.2}
               dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
-              connectNulls={false}
+              connectNulls={TREND_CONNECTS_NULLS}
               animationDuration={180}
             />
           </ComposedChart>

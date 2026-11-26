@@ -72,7 +72,7 @@ export function teamWeeklyCharts(r: TeamWeeklyReport): WeeklyChart[] {
       title: `${title} · 每日有效均值`,
       unit,
       kind: 'line',
-      note: '每日样本可能不同；缺失处断开，不代表全队恢复状态。',
+      note: '每日样本可能不同；折线连接前后有效均值，不代表缺失日已有全队数据。',
       points: r.daily.map((d) => ({
         label: d.date.slice(5),
         value: r.recovery?.find((v) => v.date === d.date)?.[key] ?? null,

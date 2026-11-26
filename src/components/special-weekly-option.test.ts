@@ -14,3 +14,18 @@ it('没有训练记录时，周图仍显示所选周期的自然周', () => {
   expect(option.xAxis).toMatchObject({ data: ['10-19周', '10-26周', '11-02周'] });
   expect(option.series).toMatchObject([{ data: [null, null, null] }, { data: [null, null, null] }]);
 });
+
+it('周图折线跨缺失周连接真实点，不把缺失周补成零', () => {
+  const option = specialWeeklyOption(
+    [
+      { date: '2026-10-25', durationMin: 120, distanceKm: 4, load: null, sessionCount: 1 },
+      { date: '2026-11-02', durationMin: 90, distanceKm: null, load: null, sessionCount: 1 },
+    ],
+    '2026-10-25',
+    '2026-11-02'
+  );
+  expect(option.series).toMatchObject([
+    { data: [120, null, 90] },
+    { connectNulls: true, data: [4, null, null] },
+  ]);
+});

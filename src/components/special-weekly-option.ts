@@ -36,6 +36,6 @@ export function specialWeeklyOption(
     xAxis: { type: 'category', data: rows.map(row => `${row.week.slice(5)}周`) },
     yAxis: [{ type: 'value', name: 'min', min: 0 }, { type: 'value', name: 'km', min: 0 }],
     series: [{ name: '训练时长', type: 'bar', data: rows.map(row => row.durationMin), barMaxWidth: 28, itemStyle: { borderRadius: [5, 5, 0, 0], opacity: 0.85 } },
-      { name: '训练距离', type: 'line', yAxisIndex: 1, data: rows.map(row => row.distanceKm), connectNulls: false, lineStyle: { width: 3 }, symbolSize: 7 }],
+      { name: '训练距离', type: 'line', yAxisIndex: 1, data: rows.map(row => row.distanceKm), connectNulls: true, lineStyle: { width: 3 }, symbolSize: 7 }],
   };
 }

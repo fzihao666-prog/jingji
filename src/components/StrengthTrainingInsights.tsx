@@ -35,6 +35,7 @@ import {
 } from '../../shared/strength-training';
 import { STRENGTH_METRICS, type StrengthMetricKey } from '../../shared/strength-model';
 import type { StrengthTest, StrengthTrainingSession, TrainingPlanData } from '../types';
+import { sortTrendRows, TREND_CONNECTS_NULLS } from './trend-connection';
 import './StrengthTrainingInsights.css';
 
 const palette = ['#0d9488', '#21b7aa', '#3b82f6', '#f59e0b', '#f97316', '#ef4444', '#6366f1'];
@@ -722,7 +723,7 @@ export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTraining
     const trend = recent.map((session) => ({
       date: session.trainingDate.slice(5),
       load: sessionLoad(session) == null ? null : round(sessionLoad(session)!),
-      rpe: session.rpe || 0,
+      rpe: session.rpe ?? null,
     }));
     const earliest = ordered[0]?.trainingDate;
     const latest = ordered.at(-1)?.trainingDate || isoDateFromTime(Date.now());
@@ -967,7 +968,7 @@ export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTraining
                     strokeWidth={2.2}
                     dot={false}
                     activeDot={{ r: 4 }}
-                    connectNulls
+                    connectNulls={TREND_CONNECTS_NULLS}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -1037,6 +1038,7 @@ export function StrengthOverviewPanel({ sessions }: { sessions: StrengthTraining
                     stroke="#f59e0b"
                     strokeWidth={2.5}
                     dot={{ r: 3 }}
+                    connectNulls={TREND_CONNECTS_NULLS}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -1186,6 +1188,7 @@ export function StrengthAnalysisPanel({ sessions }: { sessions: StrengthTraining
                     stroke="#84cc16"
                     strokeWidth={2}
                     dot={{ r: 2.5 }}
+                    connectNulls={TREND_CONNECTS_NULLS}
                   />
                 </ComposedChart>
               </ResponsiveContainer>
@@ -1353,9 +1356,7 @@ export function StrengthAssessmentPanel({ tests }: { tests: StrengthTest[] }) {
         : null;
     return { ...item, unit: definition?.unit || '', value, old, change };
   });
-  const history = [...teamTests]
-    .reverse()
-    .map((test) => ({
+  const history = sortTrendRows(teamTests, (test) => test.testDate).map((test) => ({
       date: test.testDate.slice(5),
       squat: test.metrics.squatKg,
       bench: test.metrics.benchPressKg,
@@ -1444,21 +1445,21 @@ export function StrengthAssessmentPanel({ tests }: { tests: StrengthTest[] }) {
                     name="深蹲 kg"
                     stroke="#0d9488"
                     strokeWidth={2.5}
-                    connectNulls
+                    connectNulls={TREND_CONNECTS_NULLS}
                   />
                   <Line
                     dataKey="bench"
                     name="卧推 kg"
                     stroke="#3b82f6"
                     strokeWidth={2.5}
-                    connectNulls
+                    connectNulls={TREND_CONNECTS_NULLS}
                   />
                   <Line
                     dataKey="core"
                     name="核心 秒"
                     stroke="#84cc16"
                     strokeWidth={2.5}
-                    connectNulls
+                    connectNulls={TREND_CONNECTS_NULLS}
                   />
                 </LineChart>
               </ResponsiveContainer>

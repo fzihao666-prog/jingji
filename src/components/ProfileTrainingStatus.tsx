@@ -7,6 +7,7 @@ import type {
 import { formatNumber } from '../utils';
 import { EChart } from './EChart';
 import { ContentState } from './PageLayout';
+import { sortTrendRows, TREND_CONNECTS_NULLS } from './trend-connection';
 
 type Props = {
   trainingStatus: ProfileTrainingStatusPayload | null;
@@ -24,7 +25,7 @@ function formatDifference(metric: TrainingStatusMetric) {
 }
 
 function trendOption(card: TrainingStatusCard): EChartsOption {
-  const points = card.trend.points;
+  const points = sortTrendRows(card.trend.points, (point) => point.date);
   const timestamps = points.map((point) => Date.parse(`${point.date}T00:00:00Z`));
   return {
     animation: false,
@@ -66,7 +67,7 @@ function trendOption(card: TrainingStatusCard): EChartsOption {
         id: `${card.kind}-personal`,
         name: '当前运动员',
         type: 'line',
-        connectNulls: false,
+        connectNulls: TREND_CONNECTS_NULLS,
         symbol: 'circle',
         symbolSize: 7,
         lineStyle: { width: 3, color: '#176f7f' },
@@ -77,7 +78,7 @@ function trendOption(card: TrainingStatusCard): EChartsOption {
         id: `${card.kind}-team`,
         name: '团队平均',
         type: 'line',
-        connectNulls: false,
+        connectNulls: TREND_CONNECTS_NULLS,
         symbol: 'emptyCircle',
         symbolSize: 5,
         lineStyle: { width: 2.5, type: 'dashed', color: '#8a651e' },

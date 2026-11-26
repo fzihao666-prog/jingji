@@ -20,6 +20,7 @@ import {
   YAxis,
 } from 'recharts';
 import type { SpecialPageKey } from '../components/AppShell';
+import { TREND_CONNECTS_NULLS } from '../components/trend-connection';
 import {
   AppCard,
   ContentState,
@@ -394,6 +395,7 @@ export function TrendChart({
             dot={{ r: 3, strokeWidth: 2, fill: '#fff' }}
             activeDot={{ r: 6 }}
             fill={`url(#fill-${metric})`}
+            connectNulls={TREND_CONNECTS_NULLS}
           />
           {secondary && (
             <Line
@@ -403,6 +405,7 @@ export function TrendChart({
               strokeWidth={2.5}
               strokeDasharray="5 4"
               dot={false}
+              connectNulls={TREND_CONNECTS_NULLS}
             />
           )}
         </AreaChart>

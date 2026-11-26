@@ -11,6 +11,7 @@ import { CanvasRenderer } from 'echarts/renderers';
 import type { EChartsOption } from 'echarts';
 import './EChart.css';
 import { emptyChartOption } from './empty-chart-option';
+import { connectTrendLines } from './trend-connection';
 
 registerEChartsComponents([
   BarChart,
@@ -39,7 +40,9 @@ export function EChart({
 }) {
   const element = useRef<HTMLDivElement>(null);
   const chart = useRef<EChartsType | null>(null);
-  const displayOption = isPlaceholder ? emptyChartOption(option) : option;
+  const displayOption = isPlaceholder
+    ? emptyChartOption(connectTrendLines(option))
+    : connectTrendLines(option);
   const currentOption = useRef(displayOption);
   currentOption.current = displayOption;
   useEffect(() => {

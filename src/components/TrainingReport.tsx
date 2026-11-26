@@ -113,14 +113,14 @@ export function TrainingReportFigures({ data }: FiguresProps) {
             每日负荷 <small>SRPE · AU</small>
           </h3>
           <EChart
-            label="每日 SRPE 负荷趋势，缺失日期断开；明细见下方"
+            label="每日 SRPE 负荷趋势，跨缺失日期连接前后真实负荷；明细见下方"
             option={chart(
               data.daily.map((d) => d.date),
               [
                 {
                   name: 'SRPE',
                   type: 'line',
-                  connectNulls: false,
+                  connectNulls: true,
                   data: data.daily.map((d) => d.srpe),
                 },
               ],
@@ -128,7 +128,7 @@ export function TrainingReportFigures({ data }: FiguresProps) {
             )}
           />
           <p className="training-report-note">
-            只汇总有效时长且有 RPE 的课次；缺失记录不补零，不生成风险阈值。
+            只汇总有效时长且有 RPE 的课次；缺失记录不补零，折线连接前后真实负荷，不生成风险阈值。
           </p>
           <details>
             <summary>查看每日数值</summary>
@@ -240,7 +240,7 @@ export function TrainingReportFigures({ data }: FiguresProps) {
                     {
                       name: w.label,
                       type: 'line',
-                      connectNulls: false,
+                      connectNulls: true,
                       data: data.daily.map(
                         (d) => w.points.find((p) => p.date === d.date)?.value ?? null
                       ),

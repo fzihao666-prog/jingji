@@ -5,22 +5,18 @@ import { api } from '../api';
 import type { Project } from '../types';
 import { EChart } from './EChart';
 import { ChartCard, ContentState } from './PageLayout';
+import { sortTrendRows, TREND_CONNECTS_NULLS } from './trend-connection';
 import './CustomTestTrendCard.css';
 
-const dayMs = 86_400_000;
 const dateTime = (date: string) => Date.parse(`${date}T00:00:00Z`);
 const axisDate = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', month: 'numeric', day: 'numeric' });
 const detailDate = new Intl.DateTimeFormat('zh-CN', { timeZone: 'UTC', year: 'numeric', month: '2-digit', day: '2-digit' });
 const numberFormat = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 12 });
 
 function trendOption(points: CustomTestTrend['points'], from: string, to: string, unit: string): EChartsOption {
-  const series: Array<[number, number | null]> = [];
-  for (const point of points) {
-    const date = dateTime(point.date);
-    const previous = series.at(-1)?.[0];
-    if (previous !== undefined && date - previous > dayMs) series.push([previous + dayMs, null]);
-    series.push([date, point.value]);
-  }
+  const series: Array<[number, number]> = sortTrendRows(points, (point) => point.date).map(
+    (point) => [dateTime(point.date), point.value]
+  );
   return {
     animation: false,
     useUTC: true,
@@ -32,7 +28,7 @@ function trendOption(points: CustomTestTrend['points'], from: string, to: string
       axisLabel: { formatter: value => axisDate.format(value), hideOverlap: true },
     },
     yAxis: { type: 'value', name: unit, scale: true },
-    series: [{ type: 'line', data: series, connectNulls: false, showSymbol: true, symbolSize: 7 }],
+    series: [{ type: 'line', data: series, connectNulls: TREND_CONNECTS_NULLS, showSymbol: true, symbolSize: 7 }],
   };
 }
 
@@ -85,7 +81,7 @@ export function CustomTestTrendCard({ project, teamId, athleteId, from, to }: {
           <p className="custom-test-trend-summary" role="status">
             {metric.label} · 实测 {points.length} 天 · 最近一次 {detailDate.format(dateTime(latest.date))}，{show(latest.value)}
           </p>
-          <EChart option={trendOption(points, from, to, metric.unit)} label={`${metric.label}的实测成绩按日期排列，缺测处断开`} />
+          <EChart option={trendOption(points, from, to, metric.unit)} label={`${metric.label}的实测成绩按日期升序排列，跨缺测日期连接真实成绩`} />
           <details>
             <summary>查看成绩明细</summary>
             <div className="table-scroll">

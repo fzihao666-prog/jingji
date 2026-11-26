@@ -19,6 +19,7 @@ import {
 import { api } from '../api';
 import { PhysicalChampionModel } from '../components/PhysicalChampionModel';
 import { PhysicalTestModule } from '../components/PhysicalTestModule';
+import { TREND_CONNECTS_NULLS } from '../components/trend-connection';
 import { AthleteAnalysisSelector } from '../components/AthleteAnalysisSelector';
 import {
   AppCard,
@@ -289,6 +290,7 @@ function MetricTrend({
                 strokeWidth={3}
                 activeDot={{ r: 6, strokeWidth: 3 }}
                 dot={{ r: 3, fill: '#fff', strokeWidth: 2 }}
+                connectNulls={TREND_CONNECTS_NULLS}
               />
             </ComposedChart>
           </ResponsiveContainer>
@@ -428,7 +430,7 @@ function TrainingLoadTrend({ sessions }: { sessions: StrengthTrainingSession[] }
             strokeWidth={3}
             dot={{ r: 3, fill: 'var(--surface, white)', strokeWidth: 2 }}
             activeDot={{ r: 6 }}
-            connectNulls={false}
+            connectNulls={TREND_CONNECTS_NULLS}
           />
         </ComposedChart>
       </ResponsiveContainer>

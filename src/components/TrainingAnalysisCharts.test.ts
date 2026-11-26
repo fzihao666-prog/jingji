@@ -2,7 +2,13 @@ import { createElement, type ReactNode } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { OverviewPayload } from '../types';
-const charts = vi.hoisted(() => ({ data: [] as unknown[][], axes: [] as unknown[], radars: [] as unknown[] }));
+const charts = vi.hoisted(() => ({
+  data: [] as unknown[][],
+  axes: [] as unknown[],
+  radars: [] as unknown[],
+  lines: [] as Record<string, unknown>[],
+  areas: [] as Record<string, unknown>[],
+}));
 vi.mock('recharts', () => {
   const component = ({ children, data }: { children?: ReactNode; data?: unknown[] }) => {
     if (data) charts.data.push(data);
@@ -33,12 +39,17 @@ vi.mock('recharts', () => {
       'PolarRadiusAxis',
     ].map((key) => [
       key,
-      ['XAxis', 'YAxis', 'Radar'].includes(key)
+      ['Line', 'Area'].includes(key)
         ? (props: Parameters<typeof component>[0]) => {
-            (key === 'Radar' ? charts.radars : charts.axes).push(props);
+            (key === 'Line' ? charts.lines : charts.areas).push(props as Record<string, unknown>);
             return component(props);
           }
-        : component,
+        : ['XAxis', 'YAxis', 'Radar'].includes(key)
+          ? (props: Parameters<typeof component>[0]) => {
+              (key === 'Radar' ? charts.radars : charts.axes).push(props);
+              return component(props);
+            }
+          : component,
     ])
   );
 });
@@ -56,6 +67,8 @@ beforeEach(() => {
   charts.data = [];
   charts.axes = [];
   charts.radars = [];
+  charts.lines = [];
+  charts.areas = [];
 });
 const summary: OverviewPayload['trainingAnalytics']['summary'] = {
   totalDurationMin: null,
@@ -277,4 +290,43 @@ it('团队 FMS 缺测时保留七个动作及 0–3 分坐标', () => {
   }));
   expect(charts.data[0]).toHaveLength(7);
   expect(charts.data[0][0]).toMatchObject({ name: '深蹲', score: null });
+});
+
+it('日期不连续的折线与面积边界统一连接真实点', () => {
+  const day = (date: string, distance: number) => ({
+    date,
+    durationMin: null,
+    distanceKm: distance,
+    sessionCount: 1,
+  });
+  renderToStaticMarkup(
+    createElement(
+      'div',
+      null,
+      createElement(TrainingVolumeChart, {
+        data: {
+          days: [day('2026-10-29', 4), day('2026-11-02', 8)],
+          totalDurationMin: null,
+          totalDistanceKm: 12,
+          averageDurationMin: null,
+          averageDistanceKm: 6,
+          durationDayCount: 0,
+          distanceDayCount: 2,
+        },
+        from: '2026-10-29',
+        to: '2026-11-02',
+      }),
+      createElement(TrendChart, {
+        data: [
+          { date: '10/29', isoDate: '2026-10-29', duration: 30, distance: 4, power: 120, powerCount: 1 },
+          { date: '11/02', isoDate: '2026-11-02', duration: 40, distance: 8, power: 150, powerCount: 1 },
+        ] as Parameters<typeof TrendChart>[0]['data'],
+        metric: 'power',
+      })
+    )
+  );
+  expect(charts.lines.length).toBeGreaterThan(0);
+  expect(charts.lines.every((line) => line.connectNulls === true)).toBe(true);
+  expect(charts.areas.length).toBeGreaterThan(0);
+  expect(charts.areas.every((area) => area.connectNulls === true)).toBe(true);
 });

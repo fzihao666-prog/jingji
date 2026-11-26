@@ -21,10 +21,13 @@ it('专项options的空状态不生成趋势或比例数据', () => {
   const data = aggregateSpecialTraining([]);
   const timestamp = Date.parse('2026-01-01T00:00:00Z');
   expect(volumeOption(data, '2026-01-01', '2026-01-01', true)).toMatchObject({
-    series: [{ data: [[timestamp, null]] }, { data: [[timestamp, null]] }],
+    series: [
+      { data: [[timestamp, null]] },
+      { connectNulls: true, data: [[timestamp, null]] },
+    ],
   });
   expect(loadOption(data, '2026-01-01', '2026-01-01', true)).toMatchObject({
-    series: [{ data: [[timestamp, null]] }],
+    series: [{ connectNulls: true, data: [[timestamp, null]] }],
   });
   expect(intensityOption(data, true)).toMatchObject({ series: [{ data: [] }] });
   expect(contentOption(data, true)).toMatchObject({ series: [{ data: [] }] });
@@ -38,10 +41,13 @@ it('专项options保留真实零和缺失值，不用示例替换', () => {
   };
   const timestamp = Date.parse('2026-01-01T00:00:00Z');
   expect(volumeOption(data, '2026-01-01', '2026-01-01')).toMatchObject({
-    series: [{ data: [[timestamp, 0]] }, { data: [[timestamp, 0]] }],
+    series: [
+      { data: [[timestamp, 0]] },
+      { connectNulls: true, data: [[timestamp, 0]] },
+    ],
   });
   expect(loadOption(data, '2026-01-01', '2026-01-01')).toMatchObject({
-    series: [{ data: [[timestamp, 0]] }],
+    series: [{ connectNulls: true, data: [[timestamp, 0]] }],
   });
   expect(intensityOption(data)).toMatchObject({
     series: [{ data: [{ name: '未知', value: undefined }] }],

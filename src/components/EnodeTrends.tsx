@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { api } from '../api';
 import { EChart } from './EChart';
 import { AppCard } from './PageLayout';
+import { sortTrendRows } from './trend-connection';
 import type { EChartsOption } from 'echarts';
 import {
   ENODE_METRICS,
@@ -78,25 +79,27 @@ export function EnodeTrends({
   }, [key, query]);
   const options = Object.entries(ENODE_METRICS).filter(([, meta]) => meta.kind === kind);
   const meta = ENODE_METRICS[metric];
+  const daily = sortTrendRows(data?.daily ?? [], (point) => point.date);
+  const points = sortTrendRows(data?.points ?? [], (point) => point.date);
   const option: EChartsOption = {
     animation: false,
     tooltip: { trigger: 'axis', renderMode: 'richText' },
     legend: { data: ['每日均值', '测量点'] },
     grid: { left: 65, right: 25, top: 55, bottom: 50 },
-    xAxis: { type: 'category', data: data?.daily.map((d) => d.date) || [], name: '日期' },
+    xAxis: { type: 'category', data: daily.map((d) => d.date), name: '日期' },
     yAxis: { type: 'value', name: meta.unit || meta.label, scale: true },
     series: [
       {
         type: 'line',
         name: '每日均值',
-        data: data?.daily.map((d) => d.mean) || [],
+        data: daily.map((d) => d.mean),
         symbolSize: 7,
-        connectNulls: false,
+        connectNulls: true,
       },
       {
         type: 'scatter',
         name: '测量点',
-        data: data?.points.map((p) => [p.date, p.value]) || [],
+        data: points.map((p) => [p.date, p.value]),
         symbolSize: 5,
       },
     ],
