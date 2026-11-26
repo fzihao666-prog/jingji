@@ -204,8 +204,8 @@ export const api = {
   submissionReport(signal?: AbortSignal) {
     return request<SubmissionReport>('/api/reports/submissions', { signal, timeoutMs: 35_000 });
   },
-  basicSubmissionReport(teamId: number, signal?: AbortSignal) {
-    return request<BasicSubmissionReport>(`/api/reports/submissions/basic?teamId=${teamId}`, { signal, timeoutMs: 35_000 });
+  basicSubmissionReport(signal?: AbortSignal) {
+    return request<BasicSubmissionReport>('/api/reports/submissions/basic', { signal, timeoutMs: 35_000 });
   },
   async importTeamTrainingStats(file: File, project: Project, teamId: number, mappings: Record<string, TeamTrainingColumnMapping>) {
     const body = new FormData();

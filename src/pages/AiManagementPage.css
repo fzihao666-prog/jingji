@@ -4,17 +4,6 @@
   gap: 0.75rem;
 }
 
-.ai-management .app-page-header-actions {
-  flex-wrap: wrap;
-  align-items: end;
-}
-
-.ai-management-export-team {
-  display: grid;
-  min-width: 0;
-  gap: 0.25rem;
-}
-
 .ai-management-status:empty {
   position: absolute;
 }
@@ -81,7 +70,7 @@
 }
 
 .ai-management
-  :is(.ai-management-controls, .ai-management-filters, .ai-management-export-team)
+  :is(.ai-management-controls, .ai-management-filters)
   :is(input:not([type='checkbox']), select) {
   max-width: 100%;
   min-height: 2.5rem;

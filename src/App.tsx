@@ -673,7 +673,7 @@ export default function App() {
           />
         )}
         {page === 'accounts' && canOpenSystemPages && <AccountsPage />}
-        {page === 'ai-management' && user.role === 'DMD' && <AiManagementPage project={project} currentTeamId={teamId} />}
+        {page === 'ai-management' && user.role === 'DMD' && <AiManagementPage />}
       </RouteErrorBoundary>
     </AppShell>
   );

@@ -127,7 +127,7 @@ it('转队后历史随新队，离队清空归最后一队', async () => {
   expect(original.records.some(([, , , id]) => id === 'training_session:9301')).toBe(false);
 });
 
-it('基本信息检查仅导出所选授权队伍及四类正式填报情况', async () => {
+it('基本信息检查一次导出授权队伍并按队伍汇总四类正式填报情况', async () => {
   db.exec(`
     INSERT INTO athletes(id,name,project,team,team_id,gender,birth_date)
       SELECT 9310,'检查用合成队员','ROWING',name,id,'女','2000-01-01' FROM project_teams WHERE name='合成一队';
@@ -157,11 +157,8 @@ it('基本信息检查仅导出所选授权队伍及四类正式填报情况', a
         '{"sessions":[{"date":"2025-12-01","category":"physical","content":"深蹲","durationMin":35,"items":[{"title":"深蹲"}]}]}',
         9302,9302,'team',id,'published' FROM project_teams WHERE name='合成一队';
   `);
-  const teamId = (name: string) => (db.prepare('SELECT id FROM project_teams WHERE name=?').get(name) as { id: number }).id;
-  const firstTeam = teamId('合成一队');
-  const secondTeam = teamId('合成二队');
-  const fetchBasic = (id?: number, team: number | null = firstTeam) => fetch(
-    `${url}/basic${team === null ? '' : `?teamId=${team}`}`,
+  const fetchBasic = (id?: number) => fetch(
+    `${url}/basic`,
     id ? { headers: { Authorization: `Bearer ${jwt.sign({ id, sessionVersion: 1 }, secret)}` } } : {}
   );
   const response = await fetchBasic(9301);
@@ -169,32 +166,33 @@ it('基本信息检查仅导出所选授权队伍及四类正式填报情况', a
   expect(response.headers.get('cache-control')).toBe('private, no-store');
   const report = await response.json() as BasicSubmissionReport;
   const rows = (name: string) => report.sheets.find(sheet => sheet.name === name)!.rows.slice(1);
-  expect(report.team).toBe('合成一队');
   expect(JSON.stringify(report)).not.toContain('其他队运动员');
-  expect(rows('队伍汇总')).toContainEqual(['赛艇', '合成一队', 2, report.asOf]);
-  expect(rows('填报汇总')).toEqual([
-    ['运动员档案', 0, 1, 1],
-    ['体能与专项测试', 1, 0, 1],
-    ['功能筛查', 1, 0, 1],
-    ['每日训练', 1, 0, 1],
+  expect(rows('队伍汇总')).toEqual([
+    ['赛艇', '合成一队', 2, report.asOf],
+    ['赛艇', '合成空队', 0, report.asOf],
   ]);
-  expect(rows('运动员档案').find(row => row[1] === '检查用合成队员')).toEqual([
-    9310, '检查用合成队员', '部分填写', '代表队伍', '女', expect.any(Number), 175, 68, 0,
+  expect(rows('填报汇总').filter(row => row[1] === '合成一队')).toEqual([
+    ['赛艇', '合成一队', '运动员档案', 0, 1, 1],
+    ['赛艇', '合成一队', '体能与专项测试', 1, 0, 1],
+    ['赛艇', '合成一队', '功能筛查', 1, 0, 1],
+    ['赛艇', '合成一队', '每日训练', 1, 0, 1],
+  ]);
+  expect(rows('运动员档案').find(row => row[3] === '检查用合成队员')).toEqual([
+    '赛艇', '合成一队', 9310, '检查用合成队员', '部分填写', '代表队伍', '女', expect.any(Number), 175, 68, 0,
     '6:50.0', '合成籍贯', '', '本科', '双桨', '合成伤病（康复中）',
   ]);
-  expect(rows('体能与专项测试')).toContainEqual([9310, '检查用合成队员', '已填写', 1, '2025-12-01']);
-  expect(rows('功能筛查')).toContainEqual([9310, '检查用合成队员', '已填写', 2, '2025-12-02']);
-  expect(rows('每日训练')).toContainEqual([9310, '检查用合成队员', '已填写', 2, 2, '2025-12-02']);
-  expect(rows('每日训练')).toContainEqual([9312, '待填合成队员', '未填写', 0, 0, '']);
+  expect(rows('体能与专项测试')).toContainEqual(['赛艇', '合成一队', 9310, '检查用合成队员', '已填写', 1, '2025-12-01']);
+  expect(rows('功能筛查')).toContainEqual(['赛艇', '合成一队', 9310, '检查用合成队员', '已填写', 2, '2025-12-02']);
+  expect(rows('每日训练')).toContainEqual(['赛艇', '合成一队', 9310, '检查用合成队员', '已填写', 2, 2, '2025-12-02']);
+  expect(rows('每日训练')).toContainEqual(['赛艇', '合成一队', 9312, '待填合成队员', '未填写', 0, 0, '']);
   expect(JSON.stringify(report)).not.toContain('合成运动员');
-  const empty = await fetchBasic(9301, teamId('合成空队'));
-  expect(empty.status).toBe(200);
-  const emptyReport = await empty.json() as BasicSubmissionReport;
-  expect(emptyReport.sheets[0].rows[1]).toEqual(['赛艇', '合成空队', 0, report.asOf]);
-  expect((await fetchBasic(9301, secondTeam)).status).toBe(404);
-  expect((await fetchBasic(9304)).status).toBe(404);
-  expect((await fetchBasic(9304, secondTeam)).status).toBe(200);
-  expect((await fetchBasic(9301, null)).status).toBe(400);
+  expect(rows('填报汇总')).toContainEqual(['赛艇', '合成空队', '每日训练', 0, 0, 0]);
+  const other = await fetchBasic(9304);
+  expect(other.status).toBe(200);
+  const otherReport = await other.json() as BasicSubmissionReport;
+  expect(otherReport.sheets.find(sheet => sheet.name === '队伍汇总')?.rows.slice(1))
+    .toEqual([['赛艇', '合成二队', 1, report.asOf]]);
+  expect(JSON.stringify(otherReport)).not.toContain('检查用合成队员');
   expect((await fetchBasic(9302)).status).toBe(403);
   expect((await fetchBasic()).status).toBe(401);
 });

@@ -6,8 +6,6 @@ import {
   type AiManagementData,
   type AiSettings,
 } from '../../shared/ai-management';
-import type { Project } from '../../shared/projects';
-import type { ProjectTeam } from '../types';
 import { api, getAiManagement, saveAiSettings } from '../api';
 import {
   AppCard,
@@ -33,25 +31,7 @@ const beijingTime = new Intl.DateTimeFormat('zh-CN', {
 });
 const emptySettings = { enabled: false, budgetYuan: 10 };
 
-export function AiManagementPage({ project, currentTeamId }: { project: Project; currentTeamId: number | null }) {
-  const [refresh, setRefresh] = useState(0);
-  const [teams, setTeams] = useState<ProjectTeam[]>();
-  const [teamError, setTeamError] = useState('');
-  const [selection, setSelection] = useState<{ project: Project; id: number }>();
-  const projectTeams = teams?.filter(team => team.project === project) ?? [];
-  const preferredTeam = selection?.project === project ? selection.id : currentTeamId;
-  const exportTeamId = projectTeams.find(team => team.id === preferredTeam)?.id
-    ?? (projectTeams.length === 1 ? projectTeams[0].id : null);
-  const teamPlaceholder = teamError || (!teams ? '正在读取队伍…' :
-    projectTeams.length ? '请选择队伍' : '当前项目暂无队伍');
-  useEffect(() => {
-    let active = true;
-    setTeamError('');
-    api.teams()
-      .then(result => { if (active) setTeams(result.teams); })
-      .catch(() => { if (active) setTeamError('队伍列表加载失败。'); });
-    return () => { active = false; };
-  }, [refresh]);
+export function AiManagementPage() {
   const [exporting, setExporting] = useState<'team' | 'basic' | null>(null);
   const [exportError, setExportError] = useState('');
   async function exportTeamData(kind: 'team' | 'basic') {
@@ -59,8 +39,8 @@ export function AiManagementPage({ project, currentTeamId }: { project: Project;
     setExportError('');
     try {
       const exporter = await import('../submission-report-excel');
-      if (kind === 'team') await exporter.downloadSubmissionExcel(await api.submissionReport());
-      else if (exportTeamId !== null) await exporter.downloadBasicSubmissionExcel(await api.basicSubmissionReport(exportTeamId));
+      if (kind === 'basic') await exporter.downloadBasicSubmissionExcel(await api.basicSubmissionReport());
+      else await exporter.downloadSubmissionExcel(await api.submissionReport());
     } catch (error) {
       setExportError(error instanceof Error ? error.message : 'Excel 导出失败，请重试。');
     } finally {
@@ -72,6 +52,7 @@ export function AiManagementPage({ project, currentTeamId }: { project: Project;
   const [budget, setBudget] = useState('10');
   const [query, setQuery] = useState('');
   const [before, setBefore] = useState<number[]>([]);
+  const [refresh, setRefresh] = useState(0);
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [notice, setNotice] = useState('');
@@ -119,23 +100,8 @@ export function AiManagementPage({ project, currentTeamId }: { project: Project;
               <Download size={16} aria-hidden="true" />
               {exporting === 'team' ? '正在生成 Excel…' : '队伍数据检查Excel'}
             </button>
-            <label className="ai-management-export-team">
-              <span>基本信息检查队伍</span>
-              <select
-                value={exportTeamId ?? ''}
-                disabled={Boolean(exporting) || !projectTeams.length}
-                onChange={event => setSelection({ project, id: Number(event.target.value) })}
-              >
-                <option value="" disabled>{teamPlaceholder}</option>
-                {projectTeams.map(team => <option key={team.id} value={team.id}>{team.name}</option>)}
-              </select>
-            </label>
-            <button
-              type="button"
-              className="secondary-button"
-              disabled={Boolean(exporting) || exportTeamId === null}
-              onClick={() => void exportTeamData('basic')}
-            >
+            <button type="button" className="secondary-button" disabled={Boolean(exporting)}
+              onClick={() => void exportTeamData('basic')}>
               <Download size={16} aria-hidden="true" />
               {exporting === 'basic' ? '正在生成 Excel…' : '基本信息检查'}
             </button>
