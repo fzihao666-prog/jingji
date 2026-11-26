@@ -350,3 +350,35 @@ it('测功仪参考要求登录并按观察员队伍所属项目授权', async (
   db.prepare('DELETE FROM user_team_permissions WHERE user_id=9001').run();
   expect((await fetch(baseUrl + path, { headers })).status).toBe(403);
 });
+
+it('档案保留部分信息缺失的导入实测值，但不用于正式雷达对比', async () => {
+  test('2026-01-02', 'ROWING', 'confirmed', 42);
+  db.exec("UPDATE test_sessions SET quality='partial',source='file_import' WHERE athlete_id=9001; UPDATE test_measurements SET quality='partial',source='file_import' WHERE test_session_id IN (SELECT id FROM test_sessions WHERE athlete_id=9001)");
+  const result = await read(`/api/athletes/9001/radar-models?${range}`);
+  expect(result).toMatchObject({ physical: {
+    series: [expect.objectContaining({ points: [{ date: '2026-01-02', value: 42 }] })],
+    dimensions: expect.arrayContaining([expect.objectContaining({ key: 'vertical_jump', currentValue: null })]),
+  } });
+});
+
+it('自定义测试名称按指标领域归类，身体与FMS仍由各自模块展示', async () => {
+  db.exec(`
+    INSERT INTO metric_definitions(code,label,domain,unit,direction,frequency) VALUES
+      ('profile_custom_fitness','自定义跳跃','fitness','cm','neutral','phase'),
+      ('profile_custom_special','自定义专项','project','s','neutral','phase');
+  `);
+  for (const [code, type, value] of [
+    ['profile_custom_fitness','弹跳评估',50], ['profile_custom_special','水上计时',60],
+    ['vertical_jump_cm','身体测量',999], ['vertical_jump_cm','FMS测试',888],
+  ] as const) {
+    const session = db.prepare(`INSERT INTO test_sessions(athlete_id,test_date,test_type,project_code,project_status)
+      VALUES(9001,'2026-01-02',?,'ROWING','confirmed')`).run(type);
+    db.prepare('INSERT INTO test_measurements(test_session_id,metric_code,value_num,unit) VALUES(?,?,?,?)')
+      .run(session.lastInsertRowid, code, value, code === 'profile_custom_special' ? 's' : 'cm');
+  }
+  const result = await read(`/api/athletes/9001/radar-models?${range}`);
+  expect(result).toMatchObject({
+    physical: { series: [expect.objectContaining({ label: '自定义跳跃', points: [{ date: '2026-01-02', value: 50 }] })] },
+    special: { series: [expect.objectContaining({ label: '自定义专项', points: [{ date: '2026-01-02', value: 60 }] })] },
+  });
+});

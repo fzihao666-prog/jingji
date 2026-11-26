@@ -141,8 +141,9 @@ const RADAR_DIMENSIONS_BY_PROJECT: Partial<
 type ProfileRadarMeasurement = {
   code: string; value: number; testDate: string; testType: string; label: string; unit: string;
   protocol: string; protocolVersion: string; testContext: string; side: string; domain: string | null;
+  sessionQuality: string; measurementQuality: string;
 };
-type ProfileRadarSeries = Omit<ProfileRadarMeasurement, 'code' | 'value' | 'testDate' | 'domain'> & {
+type ProfileRadarSeries = Omit<ProfileRadarMeasurement, 'code' | 'value' | 'testDate' | 'domain' | 'sessionQuality' | 'measurementQuality'> & {
   key: string;
   points: Array<{ date: string; value: number }>;
 };
@@ -156,8 +157,13 @@ const physicalTestDomains = new Set([
 ]);
 
 function profileRadarKind(row: ProfileRadarMeasurement) {
+  if (/FMS|功能筛查|功能动作|身体测量|身体成分/i.test(row.testType)) return null;
   if (/体能|力量素质/.test(row.testType)) return 'physical';
-  if (!/专项/.test(row.testType)) return null;
+  if (!/专项/.test(row.testType)) {
+    if (physicalTestCodes.has(row.code) || physicalTestDomains.has(row.domain ?? '') ||
+        row.domain === 'fitness' || row.domain === 'foundation') return 'physical';
+    return row.domain === 'project' || row.domain === 'technique' ? 'special' : null;
+  }
   // 「其他测试」历史行可能使用默认的专项测试类型，按通用体能指标归类。
   return physicalTestCodes.has(row.code) || physicalTestDomains.has(row.domain ?? '')
     ? 'physical'
@@ -676,13 +682,14 @@ export function registerAnalysisRoutes(app: Express) {
         SELECT tm.metric_code AS code, tm.value_num AS value, ts.test_date AS testDate,
           ts.test_type AS testType, ts.protocol, ts.protocol_version AS protocolVersion,
           ts.context_key AS testContext, tm.side, tm.unit, md.domain,
+          ts.quality AS sessionQuality, tm.quality AS measurementQuality,
           COALESCE(md.label, tm.metric_code) AS label
         FROM test_sessions ts
         JOIN test_measurements tm ON tm.test_session_id = ts.id
         LEFT JOIN metric_definitions md ON md.code = tm.metric_code
         WHERE ts.athlete_id = ? AND ts.test_date BETWEEN ? AND ?
           AND ts.project_code = ? AND ts.project_status = 'confirmed'
-          AND ts.quality = 'valid' AND tm.quality = 'valid'
+          AND ts.quality IN ('valid', 'partial') AND tm.quality IN ('valid', 'partial')
           AND ts.is_demo = 0 AND tm.is_demo = 0
           AND trim(ts.source) <> '' AND trim(tm.source) <> ''
           AND lower(ts.source) NOT LIKE '%demo%' AND lower(tm.source) NOT LIKE '%demo%'
@@ -714,7 +721,8 @@ export function registerAnalysisRoutes(app: Express) {
     const latestMeasurements = new Map<string, RadarMeasurementRow>();
     for (const row of measurementRows) {
       const code = radarMeasurementCodes.find((candidate) => candidate === row.code);
-      if (code && row.value > 0 && !latestMeasurements.has(code)) latestMeasurements.set(code, { ...row, code });
+      if (row.sessionQuality === 'valid' && row.measurementQuality === 'valid' &&
+          code && row.value > 0 && !latestMeasurements.has(code)) latestMeasurements.set(code, { ...row, code });
     }
 
     const weightStatement = db.prepare(`
