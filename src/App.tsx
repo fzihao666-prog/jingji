@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, getToken, setToken } from './api';
 import { trainingRecordScope } from './training-record-scope';
 import {
@@ -13,7 +13,7 @@ import { LoginPage } from './pages/LoginPage';
 import type { Athlete, Project, ProjectTeam, TrainingRecord, User } from './types';
 import { addDays, toIsoDate } from './utils';
 import { SYSTEM_MANAGEMENT_ROLES } from '../shared/access';
-import { isProject, normalizeProject, PROJECTS } from '../shared/projects';
+import { isProject, PROJECTS } from '../shared/projects';
 
 const BluetoothConnectPage = lazy(() =>
   import('./pages/BluetoothConnectPage').then((module) => ({
@@ -140,11 +140,48 @@ function orderedProjects(values: string[]) {
   return PROJECTS.filter((project) => available.has(project));
 }
 
+class RouteErrorBoundary extends Component<{ page: PageKey; children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  componentDidUpdate(previous: { page: PageKey }) {
+    if (this.state.failed && previous.page !== this.props.page) this.setState({ failed: false });
+  }
+
+  render() {
+    if (!this.state.failed)
+      return (
+        <Suspense
+          fallback={
+            <div className="route-loading" role="status">
+              <BrandLogo />
+              <p>正在打开页面…</p>
+            </div>
+          }
+        >
+          {this.props.children}
+        </Suspense>
+      );
+    return (
+      <div className="route-loading" role="alert">
+        <p>页面加载失败，请重新打开当前页面。</p>
+        <button type="button" className="secondary-button" onClick={() => window.location.reload()}>
+          重新打开
+        </button>
+      </div>
+    );
+  }
+}
+
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [sessionStatus, setSessionStatus] = useState<'loading' | 'failed' | 'ready'>(() =>
     getToken() ? 'loading' : 'ready'
   );
+  const [sessionAttempt, setSessionAttempt] = useState(0);
   const [requestedPage, setPage] = useState<PageKey>(() => pageFromHash());
   const canOpenSystemPages = Boolean(user && SYSTEM_MANAGEMENT_ROLES.includes(user.role));
   const restrictedPage =
@@ -166,7 +203,10 @@ export default function App() {
   const teams = teamOptions?.project === project ? teamOptions.teams : [];
   const [authorizedProjects, setAuthorizedProjects] = useState<Project[]>([]);
   const [athletesReady, setAthletesReady] = useState(false);
-  const rosterUserRef = useRef<User | null>(null);
+  const [projectReady, setProjectReady] = useState(false);
+  const [projectError, setProjectError] = useState('');
+  const [rosterError, setRosterError] = useState('');
+  const rosterUserRef = useRef<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [refreshKey, setRefreshKey] = useState(0);
   useEffect(() => {
@@ -241,36 +281,43 @@ export default function App() {
         if (active) setSessionStatus(getToken() ? 'failed' : 'ready');
       });
     return () => { active = false; };
-  }, []);
+  }, [sessionAttempt]);
 
   useEffect(() => {
     if (!user) return;
-    // 同账号刷新保留页面和导入回执；账号变化仍等待新名册。
-    if (rosterUserRef.current !== user) setAthletesReady(false);
-    rosterUserRef.current = user;
-    Promise.all([api.athletes(), api.currentProject()])
-      .then(([{ athletes: nextAthletes }, saved]) => {
-        setAthletes(nextAthletes);
-        const ownProject = user.athleteId
-          ? nextAthletes.find((athlete) => athlete.id === user.athleteId)?.project
-          : '';
+    const controller = new AbortController();
+    if (rosterUserRef.current !== user.id) {
+      setAthletesReady(false);
+      setProjectReady(false);
+    }
+    rosterUserRef.current = user.id;
+    setProjectError('');
+    setRosterError('');
+    if (user.role === 'ATL' && user.athleteId) setAthleteId(user.athleteId);
+
+    api.currentProject(controller.signal)
+      .then((saved) => {
+        if (controller.signal.aborted) return;
         const available = orderedProjects(saved.projects);
         setAuthorizedProjects(available);
-        const normalizedOwnProject = normalizeProject(ownProject);
-        if (saved.project && available.includes(saved.project)) setProject(saved.project);
-        else if (available.length === 1) setProject(available[0]);
-        else if (normalizedOwnProject && available.includes(normalizedOwnProject))
-          setProject(normalizedOwnProject);
-        else if (available[0]) setProject(available[0]);
-        else setProject(null);
-        if (user.role === 'ATL' && user.athleteId) setAthleteId(user.athleteId);
+        setProject(saved.project && available.includes(saved.project) ? saved.project : available[0] ?? null);
+        setProjectReady(true);
       })
-      .catch((error) => {
-        setGlobalError(error instanceof Error ? error.message : '运动员数据加载失败。');
-        setAuthorizedProjects([]);
-        setProject(null);
+      .catch(() => {
+        if (!controller.signal.aborted) setProjectError('项目信息加载失败，请重试。');
+      });
+
+    api.athletes({ signal: controller.signal, timeoutMs: 15000 })
+      .then(({ athletes: nextAthletes }) => {
+        if (controller.signal.aborted) return;
+        setAthletes(nextAthletes);
+        setAthletesReady(true);
       })
-      .finally(() => setAthletesReady(true));
+      .catch(() => {
+        if (!controller.signal.aborted) setRosterError('运动员名册加载失败，请重试。');
+      });
+
+    return () => controller.abort();
   }, [user, refreshKey]);
 
   const recordScope = trainingRecordScope(
@@ -345,6 +392,7 @@ export default function App() {
     }
     setToken(null);
     setUser(null);
+    rosterUserRef.current = null;
     setAthletes([]);
     setRecords([]);
     setAthleteId(null);
@@ -353,6 +401,7 @@ export default function App() {
     setTeamOptions(null);
     setAuthorizedProjects([]);
     setAthletesReady(false);
+    setProjectReady(false);
   };
 
   const renameOwnProfile = async (name: string) => {
@@ -380,19 +429,31 @@ export default function App() {
         <strong>竞迹</strong>
         <p>{sessionStatus === 'loading' ? '正在恢复训练数据会话…' : '暂时无法恢复登录状态，请重试。'}</p>
         {sessionStatus === 'failed' && (
-          <button type="button" className="secondary-button" onClick={() => window.location.reload()}>
+          <button type="button" className="secondary-button" onClick={() => {
+            setSessionStatus('loading');
+            setSessionAttempt((attempt) => attempt + 1);
+          }}>
             重试
           </button>
         )}
       </div>
     );
   if (!user) return <LoginPage onLogin={login} />;
-  if (!athletesReady)
+  const needsRoster = page !== 'overview';
+  const bootError =
+    ((!projectReady || !project) && projectError) ||
+    (project && needsRoster && !athletesReady && rosterError);
+  if (bootError || !projectReady || (project && needsRoster && !athletesReady))
     return (
       <div className="boot-screen">
         <BrandLogo className="large" />
         <strong>竞迹</strong>
-        <p>正在加载项目信息…</p>
+        <p role={bootError ? 'alert' : 'status'}>{bootError || '正在加载项目信息…'}</p>
+        {bootError && (
+          <button type="button" className="secondary-button" onClick={() => setRefreshKey((key) => key + 1)}>
+            重试
+          </button>
+        )}
       </div>
     );
   if (!project)
@@ -468,14 +529,15 @@ export default function App() {
       onProfileNameChange={renameOwnProfile}
     >
       {globalError && <div className="global-error">{globalError}</div>}
-      <Suspense
-        fallback={
-          <div className="route-loading">
-            <BrandLogo />
-            <p>正在打开页面…</p>
-          </div>
-        }
-      >
+      {(projectError || (needsRoster && rosterError)) && (
+        <div className="global-error" role="alert">
+          {projectError || rosterError}{' '}
+          <button type="button" className="secondary-button" onClick={() => setRefreshKey((key) => key + 1)}>
+            重试
+          </button>
+        </div>
+      )}
+      <RouteErrorBoundary page={page}>
         {page === 'training-plans' && (
           <UnifiedTrainingPlansPage
             key={routeHash}
@@ -613,7 +675,7 @@ export default function App() {
         )}
         {page === 'accounts' && canOpenSystemPages && <AccountsPage />}
         {page === 'ai-management' && user.role === 'DMD' && <AiManagementPage />}
-      </Suspense>
+      </RouteErrorBoundary>
     </AppShell>
   );
 }

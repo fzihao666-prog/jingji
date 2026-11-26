@@ -444,7 +444,7 @@ export const api = {
     });
   },
   async me() {
-    return request<{ user: User }>('/api/me');
+    return request<{ user: User }>('/api/me', { timeoutMs: 15000 });
   },
   async changePassword(currentPassword: string, newPassword: string) {
     return request<{ message: string }>('/api/auth/change-password', {
@@ -473,8 +473,8 @@ export const api = {
       body: JSON.stringify({ name }),
     });
   },
-  async athletes() {
-    return request<{ athletes: Athlete[] }>('/api/athletes');
+  async athletes(options?: { signal?: AbortSignal; timeoutMs?: number }) {
+    return request<{ athletes: Athlete[] }>('/api/athletes', options);
   },
   async createAthlete(input: Record<string, unknown>) {
     return request<{ message: string; id: number; accountId: number | null }>(
@@ -766,9 +766,10 @@ export const api = {
       `/api/strength-training/results?athleteId=${athleteId}`
     );
   },
-  async currentProject() {
+  async currentProject(signal?: AbortSignal) {
     return request<{ project: Project | null; projects: Project[] }>(
-      '/api/preferences/current-project'
+      '/api/preferences/current-project',
+      { signal, timeoutMs: 15000 }
     );
   },
   async saveCurrentProject(project: Project) {

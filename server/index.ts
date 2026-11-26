@@ -315,6 +315,7 @@ if (existsSync(distPath)) {
   app.use(
     '/assets',
     express.static(resolve(distPath, 'assets'), {
+      fallthrough: false,
       setHeaders: (res, filePath) => {
         res.setHeader(
           'Cache-Control',

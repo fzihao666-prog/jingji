@@ -44,6 +44,15 @@ describe('Nginx 发布示例', () => {
     expect(config).toMatch(/gzip_types[^;]*application\/json/);
   });
 
+  it('缺失的构建资产在进入 SPA 回退前返回 404', () => {
+    const source = readFileSync(resolve(process.cwd(), 'server/index.ts'), 'utf8');
+    const assets = source.indexOf("'/assets'");
+    const fallback = source.indexOf('res.sendFile(resolve(distPath');
+    expect(assets).toBeGreaterThanOrEqual(0);
+    expect(fallback).toBeGreaterThan(assets);
+    expect(source.slice(assets, fallback)).toMatch(/fallthrough:\s*false/);
+  });
+
   it('静态资源缓存策略：带内容 hash 的资产长缓存，普通资产缓存 30 天，HTML 每次重新验证', () => {
     const serverSource = readFileSync(resolve(process.cwd(), 'server/index.ts'), 'utf8');
 
