@@ -776,13 +776,6 @@ export function PersonalPage(props: Props) {
                   </strong>
                 </article>
                 <article>
-                  <span>专项距离</span>
-                  <strong>
-                    {formatNumber(rangeAnalysis.totalDistanceKm, 1)}
-                    <small>km</small>
-                  </strong>
-                </article>
-                <article>
                   <span>训练课次</span>
                   <strong>
                     {rangeAnalysis.sessions}
