@@ -10,6 +10,7 @@ import multer from 'multer';
 import { existsSync } from 'node:fs';
 import { basename, resolve } from 'node:path';
 import { db } from './core/db.ts';
+import { hashedAssetPattern, previousReleaseAssets } from './core/release-assets.ts';
 import { configureTrustedProxy } from './core/trusted-proxy.ts';
 import {
   beijingDate,
@@ -311,11 +312,9 @@ app.get('/api/coach/plan-execution', requireAuth, requireRole('SCC', 'REG', 'TD'
 const distPath = resolve(process.cwd(), 'dist');
 if (existsSync(distPath)) {
   // 带内容 hash 的资源缓存一年；其他资产缓存 30 天，更新时须更换文件名或 URL 版本。HTML 每次重新验证。
-  const hashedAssetPattern = /-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$/;
   app.use(
     '/assets',
     express.static(resolve(distPath, 'assets'), {
-      fallthrough: false,
       setHeaders: (res, filePath) => {
         res.setHeader(
           'Cache-Control',
@@ -325,6 +324,7 @@ if (existsSync(distPath)) {
         );
       },
     }),
+    previousReleaseAssets(resolve(process.cwd(), 'data/.release-assets')),
   );
   app.use(
     express.static(distPath, {

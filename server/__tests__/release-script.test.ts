@@ -13,7 +13,7 @@ function release(
   options: {
     previous?: string;
     unhealthy?: boolean;
-    fail?: 'pull' | 'up' | 'curl' | 'remove' | 'lock';
+    fail?: 'pull' | 'up' | 'curl' | 'remove' | 'lock' | 'copy' | 'static';
     history?: string[];
     protectedTag?: string;
     dryRun?: boolean;
@@ -47,6 +47,16 @@ if (command.includes(' compose ') || args[0] === 'compose') {
     if (process.env.TEST_FAIL === 'up') process.exit(1);
   }
   if (args.includes('-aq')) console.log('container');
+  if (args.includes('exec') && process.env.TEST_FAIL === 'static') process.exit(1);
+} else if (args[0] === 'create') {
+  console.log('snapshot-container');
+} else if (args[0] === 'cp') {
+  if (process.env.TEST_FAIL === 'copy') process.exit(1);
+  fs.writeFileSync(args.at(-1) + '/app-12345678.js', 'export {};');
+  fs.writeFileSync(args.at(-1) + '/app-12345678.css', 'body{}');
+  fs.writeFileSync(args.at(-1) + '/unversioned.js', 'export {};');
+} else if (args[0] === 'rm') {
+  process.exit(0);
 } else if (args[0] === 'container' && args[1] === 'inspect') {
   if (command.includes('Config.Image')) console.log(repo + ':' + (updated ? 'aaaaaaa' : process.env.TEST_PREVIOUS));
   else if (command.includes('Health')) console.log(process.env.TEST_UNHEALTHY === '1' && !updated ? 'unhealthy' : 'healthy');
@@ -117,6 +127,9 @@ if (command.includes(' compose ') || args[0] === 'compose') {
       history: existsSync(join(directory, '.release-successful-images'))
         ? readFileSync(join(directory, '.release-successful-images'), 'utf8').trim().split('\n')
         : [],
+      assets: existsSync(join(directory, 'data/.release-assets/previous'))
+        ? readFileSync(join(directory, 'data/.release-assets/previous'), 'utf8').trim()
+        : '',
       calls: existsSync(join(directory, 'calls'))
         ? readFileSync(join(directory, 'calls'), 'utf8')
         : '',
@@ -154,6 +167,45 @@ describe('发布后的镜像保留', () => {
     }
   });
 
+  it('发布静态检查递归检查入口预加载和动态引用，并拒绝 HTML 回退', async () => {
+    const requests: string[] = [];
+    const server = createServer((req, res) => {
+      requests.push(req.url ?? '');
+      if (req.url === '/') {
+        res.setHeader('Content-Type', 'text/html');
+        res.end('<script type="module" src="/assets/index-12345678.js"></script>');
+      } else if (req.url === '/assets/index-12345678.js') {
+        res.setHeader('Content-Type', 'text/javascript');
+        res.end('import("./route.es-12345678.js")');
+      } else if (req.url === '/assets/route.es-12345678.js') {
+        res.setHeader('Content-Type', 'text/javascript');
+        res.end('import("./missing-12345678.js")');
+      } else {
+        res.setHeader('Content-Type', 'text/html');
+        res.end('<html>页面回退</html>');
+      }
+    });
+    await new Promise<void>((resolveListen) => server.listen(0, '127.0.0.1', resolveListen));
+    try {
+      const address = server.address();
+      if (!address || typeof address === 'string') throw new Error('未取得测试服务端口');
+      const script = readFileSync(resolve('scripts/release.sh'), 'utf8');
+      const check = script.match(/<<'CHECK_ASSETS'\n([\s\S]+?)\nCHECK_ASSETS/)?.[1];
+      if (!check) throw new Error('未找到发布静态检查命令');
+      await expect(promisify(execFile)(process.execPath, [
+        '--input-type=module', '-e',
+        check.replace('http://127.0.0.1:8787', `http://127.0.0.1:${address.port}`),
+      ], { timeout: 5000 })).rejects.toMatchObject({
+        code: 1,
+        stderr: expect.stringContaining('/assets/missing-12345678.js 返回 HTTP 200'),
+      });
+      expect(requests).toEqual(['/', '/assets/index-12345678.js', '/assets/route.es-12345678.js', '/assets/missing-12345678.js']);
+    } finally {
+      server.closeAllConnections();
+      await new Promise<void>((resolveClose) => server.close(() => resolveClose()));
+    }
+  });
+
   it('成功后仅删除本仓库的旧 SHA 版本，保留当前版和发布前健康版', () => {
     const result = release();
     expect(result.status, result.output).toBe(0);
@@ -161,7 +213,26 @@ describe('发布后的镜像保留', () => {
     expect(result.history).toEqual([ref('aaaaaaa'), ref('bbbbbbb')]);
   });
 
-  it.each(['pull', 'up', 'curl'] as const)('%s 失败时不清理，也不覆盖成功历史', (fail) => {
+  it('切换前提取上一版分包，健康检查后验证静态资源', () => {
+    const result = release();
+    expect(result.status, result.output).toBe(0);
+    expect(result.assets).toBe('bbbbbbb');
+    const calls = result.calls.trim().split('\n').map((line) => JSON.parse(line) as string[]);
+    const snapshot = calls.findIndex((args) => args[0] === 'cp');
+    const switchImage = calls.findIndex((args) => args.includes('up'));
+    expect(snapshot).toBeGreaterThanOrEqual(0);
+    expect(snapshot).toBeLessThan(switchImage);
+    expect(calls.findIndex((args) => args.includes('exec'))).toBeGreaterThan(switchImage);
+  });
+
+  it('提取失败时保留当前服务和发布记录', () => {
+    const result = release({ fail: 'copy', history: [ref('bbbbbbb')] });
+    expect(result.status).not.toBe(0);
+    expect(result.calls).not.toContain('"up"');
+    expect(result.history).toEqual([ref('bbbbbbb')]);
+  });
+
+  it.each(['pull', 'up', 'curl', 'static'] as const)('%s 失败时不清理，也不覆盖成功历史', (fail) => {
     const result = release({ fail, history: [ref('bbbbbbb'), ref('ccccccc')] });
     expect(result.status).not.toBe(0);
     expect(result.deleted, result.output).toEqual([]);

@@ -1,6 +1,7 @@
 import { Component, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { api, getToken, setToken } from './api';
 import { trainingRecordScope } from './training-record-scope';
+import { finishPageLoadRecovery, recoverPageLoad } from './page-load-recovery';
 import {
   AppShell,
   type PageKey,
@@ -140,8 +141,31 @@ function orderedProjects(values: string[]) {
   return PROJECTS.filter((project) => available.has(project));
 }
 
+function RouteContent({
+  onReady,
+  children,
+}: {
+  onReady: () => void;
+  children: ReactNode;
+}) {
+  useEffect(onReady, [onReady]);
+  return children;
+}
+
 class RouteErrorBoundary extends Component<{ page: PageKey; children: ReactNode }, { failed: boolean }> {
   state = { failed: false };
+
+  private hasRenderedRoute = false;
+
+  private markRouteReady = () => {
+    if (this.hasRenderedRoute) return;
+    this.hasRenderedRoute = true;
+    finishPageLoadRecovery();
+  };
+
+  componentDidCatch(error: Error) {
+    void recoverPageLoad(error, () => this.state.failed && !this.hasRenderedRoute);
+  }
 
   static getDerivedStateFromError() {
     return { failed: true };
@@ -162,7 +186,7 @@ class RouteErrorBoundary extends Component<{ page: PageKey; children: ReactNode 
             </div>
           }
         >
-          {this.props.children}
+          <RouteContent onReady={this.markRouteReady}>{this.props.children}</RouteContent>
         </Suspense>
       );
     return (

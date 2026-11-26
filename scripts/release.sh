@@ -173,6 +173,40 @@ if [ -z "$previous" ] && [ -f "$history" ]; then
   done < "$history"
 fi
 
+# 只留上一个成功版本的公开哈希分包，沿用现有 data 挂载。
+assets_root='data/.release-assets'
+previous_tag=''
+if [ -n "$previous" ]; then
+  previous_tag="${previous##*:}"
+  mkdir -p -- "$assets_root"
+  if [ ! -d "$assets_root/$previous_tag" ]; then
+    scratch=$(mktemp -d "$assets_root/.snapshot.XXXXXX")
+    snapshot_container=''
+    trap 'if [ -n "$snapshot_container" ]; then docker rm "$snapshot_container" >/dev/null || true; fi; rm -rf -- "$scratch"' EXIT
+    snapshot_container=$(docker create "$previous")
+    mkdir -- "$scratch/full" "$scratch/hashed"
+    docker cp "$snapshot_container:/app/dist/assets/." "$scratch/full"
+    for file in "$scratch/full/"*; do
+      name="${file##*/}"
+      if [ -f "$file" ] && [ ! -L "$file" ] && [[ "$name" =~ ^[A-Za-z0-9_][A-Za-z0-9_.-]*-[A-Za-z0-9_-]{8}\.[A-Za-z0-9]+$ ]]; then
+        mv -- "$file" "$scratch/hashed/"
+      fi
+    done
+    if ! compgen -G "$scratch/hashed/*.js" >/dev/null; then
+      echo '错误：上一版镜像没有可保留的 JS 分包。' >&2
+      exit 1
+    fi
+    mv -- "$scratch/hashed" "$assets_root/$previous_tag"
+    docker rm "$snapshot_container" >/dev/null
+    snapshot_container=''
+    rm -rf -- "$scratch"
+    trap - EXIT
+  fi
+  marker=$(mktemp "$assets_root/.previous.XXXXXX")
+  printf '%s\n' "$previous_tag" > "$marker"
+  mv -- "$marker" "$assets_root/previous"
+fi
+
 printf 'IMAGE_TAG=%s\n' "$tag" > .env.compose
 chmod 600 .env.compose
 if ! docker compose --env-file .env.compose pull ||
@@ -180,6 +214,56 @@ if ! docker compose --env-file .env.compose pull ||
    ! curl --fail --silent --show-error --connect-timeout 3 --max-time 10 --retry 5 --retry-delay 2 --retry-all-errors --retry-max-time 70 http://127.0.0.1:8787/health >/dev/null; then
   echo '错误：拉取、启动或健康检查失败；保留全部镜像及成功历史。' >&2
   docker compose --env-file .env.compose logs --tail=200 app || true
+  exit 1
+fi
+# 在容器内通过 HTTP 验证入口及分包。旧镜像仍可回滚，支持兼容分包的镜像额外检查上一版资源。
+if ! docker compose --env-file .env.compose exec -T app node --input-type=module - "$previous_tag" <<'CHECK_ASSETS'
+import { existsSync, readdirSync } from 'node:fs';
+const previous = process.argv[2];
+const base = 'http://127.0.0.1:8787';
+async function read(path, type) {
+  const res = await fetch(base + path, { redirect: 'error', signal: AbortSignal.timeout(8000) });
+  if (!res.ok || !type.test(res.headers.get('content-type') ?? '')) {
+    throw new Error(`${path} 返回 HTTP ${res.status}，资源类型 ${res.headers.get('content-type')}`);
+  }
+  return res.text();
+}
+
+const html = await read('/', /text\/html/);
+const entryAssets = [...html.matchAll(/(?:src|href)="(\/assets\/[^"]+\.(?:js|css))"/g)].map(match => match[1]);
+if (!entryAssets.some(path => path.endsWith('.js'))) throw new Error('首页缺少 JS 入口');
+const seen = new Set(entryAssets);
+const pending = [...seen];
+while (pending.length) {
+  await Promise.all(pending.splice(0, 8).map(async path => {
+    const js = path.endsWith('.js');
+    const body = await read(path, js ? /javascript/ : /text\/css/);
+    if (!js) return;
+    for (const [, file] of body.matchAll(/(?:\.\/|assets\/)([A-Za-z0-9_][A-Za-z0-9_.-]*-[A-Za-z0-9_-]{8}\.(?:js|css))(?=["'`])/g)) {
+      const dependency = '/assets/' + file;
+      if (!seen.has(dependency)) {
+        seen.add(dependency);
+        pending.push(dependency);
+      }
+    }
+  }));
+}
+console.log(`已验证当前版本 ${seen.size} 个 JS/CSS 分包。`);
+
+if (previous && existsSync('/app/server/core/release-assets.ts')) {
+  const retained = readdirSync('/app/data/.release-assets/' + previous)
+    .filter((file) => /\.(?:js|css)$/.test(file));
+  if (!retained.some(file => file.endsWith('.js'))) throw new Error('上一版缺少保留的 JS 分包');
+  for (let offset = 0; offset < retained.length; offset += 8) {
+    await Promise.all(retained.slice(offset, offset + 8).map(file =>
+      read('/assets/' + file, file.endsWith('.js') ? /javascript/ : /text\/css/)
+    ));
+  }
+  console.log(`已验证上一版本 ${retained.length} 个 JS/CSS 分包。`);
+}
+CHECK_ASSETS
+then
+  echo '错误：静态分包检查失败；保留镜像及成功历史。' >&2
   exit 1
 fi
 docker compose --env-file .env.compose ps
@@ -190,6 +274,14 @@ trap 'rm -f -- "$temporary"' EXIT
 printf '%s\n' "$target" > "$temporary"
 if [ -n "$previous" ]; then printf '%s\n' "$previous" >> "$temporary"; fi
 mv -- "$temporary" "$history"
+
+# 只清理本脚本生成的旧分包版本目录。
+for snapshot in "$assets_root/"*; do
+  version="${snapshot##*/}"
+  if [ -d "$snapshot" ] && [ ! -L "$snapshot" ] && [[ "$version" =~ ^[0-9a-fA-F]+$ ]] && [ -n "$previous_tag" ] && [ "$version" != "$previous_tag" ]; then
+    rm -rf -- "$snapshot" || echo "提示：未能清理静态分包 $version" >&2
+  fi
+done
 
 cleanup_images() {
   if [ -z "$previous" ]; then

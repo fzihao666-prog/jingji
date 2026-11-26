@@ -50,7 +50,7 @@ describe('Nginx 发布示例', () => {
     const fallback = source.indexOf('res.sendFile(resolve(distPath');
     expect(assets).toBeGreaterThanOrEqual(0);
     expect(fallback).toBeGreaterThan(assets);
-    expect(source.slice(assets, fallback)).toMatch(/fallthrough:\s*false/);
+    expect(source.slice(assets, fallback)).toContain('previousReleaseAssets(');
   });
 
   it('静态资源缓存策略：带内容 hash 的资产长缓存，普通资产缓存 30 天，HTML 每次重新验证', () => {
