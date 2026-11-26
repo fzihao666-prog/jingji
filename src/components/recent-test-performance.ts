@@ -1,3 +1,5 @@
+import type { DailyTrainingRecord } from '../../shared/daily-training';
+import { dailyTrainingSeries } from './daily-training-chart';
 import { normalizeProject } from '../../shared/projects';
 import { OVERVIEW_METRIC_MAP } from '../../shared/overview-metrics';
 import { SLALOM_CHAMPION_METRICS } from '../../shared/slalom-model';
@@ -149,4 +151,25 @@ export function testSeriesSummary(series: TestSeries) {
           latest.value
         );
   return { latest, best, difference: previous ? latest.value - previous.value : null };
+}
+
+// 接口按课次倒序返回；同日多条保留原课次顺序，不合并实测值。
+export function recentDailyTrainingSeries(rows: DailyTrainingRecord[]): TestSeries[] {
+  const projects = [...new Set(rows.map(row => row.projectName))];
+  return projects.flatMap(project => dailyTrainingSeries(
+    rows.filter(row => row.projectName === project).slice().reverse()
+  ).map(metric => {
+    const key = JSON.stringify([project, metric.key]);
+    return {
+      key,
+      label: `${project} · ${metric.label}`,
+      unit: metric.unit,
+      direction: 'neutral' as const,
+      comparable: true,
+      points: metric.points.filter(point => Number.isFinite(point.value)).map((point, index) => ({
+        ...point, id: `${key}:${index}`, order: index, comparisonKey: key,
+      })),
+    };
+  })).filter(series => series.points.length > 0)
+    .sort((a, b) => b.points.at(-1)!.date.localeCompare(a.points.at(-1)!.date) || a.label.localeCompare(b.label, 'zh-CN'));
 }

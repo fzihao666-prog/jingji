@@ -8,7 +8,7 @@ import './CustomTestTrendCard.css';
 
 type Scope = { project: Project; teamId: number | null; from: string; to: string };
 
-function useDailyTraining({ project, teamId, from, to }: Scope, athleteId?: number) {
+export function useDailyTraining({ project, teamId, from, to }: Scope, athleteId?: number) {
   const [retry, setRetry] = useState(0);
   const [result, setResult] = useState<{ key: string; data?: DailyTrainingData; error?: string }>();
   const key = JSON.stringify([project, teamId, from, to, athleteId, retry]);

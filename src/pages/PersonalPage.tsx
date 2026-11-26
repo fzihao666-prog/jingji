@@ -866,16 +866,11 @@ export function PersonalPage(props: Props) {
               <DeferredProfileContent label="近期测试表现">
                 <RecentTestPerformance
                   key={testScope}
-                  tests={recentStrength.key === testScope ? recentStrength.tests : []}
-                  events={specialTestScope === testScope ? specialTests : []}
                   athleteId={selectedAthlete.id}
-                  project={selectedAthlete.project}
+                  project={props.project}
+                  teamId={selectedAthlete.teamId ?? null}
                   from={props.from}
                   to={props.to}
-                  strengthLoading={recentStrength.key !== testScope || recentStrength.loading}
-                  specialLoading={specialTestScope !== testScope || dossierDataLoading}
-                  strengthError={recentStrength.key === testScope && recentStrength.error}
-                  specialError={specialTestScope === testScope && specialTestError}
                 />
               </DeferredProfileContent>
               <AppCard

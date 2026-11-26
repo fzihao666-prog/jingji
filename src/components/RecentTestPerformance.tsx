@@ -2,8 +2,9 @@ import type { EChartsOption } from 'echarts';
 import { EChart } from './EChart';
 import { useId, useState } from 'react';
 import { AppCard, ContentState } from './PageLayout';
-import { recentTestSeries, testSeriesSummary } from './recent-test-performance';
-import type { SpecialTestEvent, StrengthTest } from '../types';
+import { recentDailyTrainingSeries, testSeriesSummary } from './recent-test-performance';
+import type { Project } from '../types';
+import { useDailyTraining } from './DailyTrainingCards';
 import './RecentTestPerformance.css';
 
 const number = new Intl.NumberFormat('zh-CN', { maximumFractionDigits: 2 });
@@ -14,30 +15,19 @@ function displayResult(value: number, unit: string) {
 }
 
 export function RecentTestPerformance(props: {
-  tests: StrengthTest[];
-  events: SpecialTestEvent[];
   athleteId: number;
-  project: string;
+  project: Project;
+  teamId: number | null;
   from: string;
   to: string;
-  strengthLoading: boolean;
-  specialLoading: boolean;
-  strengthError: boolean;
-  specialError: boolean;
 }) {
   const id = useId();
   const [selectedKey, setSelectedKey] = useState('');
-  const series = recentTestSeries(
-    props.tests,
-    props.events,
-    props.athleteId,
-    props.project,
-    props.from,
-    props.to
-  );
+  const { result, retry } = useDailyTraining(props, props.athleteId);
+  const series = recentDailyTrainingSeries(result?.data?.rows ?? []);
   const selected = series.find((item) => item.key === selectedKey) ?? series[0];
   const summary = selected ? testSeriesSummary(selected) : null;
-  const loading = props.strengthLoading || props.specialLoading;
+  const loading = props.teamId !== null && !result;
   const points = selected?.points ?? [];
   const chartPoints = points.slice(-8);
   const labels = chartPoints.map(
@@ -89,24 +79,23 @@ export function RecentTestPerformance(props: {
         </div>
       </header>
       <p className="recent-test-description">
-        所选周期内的体能与专项测试原始成绩，按同一指标和测试条件分别展示。
+        展示所选周期内已导入的每日训练数据，按训练项目、指标、单位和记录条件分别展示。
       </p>
-      {loading && <p role="status">正在读取测试成绩…</p>}
-      {props.strengthError && (
-        <ContentState kind="error" title="体能测试读取失败" description="请刷新页面重试。" />
-      )}
-      {props.specialError && (
-        <ContentState kind="error" title="专项测试读取失败" description="请刷新页面重试。" />
-      )}
+      {loading && <p role="status">正在读取每日训练数据…</p>}
+      {result?.error && <ContentState kind="error" title="训练数据读取失败" description={result.error}
+        action={<button type="button" className="secondary-button" onClick={retry}>重试</button>} />}
+      {props.teamId === null && <ContentState kind="empty" title="该运动员尚未关联队伍" />}
+      {result?.data && !series.length && <ContentState kind="empty" title="所选周期内暂无导入的每日训练数据" description="导入每日训练模板或调整日期范围后查看。" />}
+      {result?.data?.truncated && <p className="recent-test-description">仅展示最近 1,000 条明细，可缩短日期范围。</p>}
       <>
-          <label htmlFor={id}>测试指标</label>
+          <label htmlFor={id}>训练项目 / 指标</label>
           <select
             id={id}
             value={selected?.key ?? ''}
             disabled={!selected}
             onChange={(event) => setSelectedKey(event.target.value)}
           >
-            {!selected && <option value="">暂无可选测试指标</option>}
+            {!selected && <option value="">暂无可选训练指标</option>}
             {series.map((item) => (
               <option key={item.key} value={item.key}>
                 {item.label}
@@ -119,12 +108,12 @@ export function RecentTestPerformance(props: {
               <dd>{summary && selected ? displayResult(summary.latest.value, selected.unit) : '—'}</dd>
             </div>
             <div>
-              <dt>测试日期</dt>
+              <dt>记录日期</dt>
               <dd>{summary?.latest.date ?? '—'}</dd>
             </div>
             <div>
-              <dt>周期最好</dt>
-              <dd>{!summary || !selected || summary.best === null ? '—' : displayResult(summary.best, selected.unit)}</dd>
+              <dt>记录次数</dt>
+              <dd>{selected ? number.format(points.length) : '—'}</dd>
             </div>
             <div>
               <dt>较上次差值</dt>
@@ -142,7 +131,7 @@ export function RecentTestPerformance(props: {
             {!selected.comparable
               ? '测试条件未完整记录，保留原始成绩，暂不比较。'
               : selected.direction === 'neutral'
-                ? '该指标不判定高低优劣；差值为本次减上次。'
+                ? '训练指标不统一判定优劣；差值为同一口径下本次减上次。'
                 : `${selected.direction === 'lower_better' ? '数值越低表现越好' : '数值越高表现越好'}；差值为本次减上次。`}
           </p>
           {points.length > 8 && (
@@ -157,7 +146,7 @@ export function RecentTestPerformance(props: {
             <table>
               <thead>
                 <tr>
-                  <th>测试日期 / 次序</th>
+                  <th>记录日期 / 次序</th>
                   <th>成绩</th>
                 </tr>
               </thead>
@@ -175,7 +164,7 @@ export function RecentTestPerformance(props: {
           </details>
         </>
       ) : (
-        <EChart option={option} label="测试成绩参考坐标，暂无可展示的成绩" isPlaceholder={!loading && !props.strengthError && !props.specialError} />
+        <EChart option={option} label="测试成绩参考坐标，暂无可展示的成绩" isPlaceholder={!loading && !result?.error} />
       )}
     </AppCard>
   );
