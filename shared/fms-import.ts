@@ -16,13 +16,13 @@ export function fmsInputFields(code: string, label: string) {
   return fields;
 }
 
-export function fmsFinalScore(code: string, observation: FmsObservation): number | null {
+export function fmsFinalScore(code: string, observation: FmsObservation, optionalClearing = false): number | null {
   if (code === 'fms_shoulder_mobility') {
     if (observation.clearingLeft === '阳性' || observation.clearingRight === '阳性') return 0;
-    if (observation.clearingLeft !== '阴性' || observation.clearingRight !== '阴性') return null;
+    if (!optionalClearing && (observation.clearingLeft !== '阴性' || observation.clearingRight !== '阴性')) return null;
   } else if (clearing.has(code)) {
     if (observation.clearing === '阳性') return 0;
-    if (observation.clearing !== '阴性') return null;
+    if (!optionalClearing && observation.clearing !== '阴性') return null;
   }
   if (!bilateral.has(code)) return observation.score ?? null;
   return observation.left === undefined || observation.right === undefined ? null : Math.min(observation.left, observation.right);

@@ -121,7 +121,9 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
         expect(rows[2][0]).toBe('示例：示例甲');
         expect(rows[3][0]).toBe('模板虚构队员');
         expect(workbook.Sheets[ATHLETE_PROFILE_SHEET].A1.c?.[0].t).toBeTruthy();
-        expect(workbook.Sheets[BASIC_SCREENING_SHEET].T4.f).toBeTruthy();
+        const screeningSheet = workbook.Sheets[BASIC_SCREENING_SHEET];
+        expect(screeningSheet.C4.f).toContain('COUNTBLANK(D4:J4)+COUNTBLANK(M4:O4)+COUNTBLANK(Q4:R4)>0');
+        expect(screeningSheet.T4.f).toBeTruthy();
       }
     }
     const empty = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind: 'profile', project: 'ROWING', team: addedTeams[1] })}`, { headers: { authorization: `Bearer ${token}` } });
@@ -688,6 +690,21 @@ it('基础数据工作簿一次导入档案、测试与FMS，复用同批人员�
   expect(screening.find(row => row[0] === '整表虚构新人')?.[10]).toBe('有痛');
   expect(exportedBook.Sheets[BASIC_TEST_SHEET].A1.c?.[0].t).toBeTruthy();
 
+});
+
+it('基础数据 FMS 仅填写动作评分也能导入七项并计算总分', async () => {
+  const batch = await upload([[...BASIC_DOWNLOAD_SHEETS[2][1]],
+    ['虚构队员', '2026-10-25', '', 2, 2, 3, 2, 2, 3, 2, '', '', 3, 2, 2, '', 2, 2, ''],
+  ], BASIC_SCREENING_SHEET, 'HTTP甲队');
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items.map(item => item.valueNum)).toEqual([2, 2, 2, 2, 2, 2, 2]);
+
+  const result = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  const scores = db.prepare(`SELECT COUNT(*) AS count, SUM(m.value_num) AS total
+    FROM test_measurements m JOIN test_sessions s ON s.id=m.test_session_id
+    WHERE s.athlete_id=701 AND s.test_date='2026-10-25' AND s.test_type='FMS测试'`).get();
+  expect(scores).toEqual({ count: 7, total: 14 });
 });
 
 it('正式入口关闭旧测试模板下载，基础数据模板可继续下载', async () => {

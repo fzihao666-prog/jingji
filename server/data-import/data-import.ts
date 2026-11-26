@@ -1760,7 +1760,7 @@ function parseStandardSheet(
         });
         const hasDetail = (detailed || basicScreening) && entries.some(entry => text(entry.raw));
         const fms = hasDetail ? readFmsObservation(entries) : undefined;
-        const valueNum = fms ? fmsFinalScore(metricCode, fms.observation) : readNumber(headerName);
+        const valueNum = fms ? fmsFinalScore(metricCode, fms.observation, basicScreening) : readNumber(headerName);
         if (valueNum === null && !fms) return [];
         const metricMessages = [...messages];
         if (valueNum !== null && (!Number.isInteger(valueNum) || valueNum < 0 || valueNum > 3))
@@ -3640,7 +3640,7 @@ function validateImportItem(
     if (payload.fmsObservation && item.testType === 'FMS测试') {
       if (Array.isArray(payload.fmsErrors))
         for (const error of payload.fmsErrors) messages.push(`错误：${item.metricLabel} ${error}`);
-      item.valueNum = fmsFinalScore(item.metricCode, payload.fmsObservation as FmsObservation);
+      item.valueNum = fmsFinalScore(item.metricCode, payload.fmsObservation as FmsObservation, item.sourceSheet === BASIC_SCREENING_SHEET);
       if (item.valueNum === null) messages.push('警告：仅保存已填写的FMS原始结果，该项暂不计分');
     } else if (item.valueNum === null || !Number.isFinite(item.valueNum))
       messages.push(templateColumn
@@ -4528,7 +4528,7 @@ function upsertTestItem(
       VALUES(?,?,?,?) ON CONFLICT(test_session_id,metric_code) DO UPDATE SET
       observation_json=excluded.observation_json,data_import_batch_id=excluded.data_import_batch_id`)
       .run(session.id, item.metricCode, JSON.stringify(observation), batchId);
-    const score = fmsFinalScore(item.metricCode, observation);
+    const score = fmsFinalScore(item.metricCode, observation, item.sourceSheet === BASIC_SCREENING_SHEET);
     if (score === null) return { entityId: session.id, sessionId: session.id, skipped: !changed, created: !stored, filled: 0, overwritten: Number(Boolean(stored && changed)) };
     const result = upsertTestItem({ ...item, valueNum: score, payload: { ...item.payload, fmsObservation: undefined } }, batchId, userId, batchPolicy);
     if (changed) result.skipped = false;
