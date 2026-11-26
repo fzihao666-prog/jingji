@@ -18,6 +18,7 @@ import { COMPACT_ATHLETE_SHEET, COMPACT_ATHLETE_COLUMNS, compactAthleteHeaderKey
 import { trainingContext } from '../../shared/training-context.ts';
 import { ACTIVITY_LABELS, SPORT_RULES_VERSION } from '../../shared/sport-rules.ts';
 import { DAILY_TRAINING_SHEET } from '../../shared/daily-training.ts';
+import { projectNameResolver, readProjectNameMappings } from '../core/project-name-mappings.ts';
 import { findTestSession, saveTestSession } from '../core/test-session-store.ts';
 import { normalizeProject } from '../../shared/projects.ts';
 import { importStatistics, type ImportStatistics } from '../../shared/import-statistics.js';
@@ -198,6 +199,7 @@ export type DataImportItemView = Omit<ParsedImportItem, 'payload'> & {
   athleteTeam: string;
   committedEntityType: string;
   committedEntityId: number | null;
+  standardProjectName?: string;
 };
 
 type Matrix = unknown[][];
@@ -1233,6 +1235,7 @@ function parseStandardSheet(
   const basicCatalog = basicTest ? testTemplateCatalog(db, project) : [];
   const basicProjects = basicTest ? basicTestProjects(db, project, basicCatalog) : [];
   const metricCatalog = sheet === '测试指标' && !basicTest ? readImportMetricDefinitions(project) : [];
+  const resolveTestProject = sheet === '测试指标' ? projectNameResolver(readProjectNameMappings(db)) : undefined;
   const year = workbookYear(filename);
   const nameColumn = header.columns.get(normalizedText('姓名')) ?? 0;
   const identityHeaders = new Set(['系统运动员编号', '运动员编号', '编号', '姓名', '所属队伍', '运动项目', '日期', '测量日期', '测试日期', '发生日期', '评估日期']);
@@ -1831,6 +1834,7 @@ function parseStandardSheet(
       const rawCode = standardText(row, header.columns, '指标代码');
       // 明确指定测试类型的逐项记录保留原指标代码，兼容历史事实，不改写其归属。
       const projectName = standardText(row, header.columns, '指标名称');
+      const resolvedProjectName = resolveTestProject?.('test', projectName) ?? projectName;
       const field = basicTest ? standardText(row, header.columns, '指标') : '';
       const protocol = basicTest ? standardText(row, header.columns, '测试协议', '协议') : standardText(row, header.columns, '协议');
       const providedUnit = standardText(row, header.columns, '单位');
@@ -1843,7 +1847,11 @@ function parseStandardSheet(
       const selected = rawCode ? undefined : (() => {
         if (basicTest && !grouped.length && field && normalizedText(field) !== normalizedText(projectName))
           return { error: '错误：测试项目与指标未在系统中配对，请在「指标与标准」中新建项目与指标，或核对名称。' };
-        if (!basicTest) return resolveImportMetricName(projectName, providedUnit, metricCatalog);
+        if (!basicTest) {
+          const original = resolveImportMetricName(projectName, providedUnit, metricCatalog);
+          return resolvedProjectName !== projectName && original.error?.startsWith('错误：未识别测试项目')
+            ? resolveImportMetricName(resolvedProjectName, providedUnit, metricCatalog) : original;
+        }
         const preferred = resolveImportMetricName(lookupName, providedUnit, sameProtocol);
         return preferred.metric ? preferred : resolveImportMetricName(lookupName, providedUnit, options);
       })();
@@ -1902,6 +1910,8 @@ function parseStandardSheet(
           side,
           payload: {
             ...base.payload,
+            // 保留原称，名称映射可以在导入后继续调整。
+            ...(basicTest || resolvedProjectName !== projectName ? { rawTestProjectName: projectName } : {}),
             metricSelectionError: selectionError || '',
             ...(newTestField ? { newTestField, protocolVersion: protocol ? '' : '1' } : {}),
             protocol: protocol || configuredProtocol,
@@ -3403,6 +3413,16 @@ export function getDataImportBatch(
   delete summary.accessTeams;
   if (duplicateFile) summary.duplicateFile = true;
   let items = itemRows.map(mapItem);
+  const resolve = projectNameResolver(readProjectNameMappings(db));
+  for (const item of items) {
+    const kind = item.itemType === 'test_measurement' ? 'test'
+      : item.itemType === 'training_session' || item.itemType === 'training_set' ? 'training' : undefined;
+    if (!kind) continue;
+    const original = kind === 'test' ? text(item.payload.rawTestProjectName) || item.metricLabel
+      : item.exerciseName || text(item.payload.content) || item.sessionLabel;
+    const standard = resolve(kind, original);
+    if (standard !== original) item.standardProjectName = standard;
+  }
   if (reviewTargetId !== undefined) {
     const target = items.find(item => item.id === reviewTargetId);
     if (!target) throw new Error('未找到该组导入记录');

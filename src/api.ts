@@ -1,6 +1,7 @@
 import type { TrainingRecordTemplate } from '../shared/training-record-template';
 import type { DailyTrainingData } from '../shared/daily-training';
 import type { CustomTestTrend } from '../shared/custom-test-trend';
+import type { ProjectNameCatalog, ProjectNameMapping } from '../shared/project-name-catalog';
 import type { TestTemplateGroup, TestTemplateGroupInput, TestTemplateMetric, TestTemplateMetricInput, TestTemplatePreview } from '../shared/test-template';
 import type { BasicSubmissionReport, SubmissionReport } from '../shared/submission-report';
 import type { TeamTrainingColumnMapping, TeamTrainingImportResult, TeamTrainingPeriod, TeamTrainingBoard } from '../shared/team-training-stats';
@@ -939,13 +940,14 @@ export const api = {
     });
   },
   customTestTrend(athleteId: number, query: {
-    project: Project; teamId: number; from: string; to: string; metricCode?: string; protocol?: string; version?: number;
+    project: Project; teamId: number; from: string; to: string; metricCode?: string; protocol?: string; version?: number; seriesKey?: string;
   }, signal?: AbortSignal) {
-    const { project, teamId, from, to, metricCode, protocol, version } = query;
+    const { project, teamId, from, to, metricCode, protocol, version, seriesKey } = query;
     const params = new URLSearchParams({ project, teamId: String(teamId), from, to });
     if (metricCode) params.set('metricCode', metricCode);
     if (protocol !== undefined) params.set('protocol', protocol);
     if (version !== undefined) params.set('version', String(version));
+    if (seriesKey) params.set('seriesKey', seriesKey);
     return request<CustomTestTrend>(`/api/athletes/${athleteId}/custom-test-trend?${params}`, { signal });
   },
   collectionProgress(project: Project, team: string, from: string, to: string, signal?: AbortSignal, expected?: { athleteIds: number[]; metricCodes: string[] }) {
@@ -1017,18 +1019,13 @@ export const api = {
       `/api/data-import/metrics?${new URLSearchParams({ project })}`
     );
   },
-  async dataManagementImportedTests() {
-    return request<{ items: Array<{
-      testType: string;
-      projectName: string;
-      metricCode: string;
-      metricName: string;
-      unit: string;
-      protocol: string;
-      protocolVersion: string;
-      measurementCount: number;
-      latestTestDate: string;
-    }> }>('/api/data-management/imported-tests');
+  projectNameCatalog(signal?: AbortSignal) {
+    return request<ProjectNameCatalog>('/api/data-management/project-catalog', { signal });
+  },
+  saveProjectNameMapping(rule: ProjectNameMapping & { previousSource?: string }) {
+    return request<{ message: string }>('/api/data-management/project-catalog/mappings', {
+      method: 'PUT', body: JSON.stringify(rule),
+    });
   },
   async dataManagementMetrics() {
     return request<{

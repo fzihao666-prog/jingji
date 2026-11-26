@@ -1419,6 +1419,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
                             {metrics.map(metric => <option key={metric.code} value={metric.code}>{metric.label}{metric.unit ? `（${metric.unit}）` : ''}</option>)}
                           </select>
                         </label> : <strong>{item.exerciseName || item.metricLabel || '—'}</strong>}
+                        {item.standardProjectName && <small>标准项目：{item.standardProjectName}</small>}
                         {item.itemType === 'training_set' && importSessionChoices(item).length > 1 && <label>
                           <span>所属课次</span>
                           <select aria-label={`${item.exerciseName}所属课次`} disabled={Boolean(busy) || batch.status !== 'reviewing'}

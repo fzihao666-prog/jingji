@@ -1,5 +1,6 @@
 import { formatAthleteNumber } from '../../shared/athlete-number.ts';
 import { registerTestTemplateRoutes } from './test-template-routes.ts';
+import { registerProjectCatalogRoutes } from './project-catalog-routes.ts';
 import { buildBasicProfileWorkbook } from './basic-profile-workbook.ts';
 import { ImportRequestError } from './data-import-revision.ts';
 import { readImportMetricDefinitions } from './import-metric-catalog.ts';
@@ -182,6 +183,7 @@ function authorizeImportBatch(user: AuthUser, batchId: string) {
 
 export function registerDataImportRoutes(app: Express, legacyTestFixtures = false) {
   registerTestTemplateRoutes(app, legacyTestFixtures);
+  registerProjectCatalogRoutes(app);
   app.get('/api/data-import/metrics', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
     const project = normalizeProject(cleanString(req.query.project));
     if (!project) return res.status(400).json({ message: '请选择有效的运动项目。' });

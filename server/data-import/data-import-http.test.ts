@@ -1948,3 +1948,96 @@ it('每日训练视图纳入历史训练课次和力量组次，并遵守导入�
   const after = await read() as { rows: Array<{ projectName: string }> };
   expect(after.rows.map(row => row.projectName)).not.toContain('历史耐力训练');
 });
+
+it('项目改名保存映射，历史训练和测试按标准名展示并保留同日两条实测', async () => {
+  const headers = { authorization: `Bearer ${token}` };
+  const training = await upload([
+    ['姓名', '日期', '课次序号', '训练内容', '时长分钟'],
+    ['虚构队员', '2025-10-13', 1, '目录训练', 12],
+    ['虚构队员', '2025-10-13', 2, '目录训练（kg）', 15],
+  ], '训练课次', 'HTTP甲队');
+  expect((await request(`/batches/${training.id}/commit`, 'POST', {})).status).toBe(200);
+  const testHeaders = [...BASIC_DOWNLOAD_SHEETS[1][1]];
+  const tests = await upload([
+    testHeaders,
+    ['虚构队员', '2025-10-13', '目录冲刺', '用时', '站立式', 5.1, 's'],
+    ['虚构队员', '2025-10-13', '目录冲刺（秒）', '用时', '站立式', 5.3, 's'],
+    ['虚构队员', '2025-10-13', '目录冲刺（秒）', '用时', '行进式', 4.3, 's'],
+    ['虚构队员', '2025-10-13', '目录冲刺（分钟）', '用时', '站立式', 0.1, 'min'],
+    ['虚构队员', '2025-10-13', '目录冲刺测试', '用时', '站立式', 9, 's'],
+  ], BASIC_TEST_SHEET, 'HTTP甲队');
+  expect((await request(`/batches/${tests.id}/commit`, 'POST', {})).status).toBe(200);
+  const catalogPath = `${base}/api/data-management/project-catalog`;
+  const save = (kind: string, source: string, target: string) => fetch(`${catalogPath}/mappings`, {
+    method: 'PUT',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({ kind, source, target }),
+  });
+  expect((await save('training', '目录训练（kg）', '目录训练')).status).toBe(403);
+  db.exec("UPDATE users SET role='TD' WHERE id=701");
+  try {
+    expect((await save('training', '目录训练（kg）', '目录训练')).status).toBe(200);
+    expect((await save('test', '目录冲刺（秒）', '目录冲刺')).status).toBe(200);
+    expect((await save('test', '目录冲刺（分钟）', '目录冲刺')).status).toBe(200);
+    expect((await save('training', '目录训练', '目录训练（kg）')).status).toBe(409);
+    const catalog = await fetch(catalogPath, { headers });
+    expect(catalog.status).toBe(200);
+    expect(await catalog.json()).toMatchObject({
+      projects: expect.arrayContaining([
+        expect.objectContaining({ kind: 'training', name: '目录训练', recordCount: 2 }),
+        expect.objectContaining({ kind: 'test', name: '目录冲刺', recordCount: 4 }),
+        expect.objectContaining({ kind: 'test', name: '目录冲刺测试', recordCount: 1 }),
+        expect.objectContaining({ kind: 'training', name: '力量训练' }),
+      ]),
+      mappings: expect.arrayContaining([{ kind: 'test', source: '目录冲刺（秒）', target: '目录冲刺' }]),
+    });
+    const teamId = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get()?.id;
+    const scope = new URLSearchParams({ project: 'ROWING', teamId: String(teamId), from: '2025-10-13', to: '2025-10-13' });
+    const trend = await fetch(`${base}/api/athletes/701/custom-test-trend?${scope}`, { headers });
+    const data = await trend.json() as import('../../shared/custom-test-trend.ts').CustomTestTrend;
+    expect(data.metrics.filter(item => item.projectName === '目录冲刺')).toHaveLength(3);
+    const series = data.metrics.find(item => item.projectName === '目录冲刺' && item.protocol === '站立式' && item.unit === 's')!;
+    scope.set('seriesKey', series.seriesKey!);
+    const points = await fetch(`${base}/api/athletes/701/custom-test-trend?${scope}`, { headers });
+    expect(await points.json()).toMatchObject({ points: [
+      { date: '2025-10-13', value: 5.1 }, { date: '2025-10-13', value: 5.3 },
+    ] });
+    scope.delete('seriesKey');
+    scope.set('athleteId', '701');
+    const daily = await fetch(`${base}/api/daily-training?${scope}`, { headers });
+    expect(await daily.json()).toMatchObject({ rows: [
+      expect.objectContaining({ projectName: '目录训练', durationMin: 15 }),
+      expect.objectContaining({ projectName: '目录训练', durationMin: 12 }),
+    ] });
+    expect(db.prepare("SELECT content FROM training_sessions WHERE content='目录训练（kg）'").get()).toBeDefined();
+
+    const later = await upload([
+      testHeaders,
+      ['虚构队员', '2025-10-14', '目录冲刺（秒）', '用时', '站立式', 5.2, 's'],
+    ], BASIC_TEST_SHEET, 'HTTP甲队');
+    expect(later.errorCount).toBe(0);
+    expect(later.items[0]).toMatchObject({ standardProjectName: '目录冲刺' });
+    expect((await request(`/batches/${later.id}/commit`, 'POST', {})).status).toBe(200);
+    scope.delete('athleteId');
+    scope.set('seriesKey', series.seriesKey!);
+    scope.set('to', '2025-10-14');
+    const laterSeries = await fetch(`${base}/api/athletes/701/custom-test-trend?${scope}`, { headers });
+    expect(await laterSeries.json()).toMatchObject({ points: expect.arrayContaining([{ date: '2025-10-14', value: 5.2 }]) });
+    expect((await save('test', '目录冲刺（秒）', '目录冲刺修订')).status).toBe(200);
+    scope.delete('seriesKey');
+    const changedSeries = await fetch(`${base}/api/athletes/701/custom-test-trend?${scope}`, { headers });
+    expect(await changedSeries.json()).toMatchObject({ metrics: expect.arrayContaining([
+      expect.objectContaining({ projectName: '目录冲刺修订', protocol: '站立式' }),
+      expect.objectContaining({ projectName: '目录冲刺', protocol: '站立式' }),
+    ]) });
+
+    expect((await save('training', '目录训练（kg）', '目录训练修订')).status).toBe(200);
+    scope.set('athleteId', '701');
+    const refreshed = await fetch(`${base}/api/daily-training?${scope}`, { headers });
+    expect(await refreshed.json()).toMatchObject({ rows: [
+      expect.objectContaining({ projectName: '目录训练修订' }), expect.objectContaining({ projectName: '目录训练' }),
+    ] });
+  } finally {
+    db.exec("UPDATE users SET role='SCC' WHERE id=701");
+  }
+});

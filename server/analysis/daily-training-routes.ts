@@ -5,6 +5,7 @@ import { isProject } from '../../shared/projects.ts';
 import { requireAuth } from '../core/auth.ts';
 import { isValidIsoDate } from '../core/date-utils.ts';
 import { db } from '../core/db.ts';
+import { projectNameResolver, readProjectNameMappings } from '../core/project-name-mappings.ts';
 import { accessibleAthleteIds, accountPermissions, permissionsAllowProjectTeam } from '../core/permissions.ts';
 
 const id = z.string().regex(/^[1-9]\d{0,15}$/).transform(Number).refine(Number.isSafeInteger);
@@ -112,6 +113,9 @@ export function registerDailyTrainingRoutes(app: Express) {
     SELECT id, setGroupId, date, projectName, durationMin, distanceKm, rpe, intensity, intensityUnit, repetitions, sets, pre
     FROM entries ORDER BY date DESC, sessionOrder DESC, id DESC, setGroupId LIMIT ?
     `).all(...bindings, recordLimit + 1, DAILY_TRAINING_SHEET, recordLimit + 1) as DailyTrainingData['rows'];
-    return res.json({ athletes: [], rows: rows.slice(0, recordLimit), truncated: rows.length > recordLimit } satisfies DailyTrainingData);
+    const resolve = projectNameResolver(readProjectNameMappings(db));
+    return res.json({ athletes: [], rows: rows.slice(0, recordLimit).map(row => ({
+      ...row, projectName: resolve('training', row.projectName),
+    })), truncated: rows.length > recordLimit } satisfies DailyTrainingData);
   });
 }
