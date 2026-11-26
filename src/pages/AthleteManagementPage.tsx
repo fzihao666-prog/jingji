@@ -51,7 +51,6 @@ type AthleteForm = {
   bestResult: string;
   eventItem: string;
   representativeUnit: string;
-  trainingYears: string;
   bestResultEvent: string;
   bestResultDate: string;
   nativePlace: string;
@@ -93,7 +92,6 @@ const blankForm: AthleteForm = {
   bestResult: '',
   eventItem: '',
   representativeUnit: '',
-  trainingYears: '',
   bestResultEvent: '',
   bestResultDate: '',
   nativePlace: '',
@@ -485,7 +483,6 @@ export function AthleteManagementPage({
         ...form,
         project: selectedFormTeam.project,
         team: selectedFormTeam.name,
-        trainingYears: form.trainingYears === '' ? null : Number(form.trainingYears),
       };
       let athleteId = editingAthlete?.id || 0;
       if (editingAthlete) await api.updateAthlete(editingAthlete.id, {
@@ -1349,85 +1346,6 @@ export function AthleteManagementPage({
                           onChange={(event) => setForm({ ...form, birthDate: event.target.value })}
                         />
                       </label>
-                      <label>
-                        <span>民族</span>
-                        <input
-                          value={form.ethnicity}
-                          onChange={(event) => setForm({ ...form, ethnicity: event.target.value })}
-                        />
-                      </label>
-                      <label>
-                        <span>手机号</span>
-                        <input
-                          value={form.phone}
-                          onChange={(event) => setForm({ ...form, phone: event.target.value })}
-                          maxLength={11}
-                        />
-                      </label>
-                      <label>
-                        <span>血型</span>
-                        <input
-                          value={form.bloodType}
-                          onChange={(event) => setForm({ ...form, bloodType: event.target.value })}
-                          placeholder="例如 A型"
-                        />
-                      </label>
-                      <label>
-                        <span>学历</span>
-                        <input
-                          value={form.education}
-                          onChange={(event) => setForm({ ...form, education: event.target.value })}
-                        />
-                      </label>
-                      <label>
-                        <span>紧急联系人</span>
-                        <input
-                          value={form.emergencyContact}
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              emergencyContact: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label>
-                        <span>紧急联系电话</span>
-                        <input
-                          value={form.emergencyPhone}
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              emergencyPhone: event.target.value,
-                            })
-                          }
-                          maxLength={11}
-                        />
-                      </label>
-                      <label>
-                        <span>籍贯</span>
-                        <input
-                          value={form.nativePlace}
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              nativePlace: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
-                      <label className="wide">
-                        <span>家庭住址</span>
-                        <input
-                          value={form.homeAddress}
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              homeAddress: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
                     </div>
                   </section>
                   <section>
@@ -1561,10 +1479,6 @@ export function AthleteManagementPage({
                       <label>
                         <span>代表单位</span>
                         <input maxLength={120} value={form.representativeUnit} onChange={event => setForm({ ...form, representativeUnit: event.target.value })} />
-                      </label>
-                      <label>
-                        <span>填报训练年限（年）</span>
-                        <input type="number" min={0} step="any" value={form.trainingYears} onChange={event => setForm({ ...form, trainingYears: event.target.value })} />
                       </label>
                       <label>
                         <span>开始运动日期</span>

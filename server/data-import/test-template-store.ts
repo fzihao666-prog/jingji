@@ -1,12 +1,13 @@
 import type { FmsInputKey } from '../../shared/fms-import.ts';
 import type { TrainingRecordTemplate } from '../../shared/training-record-template.ts';
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 import type { TestTemplateGroup, TestTemplateGroupInput, TestTemplateMetric, TestTemplateMetricInput } from '../../shared/test-template.ts';
 import { FMS_TEST_PROTOCOL, FMS_TEMPLATE_METRICS } from '../../shared/data-import-template.ts';
 import { COMPACT_ATHLETE_COLUMNS } from '../../shared/compact-athlete-template.ts';
 import { normalizeProject } from '../../shared/projects.ts';
 import { metricAppliesToProject } from '../../shared/import-metric-choice.ts';
+import type { ProjectCatalogField } from '../../shared/project-name-catalog.ts';
 
 export class TestTemplateInputError extends Error {}
 
@@ -181,13 +182,45 @@ function groupNameKey(value: string) {
   return value.normalize('NFKC').replace(/\s+/g, '').toLowerCase();
 }
 
-function insertTestTemplateMetric(db: DatabaseSync, project: string, input: TestTemplateMetricInput, previous?: TestTemplateMetric) {
-  const code = `custom_${randomUUID().replaceAll('-', '')}`;
+function insertTestTemplateMetric(db: DatabaseSync, project: string, input: TestTemplateMetricInput, previous?: TestTemplateMetric,
+  code = `custom_${randomUUID().replaceAll('-', '')}`, version = previous ? Number(previous.protocolVersion || 1) + 1 : 1) {
   db.prepare(`INSERT INTO metric_definitions (code,label,domain,unit,direction,frequency,projects_json)
     VALUES (?,?,'fitness',?,?,'phase',?)`).run(code, input.label, input.unit, input.direction, JSON.stringify([project]));
   db.prepare(`INSERT INTO test_template_metric_details (metric_code,value_kind,protocol,version,previous_code)
-    VALUES (?,?,?,?,?)`).run(code, input.valueKind, input.protocol, previous ? Number(previous.protocolVersion || 1) + 1 : 1, previous?.code ?? null);
+    VALUES (?,?,?,?,?)`).run(code, input.valueKind, input.protocol, version, previous?.code ?? null);
   return code;
+}
+
+export type ImportedTestField = { projectName: string; field: string; definition?: ProjectCatalogField };
+
+export function importedTestFieldCode(project: string, { projectName, field, definition }: ImportedTestField) {
+  const key = JSON.stringify([project, groupNameKey(projectName), groupNameKey(field),
+    ...(definition ? [definition.name, definition.unit, definition.protocol, definition.version] : [])]);
+  return `custom_import_${createHash('sha256').update(key).digest('hex').slice(0, 32)}`;
+}
+
+// 调用方在成绩导入事务内写入项目与指标。
+export function saveImportedTestField(db: DatabaseSync, project: string, input: ImportedTestField, unit: string) {
+  const { projectName, field, definition } = input;
+  const code = importedTestFieldCode(project, input);
+  const key = groupNameKey(projectName);
+  const group = db.prepare('SELECT name,codes_json AS codes FROM test_template_groups WHERE project=? AND name_key=?')
+    .get(project, key) as { name: string; codes: string } | undefined;
+  const codes = group ? JSON.parse(group.codes) as string[] : [];
+  const existing = db.prepare('SELECT unit,active FROM metric_definitions WHERE code=?').get(code) as { unit: string; active: number } | undefined;
+  if (existing) {
+    if (existing.active && existing.unit === unit && codes.includes(code)) return;
+    throw new TestTemplateInputError(`「${projectName}」的「${field}」单位或状态已变更，请核对后重新上传。`);
+  }
+  if (group && !definition && !codes.some(entry => entry.startsWith('custom_import_')))
+    throw new TestTemplateInputError(`「${projectName}」已在系统中建立，请重新上传以匹配已有指标。`);
+  insertTestTemplateMetric(db, project, {
+    label: `${group?.name ?? projectName}${definition?.name ?? field}`, unit, protocol: definition?.protocol ?? '', direction: 'neutral',
+    valueKind: unit === 's' ? 'time' : 'number',
+  }, undefined, code, Number(definition?.version || 1));
+  db.prepare(`INSERT INTO test_template_groups (project,name_key,name,codes_json) VALUES (?,?,?,?)
+    ON CONFLICT(project,name_key) DO UPDATE SET codes_json=excluded.codes_json`)
+    .run(project, key, projectName, JSON.stringify([...codes, code]));
 }
 
 export function createTestTemplateGroup(db: DatabaseSync, project: string, input: TestTemplateGroupInput) {

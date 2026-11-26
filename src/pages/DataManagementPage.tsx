@@ -1,12 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Database, Plus, RefreshCw, Tags } from 'lucide-react';
 import { api } from '../api';
-import type { User } from '../types';
+import type { Project, ProjectTeam, User } from '../types';
+import { ProjectNameCatalogPanel } from '../components/ProjectNameCatalogPanel';
+import { TestTemplatePanel } from '../components/TestTemplatePanel';
 import { PageContainer, PageHeader } from '../components/PageLayout';
 import './DataImportPage.css';
 
-type Props = { user: User };
-type ImportedTest = Awaited<ReturnType<typeof api.dataManagementImportedTests>>['items'][number];
+type Props = { user: User; project: Project; teamId?: number | null };
 type Metric = {
   code: string;
   label: string;
@@ -24,7 +25,25 @@ type Alias = {
   side: string;
 };
 
-export function DataManagementPage({ user }: Props) {
+export function DataManagementPage({ user, project, teamId }: Props) {
+  const [teams, setTeams] = useState<ProjectTeam[]>([]);
+  const [selectedTeam, setSelectedTeam] = useState('');
+  const [teamsLoaded, setTeamsLoaded] = useState(false);
+  const [teamError, setTeamError] = useState('');
+  const [templateOpen, setTemplateOpen] = useState(false);
+  const templateButton = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    void api.adminTeams().then(({ teams }) => {
+      if (cancelled) return;
+      const scoped = teams.filter(team => team.project === project);
+      setTeams(scoped);
+      setSelectedTeam(scoped.find(team => team.id === teamId)?.name ?? scoped[0]?.name ?? '');
+      setTeamsLoaded(true);
+    }, () => { if (!cancelled) setTeamError('队伍读取失败，请刷新页面重试。'); });
+    return () => { cancelled = true; };
+  }, [project, teamId]);
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [aliases, setAliases] = useState<Alias[]>([]);
   const [standards, setStandards] = useState<Awaited<
@@ -39,14 +58,7 @@ export function DataManagementPage({ user }: Props) {
   const [domain, setDomain] = useState('');
   const [status, setStatus] = useState('');
   const [loading, setLoading] = useState(true);
-  const [importedTests, setImportedTests] = useState<ImportedTest[]>([]);
-  const [importedTestSearch, setImportedTestSearch] = useState('');
-  const [importedTestStatus, setImportedTestStatus] = useState<'loading' | 'ready' | 'error'>('loading');
-  const testKeyword = importedTestSearch.trim().toLowerCase();
-  const visibleImportedTests = importedTests.filter((item) =>
-    [item.testType, item.metricName, item.metricCode, item.unit, item.protocol, item.protocolVersion]
-      .some((value) => value.toLowerCase().includes(testKeyword))
-  );
+  const [catalogRevision, setCatalogRevision] = useState(0);
   const editable = user.role === 'TD' || user.role === 'DMD';
   const domains = [...new Set(metrics.map((item) => item.domain))].sort();
   const keyword = search.trim().toLowerCase();
@@ -75,20 +87,6 @@ export function DataManagementPage({ user }: Props) {
       .catch((error) => setMessage(error instanceof Error ? error.message : '指标与标准加载失败。'))
       .finally(() => setLoading(false));
   }, []);
-  useEffect(() => {
-    let ignore = false;
-    setImportedTests([]);
-    setImportedTestStatus('loading');
-    api.dataManagementImportedTests().then(
-      ({ items }) => {
-        if (ignore) return;
-        setImportedTests(items);
-        setImportedTestStatus('ready');
-      },
-      () => { if (!ignore) setImportedTestStatus('error'); }
-    );
-    return () => { ignore = true; };
-  }, [user.id]);
   const saveAlias = async () => {
     try {
       await api.saveMetricAlias({ alias, metricCode });
@@ -133,6 +131,34 @@ export function DataManagementPage({ user }: Props) {
         title="指标与标准"
       />
       <p className="data-import-message" role="status">{message}</p>
+      <section className="data-import-upload-card" aria-labelledby="test-project-management-title">
+        <div className="data-import-card-heading">
+          <Tags size={20} aria-hidden="true" />
+          <div>
+            <h2 id="test-project-management-title">测试项目、指标与模板</h2>
+            <span>在此创建测试项目、添加指标或配置本队测试成绩模板。</span>
+          </div>
+        </div>
+        {teams.length > 1 && <label className="data-import-template-team">
+          选择队伍
+          <select value={selectedTeam} onChange={event => setSelectedTeam(event.target.value)}>
+            {teams.map(team => <option key={team.id} value={team.name}>{team.name}</option>)}
+          </select>
+        </label>}
+        <button ref={templateButton} type="button" className="primary-button" aria-haspopup="dialog"
+          disabled={!selectedTeam} onClick={() => setTemplateOpen(true)}>
+          <Tags size={16} aria-hidden="true" />
+          管理测试项目与模板
+        </button>
+        {teamError ? <p role="alert">{teamError}</p> : teamsLoaded && !teams.length && <p>当前项目没有可管理的队伍。</p>}
+      </section>
+      {templateOpen && selectedTeam && <TestTemplatePanel key={selectedTeam} project={project} team={selectedTeam}
+        onClose={() => {
+          setTemplateOpen(false);
+          setCatalogRevision(value => value + 1);
+          requestAnimationFrame(() => templateButton.current?.focus());
+          void load().catch(() => setMessage('指标字典刷新失败，请重试。'));
+        }} />}
       <div className="data-import-grid">
         <section className="data-import-upload-card">
           <div className="data-import-card-heading">
@@ -207,51 +233,7 @@ export function DataManagementPage({ user }: Props) {
           </button>
         </section>
       </div>
-      <section className="data-import-review" aria-labelledby="imported-test-catalog-title">
-        <div className="data-import-review-head">
-          <div>
-            <h2 id="imported-test-catalog-title">已导入的测试项目与指标</h2>
-            <p role="status">
-              {importedTestStatus === 'ready' && `显示 ${visibleImportedTests.length} / ${importedTests.length} 项已入库指标`}
-            </p>
-          </div>
-          <label className="data-import-date">
-            <span>搜索导入指标</span>
-            <input type="search" value={importedTestSearch}
-              onChange={(event) => setImportedTestSearch(event.target.value)}
-              placeholder="测试名称、指标编码或协议" />
-          </label>
-        </div>
-        <div className="data-import-table-wrap" role="region" aria-label="已导入的测试项目与指标表" tabIndex={0}>
-          <table className="data-import-table">
-            <thead>
-              <tr>
-                {['测试项目', '指标名称与编码', '单位', '测试协议', '入库测量数', '最近测试日期']
-                  .map((label) => <th key={label} scope="col">{label}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {visibleImportedTests.map((item) => (
-                <tr key={JSON.stringify([item.testType, item.metricCode, item.unit, item.protocol, item.protocolVersion])}>
-                  <td>{item.testType}</td>
-                  <td>{item.metricName}<br /><small>{item.metricCode}</small></td>
-                  <td>{item.unit || '—'}</td>
-                  <td>{[item.protocol, item.protocolVersion].filter(Boolean).join(' · ') || '—'}</td>
-                  <td>{item.measurementCount}</td>
-                  <td>{item.latestTestDate}</td>
-                </tr>
-              ))}
-              {!visibleImportedTests.length && (
-                <tr><td colSpan={6}>
-                  {importedTestStatus === 'loading' ? '正在读取导入指标…'
-                    : importedTestStatus === 'error' ? '导入指标读取失败，请刷新页面重试。'
-                    : importedTests.length ? '没有匹配的导入指标。' : '当前权限范围内暂无已入库的导入指标。'}
-                </td></tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+      <ProjectNameCatalogPanel key={user.id} editable={editable} revision={catalogRevision} />
       <section className="data-import-review">
         <div className="data-import-review-head">
           <div>

@@ -1,7 +1,8 @@
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import { expect, it } from 'vitest';
-import { AthleteProfileOverview, BirthplaceMapOverview } from './AthleteProfileCharts';
+import { AthleteProfileOverview } from './AthleteProfileCharts';
+import { BirthplaceMapOverview } from './BirthplaceMapOverview';
 
 it.each([false, true])('缺少生源数据时地图提示不占用独立布局列（个人视图：%s）', individual => {
   const html = renderToStaticMarkup(createElement(BirthplaceMapOverview, { profiles: [], individual }));

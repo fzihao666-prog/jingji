@@ -1,5 +1,7 @@
 import type { TrainingRecordTemplate } from '../shared/training-record-template';
+import type { DailyTrainingData } from '../shared/daily-training';
 import type { CustomTestTrend } from '../shared/custom-test-trend';
+import type { ProjectCatalogSettings, ProjectNameCatalog, ProjectNameMapping } from '../shared/project-name-catalog';
 import type { TestTemplateGroup, TestTemplateGroupInput, TestTemplateMetric, TestTemplateMetricInput, TestTemplatePreview } from '../shared/test-template';
 import type { BasicSubmissionReport, SubmissionReport } from '../shared/submission-report';
 import type { TeamTrainingColumnMapping, TeamTrainingImportResult, TeamTrainingPeriod, TeamTrainingBoard } from '../shared/team-training-stats';
@@ -444,7 +446,7 @@ export const api = {
     });
   },
   async me() {
-    return request<{ user: User }>('/api/me');
+    return request<{ user: User }>('/api/me', { timeoutMs: 15000 });
   },
   async changePassword(currentPassword: string, newPassword: string) {
     return request<{ message: string }>('/api/auth/change-password', {
@@ -473,8 +475,8 @@ export const api = {
       body: JSON.stringify({ name }),
     });
   },
-  async athletes() {
-    return request<{ athletes: Athlete[] }>('/api/athletes');
+  async athletes(options?: { signal?: AbortSignal; timeoutMs?: number }) {
+    return request<{ athletes: Athlete[] }>('/api/athletes', options);
   },
   async createAthlete(input: Record<string, unknown>) {
     return request<{ message: string; id: number; accountId: number | null }>(
@@ -766,9 +768,10 @@ export const api = {
       `/api/strength-training/results?athleteId=${athleteId}`
     );
   },
-  async currentProject() {
+  async currentProject(signal?: AbortSignal) {
     return request<{ project: Project | null; projects: Project[] }>(
-      '/api/preferences/current-project'
+      '/api/preferences/current-project',
+      { signal, timeoutMs: 15000 }
     );
   },
   async saveCurrentProject(project: Project) {
@@ -778,7 +781,7 @@ export const api = {
     });
   },
   async downloadDataImportTemplate(
-    kind: 'profile' | 'training' | 'test',
+    kind: 'profile' | 'training' | 'daily-training',
     project?: string,
     team?: string
   ) {
@@ -796,7 +799,8 @@ export const api = {
     const link = document.createElement('a');
     const objectUrl = URL.createObjectURL(blob);
     link.href = objectUrl;
-    link.download = kind === 'profile' ? '基础数据模板.xlsx' : `竞迹${project || ''}分用途导入模板.xlsx`;
+    link.download = kind === 'profile' ? '基础数据模板.xlsx'
+      : kind === 'daily-training' ? '每日训练模板.xlsx' : `竞迹${project || ''}分用途导入模板.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -815,26 +819,6 @@ export const api = {
     const objectUrl = URL.createObjectURL(blob);
     link.href = objectUrl;
     link.download = `竞迹导入问题清单_${filename.replace(/\.(xls|xlsx)$/i, '')}.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(objectUrl), 1500);
-  },
-  async exportUnifiedData(project: Project, basicTeam?: string) {
-    const query = new URLSearchParams({ project });
-    if (basicTeam) { query.set('format', 'basic'); query.set('team', basicTeam); }
-    const response = await fetch(`/api/data-import/export?${query}`, {
-      headers: { Authorization: `Bearer ${getToken()}` },
-    });
-    if (!response.ok) {
-      const payload = await response.json().catch(() => null);
-      throw new Error(payload?.message || '统一数据导出失败。');
-    }
-    const blob = await response.blob();
-    const link = document.createElement('a');
-    const objectUrl = URL.createObjectURL(blob);
-    link.href = objectUrl;
-    link.download = `竞迹${project}${basicTeam ? "基础数据" : "统一数据"}导出.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();
@@ -956,11 +940,14 @@ export const api = {
     });
   },
   customTestTrend(athleteId: number, query: {
-    project: Project; teamId: number; from: string; to: string; metricCode?: string;
+    project: Project; teamId: number; from: string; to: string; metricCode?: string; protocol?: string; version?: number; seriesKey?: string;
   }, signal?: AbortSignal) {
-    const { project, teamId, from, to, metricCode } = query;
+    const { project, teamId, from, to, metricCode, protocol, version, seriesKey } = query;
     const params = new URLSearchParams({ project, teamId: String(teamId), from, to });
     if (metricCode) params.set('metricCode', metricCode);
+    if (protocol !== undefined) params.set('protocol', protocol);
+    if (version !== undefined) params.set('version', String(version));
+    if (seriesKey) params.set('seriesKey', seriesKey);
     return request<CustomTestTrend>(`/api/athletes/${athleteId}/custom-test-trend?${params}`, { signal });
   },
   collectionProgress(project: Project, team: string, from: string, to: string, signal?: AbortSignal, expected?: { athleteIds: number[]; metricCodes: string[] }) {
@@ -970,6 +957,11 @@ export const api = {
       metrics: Array<{ code: string; label: string; inTemplate: boolean; measured: number; missing: Person[];
         coverage: { total: number; completed: number } | null }> }>(
       `/api/data-import/test-template/progress?${new URLSearchParams({ project, team, from, to })}`, { signal, ...(expected ? { method: 'PUT', body: JSON.stringify(expected) } : {}) });
+  },
+  dailyTraining(project: Project, teamId: number, from: string, to: string, athleteId?: number, signal?: AbortSignal) {
+    const params = new URLSearchParams({ project, teamId: String(teamId), from, to });
+    if (athleteId !== undefined) params.set('athleteId', String(athleteId));
+    return request<DailyTrainingData>(`/api/daily-training?${params}`, { signal });
   },
   customTrainingDetails(athleteId: number, project: Project, teamId: number, from: string, to: string, signal?: AbortSignal) {
     const params = new URLSearchParams({ project, teamId: String(teamId), from, to });
@@ -1022,34 +1014,23 @@ export const api = {
       `/api/data-import/test-template/config?${new URLSearchParams({ project, team })}`,
       { method: 'PUT', body: JSON.stringify(input) });
   },
-  async downloadTestTemplate(project: Project, team: string) {
-    const blob = await request<Blob>(`/api/data-import/test-template/download?${new URLSearchParams({ project, team })}`,
-      { responseType: 'xlsx' });
-    const link = document.createElement('a');
-    const url = URL.createObjectURL(blob);
-    link.href = url;
-    link.download = `竞迹${team}测试成绩模板.xlsx`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 1500);
-  },
   async dataImportMetrics(project: Project) {
     return request<{ metrics: Array<{ code: string; label: string; unit: string }> }>(
       `/api/data-import/metrics?${new URLSearchParams({ project })}`
     );
   },
-  async dataManagementImportedTests() {
-    return request<{ items: Array<{
-      testType: string;
-      metricCode: string;
-      metricName: string;
-      unit: string;
-      protocol: string;
-      protocolVersion: string;
-      measurementCount: number;
-      latestTestDate: string;
-    }> }>('/api/data-management/imported-tests');
+  projectNameCatalog(signal?: AbortSignal) {
+    return request<ProjectNameCatalog>('/api/data-management/project-catalog', { signal });
+  },
+  saveProjectCatalog(body: Omit<ProjectCatalogSettings, 'fields'> & { source: string; fields?: ProjectCatalogSettings['fields'] }) {
+    return request<{ message: string }>('/api/data-management/project-catalog/projects', {
+      method: 'PUT', body: JSON.stringify(body),
+    });
+  },
+  saveProjectNameMapping(rule: ProjectNameMapping & { previousSource?: string }) {
+    return request<{ message: string }>('/api/data-management/project-catalog/mappings', {
+      method: 'PUT', body: JSON.stringify(rule),
+    });
   },
   async dataManagementMetrics() {
     return request<{

@@ -3,7 +3,7 @@ const api = require('../../services/api');
 const { applyScopeChange, saveProjectInOrder, isPageCacheFresh, loadPage: runPageLoad } = require('../../utils/page-scope');
 const { loadWithGuard } = require('../../utils/request-guard');
 const { ageAt, todayBeijing } = require('../../utils/date');
-const { number, maskPhone, INJURY_LABELS, strengthMetricRows } = require('../../utils/format');
+const { number, INJURY_LABELS, strengthMetricRows } = require('../../utils/format');
 const { reviewDueLabel } = require('../../utils/daily-todos');
 const { projectLabel } = require('../../utils/project-label');
 const { radarGroupView, wellnessTrendsView } = require('../../utils/profile-views');
@@ -46,6 +46,17 @@ function painTrendView(trend) {
   };
 }
 
+function trainingExperience(startDate, asOfDate) {
+  if (!startDate || !asOfDate) return '--';
+  const start = new Date(`${startDate}T12:00:00`);
+  const asOf = new Date(`${asOfDate}T12:00:00`);
+  if (!Number.isFinite(start.getTime()) || !Number.isFinite(asOf.getTime()) || start > asOf) return '--';
+  let months = (asOf.getFullYear() - start.getFullYear()) * 12 + asOf.getMonth() - start.getMonth();
+  if (asOf.getDate() < start.getDate()) months -= 1;
+  const total = Math.max(0, months);
+  return total % 12 ? `${Math.floor(total / 12)}年${total % 12}个月` : `${Math.floor(total / 12)}年`;
+}
+
 function profileView(athlete, injuryRecords, overview, benchmark, period) {
   const age = ageAt(athlete.birthDate, period.to);
   const eventItem = athlete.eventItem?.trim() || athlete.currentEvent?.trim();
@@ -63,13 +74,12 @@ function profileView(athlete, injuryRecords, overview, benchmark, period) {
     ['技术等级', athlete.technicalLevel || '--'],
     ['运动员位置', athlete.athletePosition || '--'],
     ['代表单位', athlete.representativeUnit || '--'],
-    ['训练年限', athlete.trainingYears == null ? '--' : `${number(athlete.trainingYears)} 年`],
+    ['训练年限', trainingExperience(athlete.startSportDate, period.to)],
     ['训练阶段', athlete.trainingPhase || '--'],
     ['健康状态', athlete.healthStatus || '--'],
     ['最好成绩', athlete.bestResult || '--'],
     ['对应赛事', athlete.bestResultEvent || '--'],
     ['成绩日期', athlete.bestResultDate || '--'],
-    ['联系电话', athlete.phone ? maskPhone(athlete.phone) : '--']
   ].map(([label, value]) => ({ label, value })).filter(item => period.user?.role !== 'OBS' || !['健康状态', '联系电话'].includes(item.label));
   const primaryLabels = new Set(['项目', '队伍', '负责教练', '性别', '年龄', '身高', '体重', '健康状态']);
   const primaryCells = cells.filter((item) => primaryLabels.has(item.label));

@@ -43,7 +43,10 @@ beforeAll(async () => {
   otherToken = jwt.sign({ id: 702, sessionVersion: 1 }, jwtSecret);
   const app = express();
   app.use(express.json());
-  registerDataImportRoutes(app);
+  registerDataImportRoutes(app, true);
+  const currentImport = express();
+  registerDataImportRoutes(currentImport);
+  app.use('/current', currentImport);
   const { registerAthleteRoutes } = await import('../athlete/athlete-routes.ts');
   registerAthleteRoutes(app);
   const { registerAnalysisRoutes } = await import('../analysis/analysis-routes.ts');
@@ -118,7 +121,9 @@ it('模板按授权队伍预填，拒绝越权和非法范围，空队伍返回�
         expect(rows[2][0]).toBe('示例：示例甲');
         expect(rows[3][0]).toBe('模板虚构队员');
         expect(workbook.Sheets[ATHLETE_PROFILE_SHEET].A1.c?.[0].t).toBeTruthy();
-        expect(workbook.Sheets[BASIC_SCREENING_SHEET].T4.f).toBeTruthy();
+        const screeningSheet = workbook.Sheets[BASIC_SCREENING_SHEET];
+        expect(screeningSheet.C4.f).toContain('COUNTBLANK(D4:J4)+COUNTBLANK(M4:O4)+COUNTBLANK(Q4:R4)>0');
+        expect(screeningSheet.T4.f).toBeTruthy();
       }
     }
     const empty = await fetch(`${base}/api/data-import/template?${new URLSearchParams({ kind: 'profile', project: 'ROWING', team: addedTeams[1] })}`, { headers: { authorization: `Bearer ${token}` } });
@@ -687,6 +692,75 @@ it('基础数据工作簿一次导入档案、测试与FMS，复用同批人员�
 
 });
 
+it('基础数据 FMS 仅填写动作评分也能导入七项并计算总分', async () => {
+  const batch = await upload([[...BASIC_DOWNLOAD_SHEETS[2][1]],
+    ['虚构队员', '2026-10-25', '', 2, 2, 3, 2, 2, 3, 2, '', '', 3, 2, 2, '', 2, 2, ''],
+  ], BASIC_SCREENING_SHEET, 'HTTP甲队');
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items.map(item => item.valueNum)).toEqual([2, 2, 2, 2, 2, 2, 2]);
+
+  const result = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  const scores = db.prepare(`SELECT COUNT(*) AS count, SUM(m.value_num) AS total
+    FROM test_measurements m JOIN test_sessions s ON s.id=m.test_session_id
+    WHERE s.athlete_id=701 AND s.test_date='2026-10-25' AND s.test_type='FMS测试'`).get();
+  expect(scores).toEqual({ count: 7, total: 14 });
+});
+
+it('正式入口关闭旧测试模板下载，基础数据模板可继续下载', async () => {
+  const headers = { authorization: `Bearer ${token}` };
+  const scope = new URLSearchParams({ project: 'ROWING', team: 'HTTP甲队' });
+  for (const path of [`/template?kind=test&${scope}`, `/test-template/download?${scope}`]) {
+    const response = await fetch(`${base}/current/api/data-import${path}`, { headers });
+    expect(response.status).toBe(410);
+  }
+  expect((await fetch(`${base}/current/api/data-import/template?kind=profile&${scope}`, { headers })).status).toBe(200);
+});
+
+it('基础数据确认导入时自动建立项目与指标，并在已导入列表显示', async () => {
+  const name = '虚构自动建项';
+  const headers = [...BASIC_DOWNLOAD_SHEETS[1][1]];
+  const batch = await upload([headers,
+    ['虚构队员', '2026-10-27', name, '峰值功率', '标准阻力', 250, 'W'],
+    ['虚构队员', '2026-10-27', name, '持续时间', '', 60, 's'],
+    ['虚构队员', '2026-10-27', '虚构未填成绩项目', '', '', '', '次'],
+  ], BASIC_TEST_SHEET, 'HTTP甲队');
+  expect(batch.errorCount, JSON.stringify(batch.items.map(item => item.messages))).toBe(0);
+  const group = () => db.prepare('SELECT codes_json AS codes FROM test_template_groups WHERE project=? AND name=?').get('ROWING', name);
+  expect(group()).toBeUndefined();
+
+  const committed = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(committed.status, JSON.stringify(committed.body)).toBe(200);
+  expect(group()).toEqual({ codes: JSON.stringify(batch.items.map(item => item.metricCode)) });
+  const response = await fetch(`${base}/api/data-management/imported-tests`, { headers: { authorization: `Bearer ${token}` } });
+  const { items } = await response.json() as { items: Array<{ projectName: string }> };
+  expect(items.filter(item => item.projectName === name)).toEqual(expect.arrayContaining([
+    expect.objectContaining({ metricName: `${name}峰值功率`, protocol: '标准阻力', measurementCount: 1 }),
+    expect.objectContaining({ metricName: `${name}持续时间`, measurementCount: 1 }),
+  ]));
+
+  const repeat = await upload([headers,
+    ['虚构队员', '2026-10-28', name, '峰值功率', '标准阻力', 255, 'W'],
+  ], BASIC_TEST_SHEET, 'HTTP甲队');
+  expect(repeat.errorCount).toBe(0);
+  expect(repeat.items[0].metricCode).toBe(batch.items[0].metricCode);
+});
+
+it('基础数据新项目的同一指标单位冲突时回滚项目、指标和成绩', async () => {
+  const name = '虚构单位冲突自动建项';
+  const batch = await upload([[...BASIC_DOWNLOAD_SHEETS[1][1]],
+    ['虚构队员', '2026-10-27', name, '', '', 2, 'm'],
+    ['虚构队员', '2026-10-28', name, '', '', 200, 'cm'],
+  ], BASIC_TEST_SHEET, 'HTTP甲队');
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items[0].metricCode).toBe(batch.items[1].metricCode);
+  const committed = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(committed.status).toBe(400);
+  expect(db.prepare('SELECT 1 FROM test_template_groups WHERE project=? AND name=?').get('ROWING', name)).toBeUndefined();
+  expect(db.prepare('SELECT 1 FROM metric_definitions WHERE code=?').get(batch.items[0].metricCode)).toBeUndefined();
+  expect(db.prepare('SELECT 1 FROM test_measurements WHERE metric_code=?').get(batch.items[0].metricCode)).toBeUndefined();
+});
+
 it('基础数据模板可使用自行创建的测试项目、指标与协议，并分列导出', async () => {
   const created = await request('/test-template/groups?project=ROWING&team=HTTP甲队', 'POST', {
     name: '虚构划船阶梯', protocol: '标准阻力', fields: [
@@ -700,12 +774,26 @@ it('基础数据模板可使用自行创建的测试项目、指标与协议，�
   const batch = await upload([headers,
     ['虚构队员', '2026-10-27', '虚构划船阶梯', '峰值功率', '高阻力', 250, 'W'],
     ['虚构队员', '2026-10-27', '虚构划船阶梯', '持续时间', '', 60, 's'],
+    ['虚构队员', '2026-10-27', '虚构未测项目', '', '', '', '次'],
   ], BASIC_TEST_SHEET, 'HTTP甲队');
   expect(batch.errorCount, JSON.stringify(batch.items.map(item => item.messages))).toBe(0);
   expect(batch.items.map(item => item.payload.protocol)).toEqual(['高阻力', '标准阻力']);
   const committed = await request(`/batches/${batch.id}/commit`, 'POST', {});
   expect(committed.status, JSON.stringify(committed.body)).toBe(200);
 
+  const team = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get() as { id: number };
+  const query = new URLSearchParams({
+    project: 'ROWING', teamId: String(team.id), from: '2026-10-27', to: '2026-10-27',
+    protocol: '高阻力',
+  });
+  const trend = await fetch(`${base}/api/athletes/701/custom-test-trend?${query}`, { headers: { authorization: `Bearer ${token}` } });
+  expect(trend.status).toBe(200);
+  const series = await trend.json() as import('../../shared/custom-test-trend.ts').CustomTestTrend;
+  const metric = series.metrics.find(entry => entry.label === '虚构划船阶梯峰值功率');
+  expect(metric).toMatchObject({ protocol: '高阻力', version: 0 });
+  query.set('metricCode', metric!.code);
+  const selected = await fetch(`${base}/api/athletes/701/custom-test-trend?${query}`, { headers: { authorization: `Bearer ${token}` } });
+  expect(await selected.json()).toMatchObject({ points: [{ date: '2026-10-27', value: 250 }] });
   const response = await fetch(`${base}/api/data-import/export?format=basic&${new URLSearchParams({ project: 'ROWING', team: 'HTTP甲队' })}`, { headers: { authorization: `Bearer ${token}` } });
   expect(response.status).toBe(200);
   const book = XLSX.read(await response.arrayBuffer());
@@ -1765,5 +1853,265 @@ it('指标与标准按授权跨项目汇总导入指标并区分单位及协议'
     db.prepare('DELETE FROM athletes WHERE id IN (?,?)').run(hiddenAthlete.lastInsertRowid, crossAthlete.lastInsertRowid);
     db.prepare('DELETE FROM project_teams WHERE id=?').run(crossTeam.lastInsertRowid);
     db.exec("DELETE FROM user_team_permissions WHERE user_id=701 AND project='VOLLEYBALL'; DELETE FROM user_project_permissions WHERE user_id=701 AND project='VOLLEYBALL'");
+  }
+});
+
+it('每日训练可下载原模板，经统一导入后在授权项目和队伍中查看明细', async () => {
+  const headers = { authorization: `Bearer ${token}` };
+  const path = '/api/data-import/template?kind=daily-training&project=ROWING&team=';
+  expect((await fetch(`${base}${path}HTTP甲队`)).status).toBe(401);
+  expect((await fetch(`${base}${path}HTTP乙队`, { headers })).status).toBe(403);
+  const response = await fetch(`${base}${path}HTTP甲队`, { headers });
+  expect(response.status).toBe(200);
+  const buffer = await response.arrayBuffer();
+  expect(Buffer.from(buffer)).toEqual(readFileSync('public/templates/每日训练模板.xlsx'));
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const sheet = workbook.getWorksheet('每日训练')!;
+  sheet.getCell('A4').value = '虚构队员';
+  ['2025-11-26', '虚构训练动作', 42.5, 'kg', 8, 4, 15, 7].forEach((value, index) => {
+    sheet.getRow(4).getCell(index + 3).value = value;
+  });
+  sheet.getCell('A5').value = '虚构队员';
+  sheet.getCell('C5').value = '2025-11-26';
+  sheet.getCell('D5').value = '仅填写训练内容';
+  const form = new FormData();
+  form.append('file', new Blob([await workbook.xlsx.writeBuffer()]), '每日训练模板.xlsx');
+  form.append('project', 'ROWING');
+  form.append('team', 'HTTP甲队');
+  const preview = await request('/analyze', 'POST', form);
+  expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+  const batch = preview.body.batch!;
+  expect(batch.items).toHaveLength(2);
+  const result = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  const teamId = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get()?.id;
+  const query = new URLSearchParams({ project: 'ROWING', teamId: String(teamId), from: '2025-11-26', to: '2025-11-26' });
+  const details = await fetch(`${base}/api/athletes/701/custom-training-details?${query}`, { headers });
+  expect(details.status).toBe(200);
+  expect(await details.json()).toMatchObject({ rows: expect.arrayContaining([
+    { template: '每日训练', session: '虚构训练动作', field: '强度', unit: 'kg', value: 42.5 },
+    { template: '每日训练', session: '虚构训练动作', field: 'PRE', value: 7 },
+  ].map(row => expect.objectContaining(row))) });
+  const rosterResponse = await fetch(`${base}/api/daily-training?${query}`, { headers });
+  expect(rosterResponse.status).toBe(200);
+  expect(await rosterResponse.json()).toMatchObject({ athletes: expect.arrayContaining([
+    expect.objectContaining({ id: 701, recordCount: 2, trainingDays: 1, durationMin: 15 }),
+  ]) });
+  query.set('athleteId', '701');
+  const recordsResponse = await fetch(`${base}/api/daily-training?${query}`, { headers });
+  expect(recordsResponse.status).toBe(200);
+  expect(await recordsResponse.json()).toMatchObject({ rows: [
+    expect.objectContaining({ projectName: '仅填写训练内容', durationMin: null, intensity: null, pre: null }),
+    expect.objectContaining({ projectName: '虚构训练动作', date: '2025-11-26',
+      intensity: 42.5, intensityUnit: 'kg', repetitions: 8, sets: 4, durationMin: 15, pre: 7 }),
+  ] });
+  const otherTeam = db.prepare("SELECT id FROM project_teams WHERE name='HTTP乙队'").get()?.id;
+  query.set('teamId', String(otherTeam));
+  expect((await fetch(`${base}/api/daily-training?${query}`, { headers })).status).toBe(403);
+  query.delete('athleteId');
+  expect((await fetch(`${base}/api/daily-training?${query}`, { headers })).status).toBe(403);
+  expect((await fetch(`${base}/api/athletes/701/custom-training-details?${query}`, { headers })).status).toBe(403);
+});
+
+it('每日训练视图纳入历史训练课次和力量组次，并遵守导入队伍归属', async () => {
+  const legacy = await upload([
+    ['姓名', '日期', '训练内容', '时长分钟', '距离千米', 'RPE'],
+    ['虚构队员', '2025-11-22', '历史耐力训练', 36, 8.6, 6],
+  ], '训练课次');
+  expect((await request(`/batches/${legacy.id}/commit`, 'POST', {})).status).toBe(200);
+  const strength = await upload([
+    ['姓名', '日期', '课次名称', '动作', '实际次数', '实际重量kg', '组序'],
+    ['虚构队员', '2025-11-23', '历史力量课', '深蹲', 8, 0, 1],
+  ], '力量训练组次', 'HTTP甲队');
+  expect((await request(`/batches/${strength.id}/commit`, 'POST', {})).status).toBe(200);
+
+  const teamId = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get()?.id;
+  const headers = { authorization: `Bearer ${token}` };
+  const query = new URLSearchParams({ project: 'ROWING', teamId: String(teamId), from: '2025-11-22', to: '2025-11-23' });
+  const read = async () => {
+    const response = await fetch(`${base}/api/daily-training?${query}`, { headers });
+    expect(response.status).toBe(200);
+    return response.json();
+  };
+  expect(await read()).toMatchObject({ athletes: expect.arrayContaining([
+    expect.objectContaining({ id: 701, recordCount: 2, trainingDays: 2, durationMin: 36 }),
+  ]) });
+  query.set('athleteId', '701');
+  expect(await read()).toMatchObject({ rows: expect.arrayContaining([
+    expect.objectContaining({ projectName: '历史耐力训练', durationMin: 36, distanceKm: 8.6, rpe: 6, pre: null }),
+    expect.objectContaining({ projectName: '深蹲', intensity: 0, intensityUnit: 'kg', repetitions: 8, sets: 1 }),
+  ]) });
+  const otherTeam = db.prepare("SELECT id FROM project_teams WHERE name='HTTP乙队'").get()?.id;
+  db.prepare("UPDATE data_import_batches SET summary_json=json_set(summary_json,'$.teamId',?) WHERE id=?")
+    .run(Number(otherTeam), legacy.id);
+  const after = await read() as { rows: Array<{ projectName: string }> };
+  expect(after.rows.map(row => row.projectName)).not.toContain('历史耐力训练');
+});
+
+it('项目改名保存映射，历史训练和测试按标准名展示并保留同日两条实测', async () => {
+  const headers = { authorization: `Bearer ${token}` };
+  const training = await upload([
+    ['姓名', '日期', '课次序号', '训练内容', '时长分钟'],
+    ['虚构队员', '2025-10-13', 1, '目录训练', 12],
+    ['虚构队员', '2025-10-13', 2, '目录训练（kg）', 15],
+  ], '训练课次', 'HTTP甲队');
+  expect((await request(`/batches/${training.id}/commit`, 'POST', {})).status).toBe(200);
+  const testHeaders = [...BASIC_DOWNLOAD_SHEETS[1][1]];
+  const tests = await upload([
+    testHeaders,
+    ['虚构队员', '2025-10-13', '目录冲刺', '用时', '站立式', 5.1, 's'],
+    ['虚构队员', '2025-10-13', '目录冲刺（秒）', '用时', '站立式', 5.3, 's'],
+    ['虚构队员', '2025-10-13', '目录冲刺（秒）', '用时', '行进式', 4.3, 's'],
+    ['虚构队员', '2025-10-13', '目录冲刺（分钟）', '用时', '站立式', 0.1, 'min'],
+    ['虚构队员', '2025-10-13', '目录冲刺测试', '用时', '站立式', 9, 's'],
+  ], BASIC_TEST_SHEET, 'HTTP甲队');
+  expect((await request(`/batches/${tests.id}/commit`, 'POST', {})).status).toBe(200);
+  const catalogPath = `${base}/api/data-management/project-catalog`;
+  const save = (kind: string, source: string, target: string) => fetch(`${catalogPath}/mappings`, {
+    method: 'PUT',
+    headers: { ...headers, 'content-type': 'application/json' },
+    body: JSON.stringify({ kind, source, target }),
+  });
+  expect((await save('training', '目录训练（kg）', '目录训练')).status).toBe(403);
+  db.exec("UPDATE users SET role='TD' WHERE id=701");
+  try {
+    expect((await save('training', '目录训练（kg）', '目录训练')).status).toBe(200);
+    expect((await save('test', '目录冲刺（秒）', '目录冲刺')).status).toBe(200);
+    expect((await save('test', '目录冲刺（分钟）', '目录冲刺')).status).toBe(200);
+    expect((await save('training', '目录训练', '目录训练（kg）')).status).toBe(409);
+    const catalog = await fetch(catalogPath, { headers });
+    expect(catalog.status).toBe(200);
+    expect(await catalog.json()).toMatchObject({
+      projects: expect.arrayContaining([
+        expect.objectContaining({ kind: 'training', name: '目录训练', recordCount: 2 }),
+        expect.objectContaining({ kind: 'test', name: '目录冲刺', recordCount: 4 }),
+        expect.objectContaining({ kind: 'test', name: '目录冲刺测试', recordCount: 1 }),
+        expect.objectContaining({ kind: 'training', name: '力量训练' }),
+      ]),
+      mappings: expect.arrayContaining([{ kind: 'test', source: '目录冲刺（秒）', target: '目录冲刺' }]),
+    });
+    const teamId = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get()?.id;
+    const scope = new URLSearchParams({ project: 'ROWING', teamId: String(teamId), from: '2025-10-13', to: '2025-10-13' });
+    const trend = await fetch(`${base}/api/athletes/701/custom-test-trend?${scope}`, { headers });
+    const data = await trend.json() as import('../../shared/custom-test-trend.ts').CustomTestTrend;
+    expect(data.metrics.filter(item => item.projectName === '目录冲刺')).toHaveLength(3);
+    const series = data.metrics.find(item => item.projectName === '目录冲刺' && item.protocol === '站立式' && item.unit === 's')!;
+    scope.set('seriesKey', series.seriesKey!);
+    const points = await fetch(`${base}/api/athletes/701/custom-test-trend?${scope}`, { headers });
+    expect(await points.json()).toMatchObject({ points: [
+      { date: '2025-10-13', value: 5.1 }, { date: '2025-10-13', value: 5.3 },
+    ] });
+    scope.delete('seriesKey');
+    scope.set('athleteId', '701');
+    const daily = await fetch(`${base}/api/daily-training?${scope}`, { headers });
+    expect(await daily.json()).toMatchObject({ rows: [
+      expect.objectContaining({ projectName: '目录训练', durationMin: 15 }),
+      expect.objectContaining({ projectName: '目录训练', durationMin: 12 }),
+    ] });
+    expect(db.prepare("SELECT content FROM training_sessions WHERE content='目录训练（kg）'").get()).toBeDefined();
+
+    const later = await upload([
+      testHeaders,
+      ['虚构队员', '2025-10-14', '目录冲刺（秒）', '用时', '站立式', 5.2, 's'],
+    ], BASIC_TEST_SHEET, 'HTTP甲队');
+    expect(later.errorCount).toBe(0);
+    expect(later.items[0]).toMatchObject({ standardProjectName: '目录冲刺' });
+    expect((await request(`/batches/${later.id}/commit`, 'POST', {})).status).toBe(200);
+    scope.delete('athleteId');
+    scope.set('seriesKey', series.seriesKey!);
+    scope.set('to', '2025-10-14');
+    const laterSeries = await fetch(`${base}/api/athletes/701/custom-test-trend?${scope}`, { headers });
+    expect(await laterSeries.json()).toMatchObject({ points: expect.arrayContaining([{ date: '2025-10-14', value: 5.2 }]) });
+    expect((await save('test', '目录冲刺（秒）', '目录冲刺修订')).status).toBe(200);
+    scope.delete('seriesKey');
+    const changedSeries = await fetch(`${base}/api/athletes/701/custom-test-trend?${scope}`, { headers });
+    expect(await changedSeries.json()).toMatchObject({ metrics: expect.arrayContaining([
+      expect.objectContaining({ projectName: '目录冲刺修订', protocol: '站立式' }),
+      expect.objectContaining({ projectName: '目录冲刺', protocol: '站立式' }),
+    ]) });
+
+    expect((await save('training', '目录训练（kg）', '目录训练修订')).status).toBe(200);
+    scope.set('athleteId', '701');
+    const refreshed = await fetch(`${base}/api/daily-training?${scope}`, { headers });
+    expect(await refreshed.json()).toMatchObject({ rows: [
+      expect.objectContaining({ projectName: '目录训练修订' }), expect.objectContaining({ projectName: '目录训练' }),
+    ] });
+  } finally {
+    db.exec("UPDATE users SET role='SCC' WHERE id=701");
+  }
+});
+
+it('项目编辑保存指标单位、协议和版本，新导入使用新定义并保留历史实测', async () => {
+  const name = '目录编辑专项';
+  const testHeaders = [...BASIC_DOWNLOAD_SHEETS[1][1]];
+  const before = await upload([
+    testHeaders, ['虚构队员', '2025-10-16', name, '用时', '手计时', 4.5, 's'],
+  ], BASIC_TEST_SHEET, 'HTTP甲队');
+  expect((await request(`/batches/${before.id}/commit`, 'POST', {})).status).toBe(200);
+  const path = `${base}/api/data-management/project-catalog`;
+  const headers = { authorization: `Bearer ${token}`, 'content-type': 'application/json' };
+  const settings = {
+    kind: 'test', source: name, name: '目录编辑冲刺',
+    fields: [{ source: '用时', name: '冲刺用时', unit: 'ms', protocol: '光电门', version: '2' }],
+  };
+  const edit = () => fetch(`${path}/projects`, { method: 'PUT', headers, body: JSON.stringify(settings) });
+  expect((await edit()).status).toBe(403);
+  db.exec("UPDATE users SET role='TD' WHERE id=701");
+  try {
+    const saved = await edit();
+    expect(saved.status, await saved.text()).toBe(200);
+    const catalog = await fetch(path, { headers });
+    expect(await catalog.json()).toMatchObject({ settings: expect.arrayContaining([
+      { kind: settings.kind, name: settings.name, fields: settings.fields },
+    ]) });
+    const after = await upload([
+      testHeaders, ['虚构队员', '2025-10-17', name, '用时', '', 4300, ''],
+    ], BASIC_TEST_SHEET, 'HTTP甲队');
+    expect(after.errorCount, JSON.stringify(after.items.map(item => item.messages))).toBe(0);
+    expect((await request(`/batches/${after.id}/commit`, 'POST', {})).status).toBe(200);
+    expect(db.prepare(`SELECT m.unit, s.protocol, s.protocol_version AS version, m.value_num AS value
+      FROM test_measurements m JOIN test_sessions s ON s.id=m.test_session_id
+      WHERE m.data_import_batch_id IN (?,?) ORDER BY s.test_date`).all(before.id, after.id)).toEqual([
+      { unit: 's', protocol: '手计时', version: '', value: 4.5 },
+      { unit: 'ms', protocol: '光电门', version: '2', value: 4300 },
+    ]);
+  } finally {
+    db.exec("UPDATE users SET role='SCC' WHERE id=701");
+  }
+});
+
+it('每日训练项目设置提供强度单位并保留每次导入使用的协议版本', async () => {
+  const name = '目录编辑力量';
+  const headers = ['姓名', '录入检查', '训练日期', '训练内容', '强度（数值）', '强度单位', '次数', '组数', '时长（分钟）', 'PRE'];
+  const addSession = (date: string, amount: number, unit: string) =>
+    upload([headers, [], [], ['虚构队员', null, date, name, amount, unit]], '每日训练', 'HTTP甲队');
+  const before = await addSession('2025-10-18', 50, 'kg');
+  expect((await request(`/batches/${before.id}/commit`, 'POST', {})).status).toBe(200);
+  const field = { source: '强度', name: '实测重量', unit: 'kg', protocol: '杠铃盘标重', version: '3' };
+  const auth = { authorization: `Bearer ${token}` };
+  db.exec("UPDATE users SET role='TD' WHERE id=701");
+  try {
+    const save = await fetch(`${base}/api/data-management/project-catalog/projects`, {
+      method: 'PUT', headers: { ...auth, 'content-type': 'application/json' },
+      body: JSON.stringify({ kind: 'training', source: name, name, fields: [field] }),
+    });
+    expect(save.status, await save.text()).toBe(200);
+    const after = await addSession('2025-10-19', 60, '');
+    expect(after.errorCount, JSON.stringify(after.items)).toBe(0);
+    expect((await request(`/batches/${after.id}/commit`, 'POST', {})).status).toBe(200);
+    const teamId = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get()?.id;
+    const scope = new URLSearchParams({ project: 'ROWING', teamId: String(teamId), athleteId: '701',
+      from: '2025-10-18', to: '2025-10-19' });
+    const data = await fetch(`${base}/api/daily-training?${scope}`, { headers: auth });
+    expect(data.status).toBe(200);
+    const { rows } = await data.json() as import('../../shared/daily-training.ts').DailyTrainingData;
+    expect(rows).toMatchObject([
+      { projectName: name, intensity: 60, intensityUnit: 'kg', fields: [field] },
+      { projectName: name, intensity: 50, intensityUnit: 'kg' },
+    ]);
+    expect(rows[1].fields).toBeUndefined();
+  } finally {
+    db.exec("UPDATE users SET role='SCC' WHERE id=701");
   }
 });

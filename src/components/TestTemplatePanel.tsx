@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Download, Save } from 'lucide-react';
+import { Save } from 'lucide-react';
 import { TEST_TEMPLATE_IDENTITY_HEADERS, testTemplateHeaders, testTemplateInputColumns, type TestTemplateMetric, type TestTemplateMetricInput, type TestTemplatePreview } from '../../shared/test-template';
 import { api } from '../api';
 import type { Project } from '../types';
@@ -152,22 +152,14 @@ export function TestTemplatePanel({ project, team, onClose }: {
 
   const columnsChanged = Boolean(preview && (codes.length !== preview.codes.length || codes.some((code, index) => code !== preview.codes[index])));
 
-  function download() {
-    void run(async () => {
-      await api.downloadTestTemplate(project, team);
-      setStatus('测试模板已开始下载。');
-    });
-  }
-
   return (
-    <TemplateWorkspace title="测试成绩模板预览" team={team} athleteCount={preview?.athleteCount} busy={pending} onClose={onClose}
+    <TemplateWorkspace title="测试项目与指标" team={team} athleteCount={preview?.athleteCount} busy={pending} onClose={onClose}
       error={error} status={status || (!loaded ? '正在加载测试指标…' : '')}
       preview={preview && <TemplatePreviewColumns headers={testTemplateHeaders(selected)}
         fixedColumns={TEST_TEMPLATE_IDENTITY_HEADERS.length} columnGroups={testTemplateInputColumns(selected).map(column => column.metricIndex)} busy={pending} onMove={move}
         onRemove={index => void run(() => updateColumns(codes.filter((_, position) => position !== index), 'Excel 列已移除。'))} />}
       actions={preview && <>
           {projectMode ? <button type="button" className="primary-button" disabled={pending || !codes.length} onClick={() => configure('project')}><Save size={16} aria-hidden />保存项目默认</button> : <>
-            <button type="button" className="primary-button" disabled={pending || columnsChanged || !codes.length} onClick={download}><Download size={16} aria-hidden />下载 Excel</button>
             {columnsChanged && <button type="button" className="secondary-button" disabled={pending} onClick={() => configure('team')}>重试保存</button>}
           </>}
       </>}>

@@ -21,7 +21,7 @@ export function metricAppliesToProject(metric: { projects?: readonly string[] },
 export function resolveImportMetricName(name: string, unit: string, definitions: readonly ImportMetricDefinition[]): { metric?: ImportMetricDefinition; error?: string } {
   const candidates = uniqueMetrics(definitions).filter(metric => normalized(name) === normalized(metric.label) || normalized(name) === normalized(choiceName(metric)));
   const matches = unit ? candidates.filter(metric => normalized(unit) === normalized(metric.unit)) : candidates;
-  if (!matches.length) return { error: candidates.length ? '错误：测试项目的单位与所选项目不一致，请重新选择' : '错误：未识别测试项目，请从当前项目模板下拉列表选择；队内新增项目请先由管理员配置' };
+  if (!matches.length) return { error: candidates.length ? '错误：单位与系统中的测试指标不一致，请核对填写的单位' : '错误：未识别测试项目，请核对名称，或在「指标与标准」中新建测试项目' };
   if (matches.length !== 1) return { error: '错误：测试项目对应多个定义，请选择带单位的完整项目名称；仍重名时请管理员确认' };
   return { metric: matches[0] };
 }

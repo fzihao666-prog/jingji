@@ -590,7 +590,7 @@ export function LoginPage({ onLogin }: { onLogin: (token: string, user: User) =>
                 title={`${discipline.label} / ${discipline.english}`}
               >
                 <span className="olympic-sport-icon" aria-hidden="true">
-                  <img src={discipline.gif} alt="" />
+                  <img src={discipline.gif} alt="" loading="lazy" decoding="async" fetchPriority="low" />
                 </span>
 
                 <span>{discipline.label}</span>

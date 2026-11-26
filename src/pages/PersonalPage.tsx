@@ -1,4 +1,3 @@
-import { formatAthleteNumber, matchesAthleteNumber } from '../../shared/athlete-number';
 import type { EChartsOption } from 'echarts';
 import { CalendarRange, Save, Search } from 'lucide-react';
 import {
@@ -13,11 +12,13 @@ import {
   type FormEvent,
   type ReactNode,
 } from 'react';
+import { formatAthleteNumber, matchesAthleteNumber } from '../../shared/athlete-number';
 import type { ProfilePhysiologyRecord } from '../../shared/profile-physiology';
 import { projectLabel } from '../../shared/projects';
 import { trainingPeriodSummary } from '../../shared/training-period-summary';
 import { api } from '../api';
 import { EnodeTrends } from '../components/EnodeTrends';
+import { DailyTrainingPersonalCard } from '../components/DailyTrainingCards';
 import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
 import { sortTrendRows, TREND_CONNECTS_NULLS } from '../components/trend-connection';
@@ -196,9 +197,14 @@ export function PersonalPage(props: Props) {
   );
   const filteredAthletes = useMemo(() => {
     const query = athleteQuery.trim().toLocaleLowerCase();
-    return visibleAthletes.filter((athlete) =>
-      !query || matchesAthleteNumber(athlete.id, query) || athlete.name.toLocaleLowerCase().includes(query)
-    ).sort((left, right) => left.id - right.id);
+    return visibleAthletes
+      .filter(
+        (athlete) =>
+          !query ||
+          matchesAthleteNumber(athlete.id, query) ||
+          athlete.name.toLocaleLowerCase().includes(query)
+      )
+      .sort((left, right) => left.id - right.id);
   }, [athleteQuery, visibleAthletes]);
   const selectedAthlete = useMemo(
     () =>
@@ -490,7 +496,7 @@ export function PersonalPage(props: Props) {
   const rangeAnalysis = useMemo(() => trainingPeriodSummary(selectedRecords), [selectedRecords]);
   const athleteLocation = selectedAthlete
     ? [selectedAthlete.province, selectedAthlete.city, selectedAthlete.county]
-        .filter(Boolean)
+        .filter((value) => value && value !== '未设置')
         .join('')
     : '';
   const dossierGroups = selectedAthlete
@@ -507,12 +513,13 @@ export function PersonalPage(props: Props) {
             },
             { label: '所属队伍', value: selectedAthlete.team },
             { label: '代表单位', value: selectedAthlete.representativeUnit },
-            { label: '负责教练', value: selectedAthlete.coaches || selectedAthlete.headCoaches || '—' },
+            {
+              label: '负责教练',
+              value: selectedAthlete.coaches || selectedAthlete.headCoaches || '—',
+            },
             {
               label: '训练年限',
-              value: selectedAthlete.trainingYears == null
-                ? trainingExperience(selectedAthlete.startSportDate, props.to)
-                : `${selectedAthlete.trainingYears} 年`,
+              value: trainingExperience(selectedAthlete.startSportDate, props.to),
             },
             { label: '技术等级', value: selectedAthlete.technicalLevel },
             {
@@ -527,7 +534,9 @@ export function PersonalPage(props: Props) {
               value: athletePositionValue(selectedAthlete.athletePosition),
             },
             { label: '运动员状态', value: selectedAthlete.athleteStatus },
-            ...(props.user.role === 'OBS' ? [] : [{ label: '健康状态', value: selectedAthlete.healthStatus }]),
+            ...(props.user.role === 'OBS'
+              ? []
+              : [{ label: '健康状态', value: selectedAthlete.healthStatus }]),
             {
               label: '身高 / 体重',
               value:
@@ -542,9 +551,7 @@ export function PersonalPage(props: Props) {
                   ? selectedAthlete.gender
                   : `${ageAtDate(selectedAthlete.birthDate, props.to)} 岁 / ${selectedAthlete.gender || '未填写'}`,
             },
-            ...(props.user.role === 'OBS' ? [] : [
-              { label: '籍贯', value: selectedAthlete.nativePlace },
-            ]),
+            ...(props.user.role === 'OBS' ? [] : []),
             { label: '专项特长', value: selectedAthlete.specialties },
           ] satisfies ProfileDetail[],
         },
@@ -659,7 +666,8 @@ export function PersonalPage(props: Props) {
             <option value="">选择运动员</option>
             {filteredAthletes.map((athlete) => (
               <option key={athlete.id} value={athlete.id}>
-                {athlete.name} · {athlete.team} · 编号 {athlete.athleteNumber || formatAthleteNumber(athlete.id)}
+                {athlete.name} · {athlete.team} · 编号{' '}
+                {athlete.athleteNumber || formatAthleteNumber(athlete.id)}
               </option>
             ))}
           </select>
@@ -717,9 +725,13 @@ export function PersonalPage(props: Props) {
                   {projectLabel(selectedAthlete.project)} · {selectedAthlete.team}
                 </span>
                 <h2>{selectedAthlete.name}</h2>
-                <p>运动员编号 {selectedAthlete.athleteNumber || formatAthleteNumber(selectedAthlete.id)}</p>
                 <p>
-                  {props.user.role !== 'OBS' && <>{athleteLocation || '地区待补充'} · </>}{selectedAthlete.coaches || '未绑定教练'}
+                  运动员编号{' '}
+                  {selectedAthlete.athleteNumber || formatAthleteNumber(selectedAthlete.id)}
+                </p>
+                <p>
+                  {props.user.role !== 'OBS' && <>{athleteLocation || '地区待补充'} · </>}
+                  {selectedAthlete.coaches || '未绑定教练'}
                 </p>
                 {canEditOwnPosition && (
                   <form className="personal-position-editor" onSubmit={savePosition}>
@@ -762,13 +774,6 @@ export function PersonalPage(props: Props) {
                   </strong>
                 </article>
                 <article>
-                  <span>专项距离</span>
-                  <strong>
-                    {formatNumber(rangeAnalysis.totalDistanceKm, 1)}
-                    <small>km</small>
-                  </strong>
-                </article>
-                <article>
                   <span>训练课次</span>
                   <strong>
                     {rangeAnalysis.sessions}
@@ -799,6 +804,12 @@ export function PersonalPage(props: Props) {
                 </section>
               ))}
             </section>
+          </section>
+
+          <section className="personal-profile-section" aria-label="个人每日训练">
+            <DailyTrainingPersonalCard key={`${props.project}:${selectedAthlete.id}`}
+              project={props.project} teamId={selectedAthlete.teamId ?? null}
+              from={props.from} to={props.to} athleteId={selectedAthlete.id} />
           </section>
 
           <section className="personal-profile-section personal-test-section" aria-label="测试模块">
@@ -952,7 +963,13 @@ export function PersonalPage(props: Props) {
               to={props.to}
               kind="wellness"
             />
-            {props.user.role !== 'OBS' && <InjuryRecoveryModule athlete={selectedAthlete} user={props.user} asOfDate={props.to} />}
+            {props.user.role !== 'OBS' && (
+              <InjuryRecoveryModule
+                athlete={selectedAthlete}
+                user={props.user}
+                asOfDate={props.to}
+              />
+            )}
             <StrengthProfileModule
               key={selectedAthlete.id}
               athlete={selectedAthlete}
@@ -973,7 +990,11 @@ export function PersonalPage(props: Props) {
           </ProfileSection>
           <ProfileSection
             title="训练记录"
-            subtitle={props.user.role === 'OBS' ? '训练课次与 RPE 趋势。' : '公共课次填写，按实际活动显示专项字段。'}
+            subtitle={
+              props.user.role === 'OBS'
+                ? '训练课次与 RPE 趋势。'
+                : '公共课次填写，按实际活动显示专项字段。'
+            }
           >
             <EnodeTrends
               key={`enode-rpe:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`}
@@ -983,7 +1004,8 @@ export function PersonalPage(props: Props) {
               to={props.to}
               kind="sessionRpe"
             />
-            {(props.user.role === 'ATL' || ['SCC', 'REG', 'TD', 'DMD'].includes(props.user.role)) && (
+            {(props.user.role === 'ATL' ||
+              ['SCC', 'REG', 'TD', 'DMD'].includes(props.user.role)) && (
               <>
                 {props.user.role !== 'ATL' && (
                   <ProjectFactVerification

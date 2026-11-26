@@ -314,6 +314,7 @@ export type DataImportItem = {
   testType: string;
   metricCode: string;
   metricLabel: string;
+  standardProjectName?: string;
   side: 'left' | 'right' | 'bilateral' | 'center';
   valueNum: number | null;
   unit: string;

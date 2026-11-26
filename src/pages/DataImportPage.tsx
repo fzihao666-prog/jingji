@@ -1,7 +1,5 @@
 import { formatAthleteNumber } from '../../shared/athlete-number';
-import { TrainingRecordTemplatePanel } from '../components/TrainingRecordTemplatePanel';
 import { CollectionProgress } from '../components/CollectionProgress';
-import { TestTemplatePanel } from '../components/TestTemplatePanel';
 import { TeamTrainingImport } from '../components/TeamTrainingImport';
 import { TeamPlanImport } from '../components/TeamPlanImport';
 import { EnodeImport } from '../components/EnodeImport';
@@ -91,7 +89,7 @@ type AthleteCorrection = {
   confirmed?: boolean;
 };
 
-type TemplateKind = 'profile' | 'training' | 'test';
+type TemplateKind = 'profile' | 'training' | 'daily-training';
 
 const ITEM_LABELS: Record<DataImportItem['itemType'], string> = {
   athlete_profile: '运动员档案',
@@ -142,16 +140,12 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [templateTeam, setTemplateTeam] = useState('');
-  const [testTemplateOpen, setTestTemplateOpen] = useState(false);
-  const [trainingTemplateOpen, setTrainingTemplateOpen] = useState(false);
-  const trainingTemplateButton = useRef<HTMLButtonElement>(null);
-  const testTemplateButton = useRef<HTMLButtonElement>(null);
   const [templateTeamsProject, setTemplateTeamsProject] = useState<Project | null>(null);
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [batch, setBatch] = useState<DataImportBatch | null>(null);
   const [batches, setBatches] = useState<DataImportBatchSummary[]>([]);
   const [busy, setBusy] = useState<
-    'analyze' | 'save' | 'commit' | 'load' | 'template' | 'export' | 'discard' | 'cleanup' | 'errors' | ''
+    'analyze' | 'save' | 'commit' | 'load' | 'template' | 'discard' | 'cleanup' | 'errors' | ''
   >('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
@@ -352,23 +346,9 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
     setMessage('');
     try {
       await api.downloadDataImportTemplate(kind, project, templateTeam || undefined);
-      setMessage('分用途模板已开始下载（含已有人员预填）。');
+      setMessage(kind === 'daily-training' ? '每日训练模板已开始下载。' : '分用途模板已开始下载（含已有人员预填）。');
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '模板下载失败。');
-    } finally {
-      setBusy('');
-    }
-  };
-
-  const exportUnifiedData = async (basicTeam?: string) => {
-    setBusy('export');
-    setError('');
-    setMessage('');
-    try {
-      await api.exportUnifiedData(project, basicTeam);
-      setMessage(basicTeam ? '本队基础数据已开始导出。' : '当前权限范围内的运动员数据已开始导出。');
-    } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '统一数据导出失败。');
     } finally {
       setBusy('');
     }
@@ -873,7 +853,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             const located = raw.startsWith(source) ? /^([A-Z]+\d+)\s+(.+)$/.exec(raw.slice(source.length)) : null;
             const description = located?.[2] ?? raw;
             const reason = canEditSource ? description.replace(/；请修正原文件后重新上传.*$/, '') : description;
-            return <li key={message}>{located && <strong>{located[1]}　</strong>}{reason}</li>;
+            return <li key={message}>{located && <strong>{located[1]}{'\u3000'}</strong>}{reason}</li>;
           })}
         </ul>}
         {batch?.status === 'reviewing' && item.quality === 'error' && <ImportSourceRowEditor
@@ -958,7 +938,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
         </label>
       </section>
       <section className="data-import-template-panel" aria-labelledby="data-import-template-title">
-        <h2 id="data-import-template-title">模板下载与数据导出</h2>
+        <h2 id="data-import-template-title">模板下载</h2>
         <div className="data-import-hero-actions">
           <button
             type="button"
@@ -988,90 +968,17 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             type="button"
             className="data-import-template"
             disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
-            onClick={() => downloadTemplate('test')}
+            onClick={() => downloadTemplate('daily-training')}
           >
-            <Download size={19} aria-hidden />
+            <Download size={16} aria-hidden />
             <div>
-              <strong>测试成绩模板</strong>
-              <span>使用现有测试字段填写成绩</span>
-            </div>
-          </button>
-          <button
-            type="button"
-            className="data-import-template"
-            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
-            onClick={() => void exportUnifiedData(templateTeam)}
-          >
-            <Database size={19} aria-hidden="true" />
-            <div>
-              <strong>导出本队基础数据</strong>
-              <span>使用基础数据模板，保留注释和示例</span>
-            </div>
-          </button>
-          <button
-            type="button"
-            className="data-import-template"
-            disabled={Boolean(busy)}
-            onClick={() => void exportUnifiedData()}
-          >
-            <Database size={19} />
-            <div>
-              <strong>导出统一数据</strong>
-              <span>导出当前项目及权限范围内已入库数据</span>
-            </div>
-          </button>
-        </div>
-      </section>
-      <section className="data-import-template-panel" aria-labelledby="data-import-custom-template-title">
-        <h2 id="data-import-custom-template-title">自定义模板</h2>
-        <div className="data-import-hero-actions">
-          <button
-            type="button"
-            className="data-import-template"
-            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
-            ref={trainingTemplateButton}
-            aria-haspopup="dialog"
-            onClick={() => setTrainingTemplateOpen(true)}
-          >
-            <Download size={19} aria-hidden />
-            <div>
-              <strong>自定义训练记录模板</strong>
-              <span>选择字段并预览，一堂课可填多行</span>
-            </div>
-          </button>
-          <button
-            type="button"
-            className="data-import-template"
-            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
-            ref={testTemplateButton}
-            aria-haspopup="dialog"
-            onClick={() => setTestTemplateOpen(true)}
-          >
-            <Download size={19} aria-hidden />
-            <div>
-              <strong>自定义测试成绩模板</strong>
-              <span>新建测试项目，也可用于基础数据模板</span>
+              <strong>每日训练模板</strong>
+              <span>训练内容、强度、次数、组数、时长与 PRE</span>
             </div>
           </button>
         </div>
       </section>
       {selectedTeam && <CollectionProgress key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name} lastCommit={batch?.status === 'committed' ? batch.id : undefined} />}
-      {trainingTemplateOpen && selectedTeam && (
-        <TrainingRecordTemplatePanel key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name}
-          onClose={() => {
-            setTrainingTemplateOpen(false);
-            requestAnimationFrame(() => trainingTemplateButton.current?.focus());
-          }} />
-      )}
-      {testTemplateOpen && selectedTeam && (
-        <TestTemplatePanel key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name}
-          onClose={() => {
-            setTestTemplateOpen(false);
-            requestAnimationFrame(() => testTemplateButton.current?.focus());
-          }}
-        />
-      )}
-
       <div className="data-import-grid">
         <div className="data-import-sources">
           <section className="data-import-upload-card" aria-label="Excel 导入">
@@ -1079,7 +986,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
               <FileSpreadsheet size={20} />
               <div>
                 <strong>Excel 导入</strong>
-                <span>支持 XLS / XLSX，单文件不超过 80MB。缺失日期按解析当天处理</span>
+                <span>支持 XLS / XLSX，单文件不超过 80MB。每日训练须填写实际训练日期</span>
               </div>
             </div>
             <ol className="data-import-steps" aria-label="Excel 导入进度">
@@ -1512,6 +1419,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
                             {metrics.map(metric => <option key={metric.code} value={metric.code}>{metric.label}{metric.unit ? `（${metric.unit}）` : ''}</option>)}
                           </select>
                         </label> : <strong>{item.exerciseName || item.metricLabel || '—'}</strong>}
+                        {item.standardProjectName && <small>标准项目：{item.standardProjectName}</small>}
                         {item.itemType === 'training_set' && importSessionChoices(item).length > 1 && <label>
                           <span>所属课次</span>
                           <select aria-label={`${item.exerciseName}所属课次`} disabled={Boolean(busy) || batch.status !== 'reviewing'}

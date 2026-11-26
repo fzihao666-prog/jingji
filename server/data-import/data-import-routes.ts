@@ -1,5 +1,6 @@
 import { formatAthleteNumber } from '../../shared/athlete-number.ts';
 import { registerTestTemplateRoutes } from './test-template-routes.ts';
+import { registerProjectCatalogRoutes } from './project-catalog-routes.ts';
 import { buildBasicProfileWorkbook } from './basic-profile-workbook.ts';
 import { ImportRequestError } from './data-import-revision.ts';
 import { readImportMetricDefinitions } from './import-metric-catalog.ts';
@@ -180,8 +181,9 @@ function authorizeImportBatch(user: AuthUser, batchId: string) {
   return assertDataImportBatchAccess(user, batchId, dataImportCandidates(user));
 }
 
-export function registerDataImportRoutes(app: Express) {
-  registerTestTemplateRoutes(app);
+export function registerDataImportRoutes(app: Express, legacyTestFixtures = false) {
+  registerTestTemplateRoutes(app, legacyTestFixtures);
+  registerProjectCatalogRoutes(app);
   app.get('/api/data-import/metrics', requireAuth, requireRole('SCC', 'REG', 'TD', 'DMD'), (req, res) => {
     const project = normalizeProject(cleanString(req.query.project));
     if (!project) return res.status(400).json({ message: '请选择有效的运动项目。' });
@@ -197,8 +199,10 @@ export function registerDataImportRoutes(app: Express) {
     requireAuth,
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
-      const kind = cleanString(req.query.kind) as TemplateKind | 'team';
-      if (!['profile', 'training', 'test', 'team'].includes(kind))
+      const kind = cleanString(req.query.kind) as TemplateKind | 'team' | 'daily-training';
+      if (kind === 'test' && !legacyTestFixtures)
+        return res.status(410).json({ message: '请下载基础数据模板，在「体能与专项测试」填写成绩。' });
+      if (!['profile', 'training', 'test', 'team', 'daily-training'].includes(kind))
         return res.status(400).json({ message: '模板类型无效。' });
       try {
         const team = cleanString(req.query.team);
@@ -213,11 +217,11 @@ export function registerDataImportRoutes(app: Express) {
           return res.status(403).json({ message: '当前账号无权导出该项目模板。' });
         if (team && !scope.allowedTeams.has(team))
           return res.status(403).json({ message: '所选队伍不存在、已停用或不在当前授权范围内。' });
-        if (kind === 'team') {
-          const variant = projectCapability(project) ? '水上' : '通用';
-          const filename = `竞迹队伍训练统计模板（${variant}）.xlsx`;
+        if (kind === 'team' || kind === 'daily-training') {
+          const filename = kind === 'daily-training' ? '每日训练模板.xlsx'
+            : `竞迹队伍训练统计模板（${projectCapability(project) ? '水上' : '通用'}）.xlsx`;
           const templatePath = importTemplatePath(filename);
-          if (!templatePath) return res.status(404).json({ message: '队伍训练统计模板尚未部署。' });
+          if (!templatePath) return res.status(404).json({ message: `${filename}尚未部署。` });
           res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
           return res.download(templatePath, filename);
         }
@@ -572,7 +576,13 @@ export function registerDataImportRoutes(app: Express) {
     (req, res) => {
       const athleteIds = accessibleAthleteIds(req.authUser!);
       const items = athleteIds.length ? db.prepare(`
+        WITH test_projects AS (
+          SELECT g.project, c.value AS metricCode, GROUP_CONCAT(g.name, '、') AS projectName
+          FROM test_template_groups g, json_each(g.codes_json) c
+          GROUP BY g.project, c.value
+        )
         SELECT ts.test_type AS testType,
+          COALESCE(REPLACE(GROUP_CONCAT(DISTINCT tp.projectName), ',', '、'), md.label, tm.metric_code) AS projectName,
           tm.metric_code AS metricCode, COALESCE(md.label, tm.metric_code) AS metricName,
           tm.unit, ts.protocol, COALESCE(ts.protocol_version, '') AS protocolVersion,
           COUNT(*) AS measurementCount, MAX(ts.test_date) AS latestTestDate
@@ -580,6 +590,7 @@ export function registerDataImportRoutes(app: Express) {
         JOIN test_sessions ts ON ts.id = tm.test_session_id
         JOIN athletes a ON a.id = ts.athlete_id AND a.project = ts.project_code
         LEFT JOIN metric_definitions md ON md.code = tm.metric_code
+        LEFT JOIN test_projects tp ON tp.project = ts.project_code AND tp.metricCode = tm.metric_code
         WHERE ts.athlete_id IN (SELECT value FROM json_each(?))
           AND ts.project_status = 'confirmed'
           AND ts.is_demo = 0 AND tm.is_demo = 0
@@ -587,7 +598,7 @@ export function registerDataImportRoutes(app: Express) {
           AND tm.source = 'file_import'
         GROUP BY ts.test_type, tm.metric_code, tm.unit,
           ts.protocol, COALESCE(ts.protocol_version, '')
-        ORDER BY testType, metricName, metricCode, tm.unit, ts.protocol, protocolVersion
+        ORDER BY testType, projectName, metricName, metricCode, tm.unit, ts.protocol, protocolVersion
       `).all(JSON.stringify(athleteIds)) : [];
       res.setHeader('Cache-Control', 'no-store');
       res.json({ items });

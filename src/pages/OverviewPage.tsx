@@ -1,5 +1,5 @@
 import { ArrowRight } from 'lucide-react';
-import { useEffect, useMemo, useState } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type ComponentProps } from 'react';
 import type { ReactNode } from 'react';
 import { api } from '../api';
 import type {
@@ -24,7 +24,7 @@ import {
   TrainingLoadEnergyChart,
   trainingLoadCategory,
 } from '../components/TrainingAnalysisCharts';
-import { AthleteProfileOverview, BirthplaceMapOverview } from '../components/AthleteProfileCharts';
+import { AthleteProfileOverview } from '../components/AthleteProfileCharts';
 import {
   AppCard,
   ContentState,
@@ -37,6 +37,41 @@ import {
   buildPerformanceRadar,
   calculateLoadDiagnostics,
 } from '../overview-analytics';
+
+const BirthplaceMapOverview = lazy(() =>
+  import('../components/BirthplaceMapOverview').then((module) => ({ default: module.BirthplaceMapOverview }))
+);
+
+function DeferredBirthplaceMap(props: ComponentProps<typeof BirthplaceMapOverview>) {
+  const container = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(false);
+  useEffect(() => {
+    const element = container.current;
+    if (visible || !element) return;
+    if (typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return;
+    }
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) setVisible(true);
+    }, { rootMargin: '320px' });
+    observer.observe(element);
+    return () => observer.disconnect();
+  }, [visible]);
+
+  const loading = <div className="professional-chart-empty" role="status">正在加载地图…</div>;
+  return (
+    <div ref={container}>
+      {visible ? (
+        <Suspense fallback={loading}>
+          <BirthplaceMapOverview {...props} />
+        </Suspense>
+      ) : (
+        <div className="professional-chart-empty">地图在接近可见区域时加载</div>
+      )}
+    </div>
+  );
+}
 
 type Props = {
   filters?: ReactNode;
@@ -96,7 +131,7 @@ const cardMeta: Record<string, { title: string; size: CardSize }> = {
 
 export function OverviewPage(props: Props) {
   const [overview, setOverview] = useState<OverviewPayload | null>(null);
-  const [overviewLoading, setOverviewLoading] = useState(false);
+  const [overviewLoading, setOverviewLoading] = useState(true);
   const [overviewError, setOverviewError] = useState('');
   const isSelfOverview = props.user.role === 'ATL';
   const isIndividualOverview = isSelfOverview;
@@ -340,7 +375,7 @@ export function OverviewPage(props: Props) {
           title="输送单位"
           subtitle={`${scopeLabel} · 省份分布 · 运动员成绩与竞技状态`}
         />
-        <BirthplaceMapOverview profiles={athleteProfiles} individual={isIndividualOverview} asOf={props.to} />
+        <DeferredBirthplaceMap profiles={athleteProfiles} individual={isIndividualOverview} asOf={props.to} />
         <p className="analysis-method-note">
           生源地读取运动员籍贯档案，用于档案和统计；地图仅展示当前账号有权访问的运动员。
         </p>
