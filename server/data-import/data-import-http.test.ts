@@ -717,6 +717,50 @@ it('正式入口关闭旧测试模板下载，基础数据模板可继续下载'
   expect((await fetch(`${base}/current/api/data-import/template?kind=profile&${scope}`, { headers })).status).toBe(200);
 });
 
+it('基础数据确认导入时自动建立项目与指标，并在已导入列表显示', async () => {
+  const name = '虚构自动建项';
+  const headers = [...BASIC_DOWNLOAD_SHEETS[1][1]];
+  const batch = await upload([headers,
+    ['虚构队员', '2026-10-27', name, '峰值功率', '标准阻力', 250, 'W'],
+    ['虚构队员', '2026-10-27', name, '持续时间', '', 60, 's'],
+    ['虚构队员', '2026-10-27', '虚构未填成绩项目', '', '', '', '次'],
+  ], BASIC_TEST_SHEET, 'HTTP甲队');
+  expect(batch.errorCount, JSON.stringify(batch.items.map(item => item.messages))).toBe(0);
+  const group = () => db.prepare('SELECT codes_json AS codes FROM test_template_groups WHERE project=? AND name=?').get('ROWING', name);
+  expect(group()).toBeUndefined();
+
+  const committed = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(committed.status, JSON.stringify(committed.body)).toBe(200);
+  expect(group()).toEqual({ codes: JSON.stringify(batch.items.map(item => item.metricCode)) });
+  const response = await fetch(`${base}/api/data-management/imported-tests`, { headers: { authorization: `Bearer ${token}` } });
+  const { items } = await response.json() as { items: Array<{ projectName: string }> };
+  expect(items.filter(item => item.projectName === name)).toEqual(expect.arrayContaining([
+    expect.objectContaining({ metricName: `${name}峰值功率`, protocol: '标准阻力', measurementCount: 1 }),
+    expect.objectContaining({ metricName: `${name}持续时间`, measurementCount: 1 }),
+  ]));
+
+  const repeat = await upload([headers,
+    ['虚构队员', '2026-10-28', name, '峰值功率', '标准阻力', 255, 'W'],
+  ], BASIC_TEST_SHEET, 'HTTP甲队');
+  expect(repeat.errorCount).toBe(0);
+  expect(repeat.items[0].metricCode).toBe(batch.items[0].metricCode);
+});
+
+it('基础数据新项目的同一指标单位冲突时回滚项目、指标和成绩', async () => {
+  const name = '虚构单位冲突自动建项';
+  const batch = await upload([[...BASIC_DOWNLOAD_SHEETS[1][1]],
+    ['虚构队员', '2026-10-27', name, '', '', 2, 'm'],
+    ['虚构队员', '2026-10-28', name, '', '', 200, 'cm'],
+  ], BASIC_TEST_SHEET, 'HTTP甲队');
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items[0].metricCode).toBe(batch.items[1].metricCode);
+  const committed = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(committed.status).toBe(400);
+  expect(db.prepare('SELECT 1 FROM test_template_groups WHERE project=? AND name=?').get('ROWING', name)).toBeUndefined();
+  expect(db.prepare('SELECT 1 FROM metric_definitions WHERE code=?').get(batch.items[0].metricCode)).toBeUndefined();
+  expect(db.prepare('SELECT 1 FROM test_measurements WHERE metric_code=?').get(batch.items[0].metricCode)).toBeUndefined();
+});
+
 it('基础数据模板可使用自行创建的测试项目、指标与协议，并分列导出', async () => {
   const created = await request('/test-template/groups?project=ROWING&team=HTTP甲队', 'POST', {
     name: '虚构划船阶梯', protocol: '标准阻力', fields: [
@@ -727,12 +771,6 @@ it('基础数据模板可使用自行创建的测试项目、指标与协议，�
   expect(created.status, JSON.stringify(created.body)).toBe(201);
   const headers = [...BASIC_DOWNLOAD_SHEETS[1][1]];
   expect(headers.slice(2, 5)).toEqual(['测试项目', '指标', '测试协议']);
-  const unregistered = await upload([headers,
-    ['虚构队员', '2026-10-27', '虚构尚未创建项目', '', '', 0, '次'],
-  ], BASIC_TEST_SHEET, 'HTTP甲队');
-  expect(unregistered.errorCount).toBe(1);
-  expect(unregistered.items[0].messages.join(' ')).toContain('指标与标准');
-  expect(unregistered.items[0].messages.join(' ')).not.toContain('下拉列表');
   const batch = await upload([headers,
     ['虚构队员', '2026-10-27', '虚构划船阶梯', '峰值功率', '高阻力', 250, 'W'],
     ['虚构队员', '2026-10-27', '虚构划船阶梯', '持续时间', '', 60, 's'],

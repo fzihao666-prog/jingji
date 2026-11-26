@@ -63,7 +63,7 @@ export function DataManagementPage({ user, project, teamId }: Props) {
   const [importedTestStatus, setImportedTestStatus] = useState<'loading' | 'ready' | 'error'>('loading');
   const testKeyword = importedTestSearch.trim().toLowerCase();
   const visibleImportedTests = importedTests.filter((item) =>
-    [item.testType, item.metricName, item.metricCode, item.unit, item.protocol, item.protocolVersion]
+    [item.projectName, item.testType, item.metricName, item.metricCode, item.unit, item.protocol, item.protocolVersion]
       .some((value) => value.toLowerCase().includes(testKeyword))
   );
   const editable = user.role === 'TD' || user.role === 'DMD';
@@ -279,7 +279,7 @@ export function DataManagementPage({ user, project, teamId }: Props) {
             <tbody>
               {visibleImportedTests.map((item) => (
                 <tr key={JSON.stringify([item.testType, item.metricCode, item.unit, item.protocol, item.protocolVersion])}>
-                  <td>{item.testType}</td>
+                  <td>{item.projectName}<br /><small>{item.testType}</small></td>
                   <td>{item.metricName}<br /><small>{item.metricCode}</small></td>
                   <td>{item.unit || '—'}</td>
                   <td>{[item.protocol, item.protocolVersion].filter(Boolean).join(' · ') || '—'}</td>

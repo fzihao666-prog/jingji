@@ -6,7 +6,7 @@ import {
 } from '../../shared/training-record-template.ts';
 import { readTrainingRecordDownload, type TrainingRecordDownload } from './test-template-store.ts';
 import {
-  basicTestProjects, testTemplateCatalog, readTestTemplateDownload, testTemplateTeamId, TEST_TEMPLATE_SHEET, TEST_TEMPLATE_META, TEST_TEMPLATE_FORMAT,
+  basicTestProjects, importedTestFieldCode, saveImportedTestField, type ImportedTestField, testTemplateCatalog, readTestTemplateDownload, testTemplateTeamId, TEST_TEMPLATE_SHEET, TEST_TEMPLATE_META, TEST_TEMPLATE_FORMAT,
   TEST_TEMPLATE_IDENTITY_HEADERS, type TestTemplateDownload,
 } from './test-template-store.ts';
 import { ATHLETE_PROFILE_HEADERS, ATHLETE_PROFILE_SHEET, BASIC_PROFILE_HEADERS, BASIC_PROFILE_SHEET, BASIC_TEST_SHEET, BASIC_SCREENING_SHEET } from './basic-profile-workbook.ts';
@@ -1847,8 +1847,13 @@ function parseStandardSheet(
         return preferred.metric ? preferred : resolveImportMetricName(lookupName, providedUnit, options);
       })();
       const basicMetric = basicCatalog.find(metric => metric.code === selected?.metric?.code);
+      const canCreateTest = basicTest && !rawCode && !selected?.metric && projectName &&
+        (grouped.length === 0 || (field && grouped.some(entry => entry.metric.code.startsWith('custom_import_')))) &&
+        !options.some(metric => resolveImportMetricName(lookupName, '', [metric]).metric);
+      const newTestField: ImportedTestField | undefined = canCreateTest
+        ? { projectName: grouped[0]?.projectName ?? projectName, field: field || '成绩' } : undefined;
       const configuredProtocol = basicMetric?.protocolVersion || basicMetric?.protocol === '实测1RM' ? basicMetric.protocol : '';
-      const metricCode = rawCode ? (explicitTestType ? rawCode : canonicalImportMetricCode(rawCode)) : selected?.metric?.code || '';
+      const metricCode = rawCode ? (explicitTestType ? rawCode : canonicalImportMetricCode(rawCode)) : selected?.metric?.code || (newTestField ? importedTestFieldCode(project, newTestField) : '');
       const valueNum = readNumber('数值');
       const basicTestType = basicTest
         ? COMMON_FITNESS_TEMPLATE_METRICS.find(([, code]) => code === metricCode)?.[4] ??
@@ -1859,9 +1864,13 @@ function parseStandardSheet(
       const durationMin = readNumber('测试时长分钟');
       const errorColumn = grouped.length ? '指标' : '指标名称';
       const errorAddress = cellAddress(rowIndex, header.columns.get(normalizedText(errorColumn)) ?? nameColumn);
-      const selectionError = selected?.error && basicTest
-        ? `错误：${rawSheet}!${errorAddress} ${selected.error.replace(/^错误：/, '')}`
-        : selected?.error;
+      const newTestError = newTestField && (projectName.length > 40 || newTestField.field.length > 40 ||
+        providedUnit.length > 24 || protocol.length > 160)
+        ? '测试项目、指标、单位或协议名称过长（最多 40、40、24、160 字）。' : '';
+      const lookupError = newTestField ? newTestError : selected?.error;
+      const selectionError = lookupError && basicTest
+        ? `错误：${rawSheet}!${errorAddress} ${lookupError.replace(/^错误：/, '')}`
+        : lookupError;
       if (selectionError) messages.push(selectionError);
       if (valueNum === null) messages.push('错误：测试数值不能为空');
       if (durationMin !== null && durationMin <= 0) messages.push('错误：测试时长分钟须大于0');
@@ -1886,13 +1895,14 @@ function parseStandardSheet(
           eventDate: rowDate,
           testType: explicitTestType || (metricCode === 'arm_span_cm' && side === 'center' ? '身体测量' : basicTestType),
           metricCode,
-          metricLabel: basicMetric?.label || selected?.metric?.label || projectName || metricCode,
+          metricLabel: newTestField ? `${newTestField.projectName}${newTestField.field}` : basicMetric?.label || selected?.metric?.label || projectName || metricCode,
           valueNum,
           unit: metricUnit,
           side,
           payload: {
             ...base.payload,
             metricSelectionError: selectionError || '',
+            ...(newTestField ? { newTestField, protocolVersion: protocol ? '' : '1' } : {}),
             protocol: protocol || configuredProtocol,
             ...(basicTest && basicMetric?.protocolVersion && (!protocol || protocol === basicMetric.protocol)
               ? { protocolVersion: basicMetric.protocolVersion } : {}),
@@ -3618,7 +3628,9 @@ function validateImportItem(
     if (completed !== null && ![0, 1].includes(completed)) messages.push('错误：完成状态须为已完成、未完成或0、1');
   } else if (item.itemType === 'test_measurement') {
     const templateColumn = payload.testTemplateColumn as TestTemplateDownload['columns'][number] | undefined;
-    if (!templateColumn && item.metricCode && !readImportMetricDefinitions(text(payload.projectCode) || text((db.prepare('SELECT project FROM athletes WHERE id=?').get(item.athleteId || 0) as { project: string } | undefined)?.project)).some(metric => metric.code === item.metricCode)) messages.push('错误：测试项目不适用于当前运动项目');
+    const newTestField = item.sourceSheet === BASIC_TEST_SHEET ? payload.newTestField as ImportedTestField | undefined : undefined;
+    const pendingTest = newTestField && item.metricCode === importedTestFieldCode(text(payload.projectCode), newTestField);
+    if (!templateColumn && !pendingTest && item.metricCode && !readImportMetricDefinitions(text(payload.projectCode) || text((db.prepare('SELECT project FROM athletes WHERE id=?').get(item.athleteId || 0) as { project: string } | undefined)?.project)).some(metric => metric.code === item.metricCode)) messages.push('错误：测试项目不适用于当前运动项目');
     const attempt = optionalNumber(payload.attemptOrder);
     if (isProvided(payload.attemptOrder) && (attempt === null || !Number.isInteger(attempt) || attempt < 1)) messages.push('错误：试次序号须为正整数');
     const metricDefinition = db.prepare('SELECT unit, active FROM metric_definitions WHERE code=?').get(item.metricCode) as { unit: string; active: number } | undefined;
@@ -3629,11 +3641,12 @@ function validateImportItem(
         messages.push('错误：测试指标和协议必须与下载模板一致。');
       if (templateColumn.valueKind === 'time' && item.valueNum !== null && item.valueNum < 0)
         messages.push('错误：计时成绩须填写非负秒数或分:秒。');
-    } else if (item.metricCode && !metricDefinition?.active) messages.push('错误：测试项目未配置或已停用，请联系指标字典管理员确认');
+    } else if (pendingTest && !metricDefinition && !item.unit) messages.push('错误：新测试指标须填写实测值单位');
+    else if (!pendingTest && item.metricCode && !metricDefinition?.active) messages.push('错误：测试项目未配置或已停用，请联系指标字典管理员确认');
     else if (metricDefinition && item.unit !== metricDefinition.unit) messages.push(`错误：测试项目单位已变更或不匹配，应为${metricDefinition.unit}，请重新校验`);
     if (payload.metricSelectionError) messages.push(String(payload.metricSelectionError));
     if (!item.metricCode && !payload.metricSelectionError) messages.push('错误：请选择测试项目');
-    if (!templateColumn && !item.unit && !payload.metricSelectionError) {
+    if (!templateColumn && !pendingTest && !item.unit && !payload.metricSelectionError) {
       const definition = db.prepare('SELECT unit FROM metric_definitions WHERE code = ? AND active = 1').get(item.metricCode) as { unit: string } | undefined;
       if (!definition || definition.unit !== '') messages.push('错误：指标单位无法由字典确定，请填写单位');
     }
@@ -3823,6 +3836,7 @@ function applyCorrection(
     next.metricLabel = metric.label;
     next.unit = metric.unit;
     delete next.payload.metricSelectionError;
+    delete next.payload.newTestField;
     delete next.payload.unitConflict;
   }
   if ('side' in correction) {
@@ -4147,7 +4161,7 @@ export function updateDataImportItems(input: {
         if (candidate?.confirmed && entry.itemType === 'athlete_profile') entry.payload.gender = candidate.gender;
       }
       const metricCodes = new Set(readImportMetricDefinitions(batch.project).map(metric => metric.code));
-      if (parsed.some(entry => entry.itemType === 'test_measurement' && entry.metricCode && !metricCodes.has(entry.metricCode))) throw new Error('源行测试项目不在当前项目正式字典中');
+      if (parsed.some(entry => entry.itemType === 'test_measurement' && entry.metricCode && !entry.payload.newTestField && !metricCodes.has(entry.metricCode))) throw new Error('源行测试项目不在当前项目正式字典中');
       for (const entry of related) db.prepare('DELETE FROM data_import_items WHERE id = ? AND batch_id = ?').run(entry.id, input.batchId);
       insertItems(input.batchId, parsed);
     }
@@ -5712,6 +5726,8 @@ export function commitDataImport(input: {
         entityType = 'strength_result_set';
         if (result.sessionId && !result.skipped) sessionIds.add(result.sessionId);
       } else if (item.itemType === 'test_measurement') {
+        if (item.sourceSheet === BASIC_TEST_SHEET && item.payload.newTestField)
+          saveImportedTestField(db, batch.project, item.payload.newTestField as ImportedTestField, item.unit);
         result = upsertTestItem(item, input.batchId, input.userId, input.conflictPolicy);
         entityType = item.payload.fmsObservation && result.sessionId === result.entityId ? 'test_session' : 'test_measurement';
       } else if (item.itemType === 'body_measurement') {

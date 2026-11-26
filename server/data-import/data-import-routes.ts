@@ -574,7 +574,13 @@ export function registerDataImportRoutes(app: Express, legacyTestFixtures = fals
     (req, res) => {
       const athleteIds = accessibleAthleteIds(req.authUser!);
       const items = athleteIds.length ? db.prepare(`
+        WITH test_projects AS (
+          SELECT g.project, c.value AS metricCode, GROUP_CONCAT(g.name, '、') AS projectName
+          FROM test_template_groups g, json_each(g.codes_json) c
+          GROUP BY g.project, c.value
+        )
         SELECT ts.test_type AS testType,
+          COALESCE(REPLACE(GROUP_CONCAT(DISTINCT tp.projectName), ',', '、'), md.label, tm.metric_code) AS projectName,
           tm.metric_code AS metricCode, COALESCE(md.label, tm.metric_code) AS metricName,
           tm.unit, ts.protocol, COALESCE(ts.protocol_version, '') AS protocolVersion,
           COUNT(*) AS measurementCount, MAX(ts.test_date) AS latestTestDate
@@ -582,6 +588,7 @@ export function registerDataImportRoutes(app: Express, legacyTestFixtures = fals
         JOIN test_sessions ts ON ts.id = tm.test_session_id
         JOIN athletes a ON a.id = ts.athlete_id AND a.project = ts.project_code
         LEFT JOIN metric_definitions md ON md.code = tm.metric_code
+        LEFT JOIN test_projects tp ON tp.project = ts.project_code AND tp.metricCode = tm.metric_code
         WHERE ts.athlete_id IN (SELECT value FROM json_each(?))
           AND ts.project_status = 'confirmed'
           AND ts.is_demo = 0 AND tm.is_demo = 0
@@ -589,7 +596,7 @@ export function registerDataImportRoutes(app: Express, legacyTestFixtures = fals
           AND tm.source = 'file_import'
         GROUP BY ts.test_type, tm.metric_code, tm.unit,
           ts.protocol, COALESCE(ts.protocol_version, '')
-        ORDER BY testType, metricName, metricCode, tm.unit, ts.protocol, protocolVersion
+        ORDER BY testType, projectName, metricName, metricCode, tm.unit, ts.protocol, protocolVersion
       `).all(JSON.stringify(athleteIds)) : [];
       res.setHeader('Cache-Control', 'no-store');
       res.json({ items });
