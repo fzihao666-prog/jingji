@@ -71,5 +71,6 @@ export async function downloadBasicSubmissionExcel(report: BasicSubmissionReport
     if (sheet['!ref']) sheet['!autofilter'] = { ref: sheet['!ref'] };
     xlsx.utils.book_append_sheet(workbook, sheet, name);
   }
-  xlsx.writeFile(workbook, `基本信息检查_${report.asOf}.xlsx`);
+  const team = report.team.replace(/[<>:"/\\|?*]/g, '_');
+  xlsx.writeFile(workbook, `基本信息检查_${team}_${report.asOf}.xlsx`);
 }

@@ -7,7 +7,7 @@ import express from 'express';
 import jwt from 'jsonwebtoken';
 import { afterAll, beforeAll, expect, it, vi } from 'vitest';
 import { initializeDatabase } from '../core/db-initialize.ts';
-import type { SubmissionReport } from '../../shared/submission-report.ts';
+import type { BasicSubmissionReport, SubmissionReport } from '../../shared/submission-report.ts';
 
 const fixture = vi.hoisted(() => ({ db: null as DatabaseSync | null }));
 vi.mock('../core/db.ts', () => ({
@@ -127,10 +127,11 @@ it('转队后历史随新队，离队清空归最后一队', async () => {
   expect(original.records.some(([, , , id]) => id === 'training_session:9301')).toBe(false);
 });
 
-it('基本信息检查使用在册名单、正式数据和提交凭据，按队伍授权导出', async () => {
+it('基本信息检查仅导出所选授权队伍及四类正式填报情况', async () => {
   db.exec(`
     INSERT INTO athletes(id,name,project,team,team_id,gender,birth_date)
       SELECT 9310,'检查用合成队员','ROWING',name,id,'女','2000-01-01' FROM project_teams WHERE name='合成一队';
+    INSERT INTO athletes(id,name,project,team) VALUES (9312,'待填合成队员','ROWING','合成一队');
     INSERT INTO athlete_profiles(athlete_id,training_years,best_result,native_place,education,event_item)
       VALUES(9310,0,'6:50.0','合成籍贯','本科','双桨');
     INSERT INTO athlete_body_measurements(athlete_id,measurement_date,height_cm,weight_kg,is_demo)
@@ -156,32 +157,44 @@ it('基本信息检查使用在册名单、正式数据和提交凭据，按队�
         '{"sessions":[{"date":"2025-12-01","category":"physical","content":"深蹲","durationMin":35,"items":[{"title":"深蹲"}]}]}',
         9302,9302,'team',id,'published' FROM project_teams WHERE name='合成一队';
   `);
-  const fetchBasic = (id?: number) => fetch(`${url}/basic`, id ? {
-    headers: { Authorization: `Bearer ${jwt.sign({ id, sessionVersion: 1 }, secret)}` },
-  } : {});
+  const teamId = (name: string) => (db.prepare('SELECT id FROM project_teams WHERE name=?').get(name) as { id: number }).id;
+  const firstTeam = teamId('合成一队');
+  const secondTeam = teamId('合成二队');
+  const fetchBasic = (id?: number, team: number | null = firstTeam) => fetch(
+    `${url}/basic${team === null ? '' : `?teamId=${team}`}`,
+    id ? { headers: { Authorization: `Bearer ${jwt.sign({ id, sessionVersion: 1 }, secret)}` } } : {}
+  );
   const response = await fetchBasic(9301);
   expect(response.status).toBe(200);
   expect(response.headers.get('cache-control')).toBe('private, no-store');
-  const report = await response.json() as import('../../shared/submission-report.ts').BasicSubmissionReport;
+  const report = await response.json() as BasicSubmissionReport;
   const rows = (name: string) => report.sheets.find(sheet => sheet.name === name)!.rows.slice(1);
+  expect(report.team).toBe('合成一队');
   expect(JSON.stringify(report)).not.toContain('其他队运动员');
-  expect(rows('运动员基本信息')).toContainEqual([
-    '赛艇', '合成一队', '检查用合成队员', '女', expect.any(Number), 175, 68, 0, '6:50.0',
-    '合成籍贯', '合成一队', '本科', '双桨', '合成伤病（康复中）', '',
+  expect(rows('队伍汇总')).toContainEqual(['赛艇', '合成一队', 2, report.asOf]);
+  expect(rows('填报汇总')).toEqual([
+    ['运动员档案', 0, 1, 1],
+    ['体能与专项测试', 1, 0, 1],
+    ['功能筛查', 1, 0, 1],
+    ['每日训练', 1, 0, 1],
   ]);
-  expect(rows('测试成绩明细')).toContainEqual([
-    '赛艇', '合成一队', '检查用合成队员', '最大力量', expect.any(String), '2025-12-01', 95, 'kg', '实测1RM',
+  expect(rows('运动员档案').find(row => row[1] === '检查用合成队员')).toEqual([
+    9310, '检查用合成队员', '部分填写', '代表队伍', '女', expect.any(Number), 175, 68, 0,
+    '6:50.0', '合成籍贯', '', '本科', '双桨', '合成伤病（康复中）',
   ]);
-  expect(rows('运动员测试检查')).toContainEqual([
-    '赛艇', '合成一队', '检查用合成队员', '2025-12-01 · 1项', '未录', '未录', '未录',
-    '2025-12-02 · 0/7项', '2025-12-01 · 1项', '未录', expect.stringContaining('FMS待补'),
-  ]);
-  expect(rows('运动员训练统计')).toContainEqual(['赛艇', '合成一队', '检查用合成队员', 2, 1, 45, '平板支撑', 1]);
-  expect(rows('力量和体能训练安排')).toContainEqual(['赛艇', '合成一队', '2025-12-01', '深蹲', '深蹲', 35]);
-  expect(rows('体能教练提交记录')).toContainEqual(['赛艇', '合成一队', '甲教练', 2, expect.any(String)]);
-  const other = await fetchBasic(9304);
-  expect(other.status).toBe(200);
-  expect(JSON.stringify(await other.json())).not.toContain('检查用合成队员');
+  expect(rows('体能与专项测试')).toContainEqual([9310, '检查用合成队员', '已填写', 1, '2025-12-01']);
+  expect(rows('功能筛查')).toContainEqual([9310, '检查用合成队员', '已填写', 2, '2025-12-02']);
+  expect(rows('每日训练')).toContainEqual([9310, '检查用合成队员', '已填写', 2, 2, '2025-12-02']);
+  expect(rows('每日训练')).toContainEqual([9312, '待填合成队员', '未填写', 0, 0, '']);
+  expect(JSON.stringify(report)).not.toContain('合成运动员');
+  const empty = await fetchBasic(9301, teamId('合成空队'));
+  expect(empty.status).toBe(200);
+  const emptyReport = await empty.json() as BasicSubmissionReport;
+  expect(emptyReport.sheets[0].rows[1]).toEqual(['赛艇', '合成空队', 0, report.asOf]);
+  expect((await fetchBasic(9301, secondTeam)).status).toBe(404);
+  expect((await fetchBasic(9304)).status).toBe(404);
+  expect((await fetchBasic(9304, secondTeam)).status).toBe(200);
+  expect((await fetchBasic(9301, null)).status).toBe(400);
   expect((await fetchBasic(9302)).status).toBe(403);
   expect((await fetchBasic()).status).toBe(401);
 });

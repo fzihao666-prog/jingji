@@ -9,5 +9,6 @@ export type SubmissionReport = {
 
 export type BasicSubmissionReport = {
   asOf: string;
+  team: string;
   sheets: { name: string; rows: (string | number)[][] }[];
 };
