@@ -113,7 +113,7 @@ export function DailyTrainingPersonalCard({ athleteId, ...scope }: Scope & { ath
   const selectedRows = useMemo(() => rows?.filter(row => row.projectName === selectedProject) ?? [], [rows, selectedProject]);
   const series = useMemo(() => dailyTrainingSeries(selectedRows), [selectedRows]);
   const selected = series.find(metric => metric.key === metricKey) ?? series[0];
-  return <ChartCard title="个人每日训练趋势" actions={projects.length > 0 && <>
+  return <ChartCard title="每日训练" actions={projects.length > 0 && <>
     <label className="custom-test-trend-select">
       <span>训练项目</span>
       <select value={selectedProject} onChange={event => setProjectName(event.target.value)}>
