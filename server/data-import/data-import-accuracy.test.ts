@@ -2816,3 +2816,63 @@ it('编号区分同队同名者，并将重复编号的冲突身份留待人工�
     { athletes: [...roster, { ...roster.at(-1)!, name: '另一人' }] });
   expect(duplicate.athleteCandidates[0].messages.join('')).toContain('编号101重复');
 });
+
+it('每日训练下载模板往返保存时长和分开的强度、单位、次数、组数及 PRE', async () => {
+  const { default: ExcelJS } = await import('exceljs');
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile('public/templates/每日训练模板.xlsx');
+  const sheet = workbook.getWorksheet('每日训练')!;
+  sheet.getRow(4).values = ['张某', { formula: '"不能作为业务字段"', result: '不能作为业务字段' },
+    new Date('2025-11-25T00:00:00Z'), '杠铃深蹲', 60.5, 'kg', 8, 3, 12.5, 7];
+  sheet.getRow(5).values = ['张某', null, '2025-11-25', '杠铃深蹲', 0, 'kg', 8, 1];
+  const buffer = Buffer.from(await workbook.xlsx.writeBuffer());
+  const options = { buffer, team: 'A队' };
+  const batch = analyze({}, options);
+  expect(batch.errorCount).toBe(0);
+  expect(batch.items.map(item => item.sourceAddress)).toEqual(['A4', 'A5']);
+  expect(commit(batch.id, 'skip').createdRecords).toBe(2);
+  expect(db.prepare(`SELECT content,duration_min,duration_reported,rpe,srpe,project_code
+    FROM training_sessions ORDER BY session_order`).all()).toEqual([
+    { content: '杠铃深蹲', duration_min: 12.5, duration_reported: 1, rpe: null, srpe: null, project_code: 'ROWING' },
+    { content: '杠铃深蹲', duration_min: 0, duration_reported: 0, rpe: null, srpe: null, project_code: 'ROWING' },
+  ]);
+  expect(db.prepare(`SELECT field,unit,value_num AS value FROM training_record_details
+    WHERE template_name='每日训练' AND session_id=(SELECT MIN(id) FROM training_sessions) ORDER BY field`).all())
+    .toEqual(expect.arrayContaining([
+      { field: '强度', unit: 'kg', value: 60.5 }, { field: '次数', unit: '次', value: 8 },
+      { field: '组数', unit: '组', value: 3 }, { field: 'PRE', unit: '', value: 7 },
+    ]));
+  expect(analyze({}, options).id).toBe(batch.id);
+});
+
+it('每日训练拒绝跨队姓名、缺日期、混合单位文本和错误次数', () => {
+  const header = ['姓名', '录入检查', '训练日期', '训练内容', '强度（数值）', '强度单位', '次数', '组数', '时长（分钟）', 'PRE'];
+  const rows = { 每日训练: [header, ['填写与运动员档案一致的姓名。'], ['示例：示例甲'],
+    ['赵某', null, '2025-11-25', '深蹲', 60, 'kg'],
+    ['张某', null, null, '深蹲', 60, 'kg'],
+    ['张某', null, '2025-11-25', '深蹲', '60 kg', 'kg', 1.5],
+  ] };
+  const batch = analyze(rows, { team: 'A队', defaultDate: '2025-11-25' });
+  expect(batch.errorCount).toBe(3);
+  expect(batch.items.flatMap(item => item.messages).join('；')).toMatch(/队伍.*训练日期.*强度.*次数/);
+  expect(() => commit(batch.id, 'skip')).toThrow();
+  expect(db.prepare('SELECT COUNT(*) AS count FROM training_sessions').get()?.count).toBe(0);
+});
+
+it('每日训练的课次在预览后被其他批次占用时整批回滚', () => {
+  const header = ['姓名', '录入检查', '训练日期', '训练内容', '强度（数值）', '强度单位', '次数', '组数', '时长（分钟）', 'PRE'];
+  const date = '2025-11-25';
+  const upload = (name: string) => analyze({ 每日训练: [
+    header, [], [], ['张某', null, date, name, 40, 'kg'], ['张某', null, date, '训练二', 15, 'kg'],
+  ] }, { team: 'A队' });
+  const first = upload('先提交训练');
+  const second = upload('待提交训练');
+  expect(commit(first.id, 'skip').createdRecords).toBe(2);
+  expect(() => commit(second.id, 'update')).toThrow(/变化|占用/);
+  expect(db.prepare('SELECT content FROM training_sessions ORDER BY session_order').all())
+    .toEqual([{ content: '先提交训练' }, { content: '训练二' }]);
+  expect(db.prepare(`SELECT d.value_num AS value FROM training_record_details d
+    JOIN training_sessions s ON s.id=d.session_id
+    WHERE d.template_name='每日训练' ORDER BY s.session_order`).all())
+    .toEqual([{ value: 40 }, { value: 15 }]);
+});

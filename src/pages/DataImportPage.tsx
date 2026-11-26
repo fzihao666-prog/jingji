@@ -89,7 +89,7 @@ type AthleteCorrection = {
   confirmed?: boolean;
 };
 
-type TemplateKind = 'profile' | 'training';
+type TemplateKind = 'profile' | 'training' | 'daily-training';
 
 const ITEM_LABELS: Record<DataImportItem['itemType'], string> = {
   athlete_profile: '运动员档案',
@@ -346,7 +346,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
     setMessage('');
     try {
       await api.downloadDataImportTemplate(kind, project, templateTeam || undefined);
-      setMessage('分用途模板已开始下载（含已有人员预填）。');
+      setMessage(kind === 'daily-training' ? '每日训练模板已开始下载。' : '分用途模板已开始下载（含已有人员预填）。');
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '模板下载失败。');
     } finally {
@@ -853,7 +853,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
             const located = raw.startsWith(source) ? /^([A-Z]+\d+)\s+(.+)$/.exec(raw.slice(source.length)) : null;
             const description = located?.[2] ?? raw;
             const reason = canEditSource ? description.replace(/；请修正原文件后重新上传.*$/, '') : description;
-            return <li key={message}>{located && <strong>{located[1]}　</strong>}{reason}</li>;
+            return <li key={message}>{located && <strong>{located[1]}{'\u3000'}</strong>}{reason}</li>;
           })}
         </ul>}
         {batch?.status === 'reviewing' && item.quality === 'error' && <ImportSourceRowEditor
@@ -964,6 +964,18 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
               <span>训练课次、力量组次和每日恢复</span>
             </div>
           </button>
+          <button
+            type="button"
+            className="data-import-template"
+            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
+            onClick={() => downloadTemplate('daily-training')}
+          >
+            <Download size={16} aria-hidden />
+            <div>
+              <strong>每日训练模板</strong>
+              <span>训练内容、强度、次数、组数、时长与 PRE</span>
+            </div>
+          </button>
         </div>
       </section>
       {selectedTeam && <CollectionProgress key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name} lastCommit={batch?.status === 'committed' ? batch.id : undefined} />}
@@ -974,7 +986,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
               <FileSpreadsheet size={20} />
               <div>
                 <strong>Excel 导入</strong>
-                <span>支持 XLS / XLSX，单文件不超过 80MB。缺失日期按解析当天处理</span>
+                <span>支持 XLS / XLSX，单文件不超过 80MB。每日训练须填写实际训练日期</span>
               </div>
             </div>
             <ol className="data-import-steps" aria-label="Excel 导入进度">

@@ -779,7 +779,7 @@ export const api = {
     });
   },
   async downloadDataImportTemplate(
-    kind: 'profile' | 'training',
+    kind: 'profile' | 'training' | 'daily-training',
     project?: string,
     team?: string
   ) {
@@ -797,7 +797,8 @@ export const api = {
     const link = document.createElement('a');
     const objectUrl = URL.createObjectURL(blob);
     link.href = objectUrl;
-    link.download = kind === 'profile' ? '基础数据模板.xlsx' : `竞迹${project || ''}分用途导入模板.xlsx`;
+    link.download = kind === 'profile' ? '基础数据模板.xlsx'
+      : kind === 'daily-training' ? '每日训练模板.xlsx' : `竞迹${project || ''}分用途导入模板.xlsx`;
     document.body.appendChild(link);
     link.click();
     link.remove();

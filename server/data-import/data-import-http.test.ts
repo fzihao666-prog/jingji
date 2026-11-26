@@ -1855,3 +1855,42 @@ it('指标与标准按授权跨项目汇总导入指标并区分单位及协议'
     db.exec("DELETE FROM user_team_permissions WHERE user_id=701 AND project='VOLLEYBALL'; DELETE FROM user_project_permissions WHERE user_id=701 AND project='VOLLEYBALL'");
   }
 });
+
+it('每日训练可下载原模板，经统一导入后在授权项目和队伍中查看明细', async () => {
+  const headers = { authorization: `Bearer ${token}` };
+  const path = '/api/data-import/template?kind=daily-training&project=ROWING&team=';
+  expect((await fetch(`${base}${path}HTTP甲队`)).status).toBe(401);
+  expect((await fetch(`${base}${path}HTTP乙队`, { headers })).status).toBe(403);
+  const response = await fetch(`${base}${path}HTTP甲队`, { headers });
+  expect(response.status).toBe(200);
+  const buffer = await response.arrayBuffer();
+  expect(Buffer.from(buffer)).toEqual(readFileSync('public/templates/每日训练模板.xlsx'));
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.load(buffer);
+  const sheet = workbook.getWorksheet('每日训练')!;
+  sheet.getCell('A4').value = '虚构队员';
+  ['2025-11-26', '虚构训练动作', 42.5, 'kg', 8, 4, 15, 7].forEach((value, index) => {
+    sheet.getRow(4).getCell(index + 3).value = value;
+  });
+  const form = new FormData();
+  form.append('file', new Blob([await workbook.xlsx.writeBuffer()]), '每日训练模板.xlsx');
+  form.append('project', 'ROWING');
+  form.append('team', 'HTTP甲队');
+  const preview = await request('/analyze', 'POST', form);
+  expect(preview.status, JSON.stringify(preview.body)).toBe(200);
+  const batch = preview.body.batch!;
+  expect(batch.items).toHaveLength(1);
+  const result = await request(`/batches/${batch.id}/commit`, 'POST', {});
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  const teamId = db.prepare('SELECT team_id AS id FROM athletes WHERE id=701').get()?.id;
+  const query = new URLSearchParams({ project: 'ROWING', teamId: String(teamId), from: '2025-11-26', to: '2025-11-26' });
+  const details = await fetch(`${base}/api/athletes/701/custom-training-details?${query}`, { headers });
+  expect(details.status).toBe(200);
+  expect(await details.json()).toMatchObject({ rows: expect.arrayContaining([
+    { template: '每日训练', session: '虚构训练动作', field: '强度', unit: 'kg', value: 42.5 },
+    { template: '每日训练', session: '虚构训练动作', field: 'PRE', value: 7 },
+  ].map(row => expect.objectContaining(row))) });
+  const otherTeam = db.prepare("SELECT id FROM project_teams WHERE name='HTTP乙队'").get()?.id;
+  query.set('teamId', String(otherTeam));
+  expect((await fetch(`${base}/api/athletes/701/custom-training-details?${query}`, { headers })).status).toBe(403);
+});

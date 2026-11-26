@@ -2224,6 +2224,90 @@ function refreshImportConflicts(items: Array<ParsedImportItem | DataImportItemVi
 
 type TrainingRecordDetail = { template?: string; order: number; field: string; unit: string; number: number | null; text: string | null };
 
+const DAILY_TRAINING_SHEET = '每日训练';
+const DAILY_TRAINING_HEADERS = ['姓名', '录入检查', '训练日期', '训练内容', '强度（数值）', '强度单位', '次数', '组数', '时长（分钟）', 'PRE'];
+
+function parseDailyTrainingSheet(matrix: Matrix, project: string, team: string, athletes: ImportAthlete[]) {
+  const teamId = testTemplateTeamId(db, project, team);
+  if (!teamId) throw new Error('上传每日训练前请选择有效的项目和队伍。');
+  const headers = matrix[0]?.map(normalizedText) ?? [];
+  if (headers.length !== DAILY_TRAINING_HEADERS.length ||
+      DAILY_TRAINING_HEADERS.some(label => headers.filter(header => header === normalizedText(label)).length !== 1))
+    throw new Error('每日训练模板表头无效，请使用「模板下载」中的每日训练模板。');
+  const columns = DAILY_TRAINING_HEADERS.map(label => headers.indexOf(normalizedText(label)));
+  const roster = new Set(db.prepare('SELECT id FROM athletes WHERE project=? AND team_id=? AND active=1')
+    .all(project, teamId).map(row => Number(row.id)));
+  const candidates = athletes.filter(athlete => roster.has(athlete.id) && athlete.project === project && athlete.team === team && athlete.active !== false);
+  const nextOrders = new Map<string, number>();
+  const highestOrder = db.prepare('SELECT COALESCE(MAX(session_order),0) AS highest FROM training_sessions WHERE athlete_id=? AND session_date=?');
+  const today = currentImportDate();
+  const items: ParsedImportItem[] = [];
+  // 第 2、3 行是列说明和示例；录入检查中的公式值不参与业务解析。
+  for (let index = 3; index < matrix.length; index++) {
+    const values = columns.map(column => matrix[index]?.[column]);
+    if (!values.some((value, column) => column !== 1 && text(value))) continue;
+    const [name, , date, content, intensity, unit, reps, sets, duration, pre] = values;
+    const athleteName = text(name);
+    const trainingContent = text(content);
+    const eventDate = parseImportFullDate(date);
+    const intensityUnit = text(unit);
+    const messages: string[] = [];
+    const error = (column: number, message: string) =>
+      messages.push(`错误：${DAILY_TRAINING_SHEET}!${cellAddress(index, columns[column])} ${message}`);
+    const person = resolvePerson({ name: athleteName, project, team }, candidates);
+    if (!athleteName) error(0, '请填写姓名。');
+    else if (person.kind !== 'matched') error(0, '无法在所选队伍内唯一匹配姓名，请核对队伍和运动员档案。');
+    if (!eventDate || eventDate > today) error(2, '请填写有效且不晚于今天的训练日期。');
+    if (!trainingContent) error(3, '请填写训练内容。');
+    const readNumber = (column: number, raw: unknown, valid: (value: number) => boolean, hint: string) => {
+      if (!text(raw)) return null;
+      const number = standardNumberValue(raw);
+      if (number === null || !valid(number)) error(column, hint);
+      return number;
+    };
+    const positiveInteger = (number: number) => Number.isSafeInteger(number) && number > 0;
+    const intensityValue = readNumber(4, intensity, Number.isFinite, '强度只填数字，单位填在强度单位列。');
+    if (text(intensity) && !intensityUnit) error(5, '请填写强度单位。');
+    if (!text(intensity) && intensityUnit) error(4, '有强度单位时请填写强度数值。');
+    const repetitionCount = readNumber(6, reps, positiveInteger, '次数须为正整数。');
+    const setCount = readNumber(7, sets, positiveInteger, '组数须为正整数。');
+    const durationMin = readNumber(8, duration, value => value > 0 && value <= 1440, '时长须为大于 0 且不超过 1440 的分钟数。');
+    const preValue = readNumber(9, pre, Number.isFinite, 'PRE 只填数字。');
+    const source = { sourceSheet: DAILY_TRAINING_SHEET, sourceAddress: cellAddress(index, columns[0]),
+      rawAthleteName: athleteName, eventDate, sessionLabel: trainingContent };
+    if (messages.length || person.kind !== 'matched') {
+      items.push(itemBase({ ...source, itemType: 'invalid_row', quality: 'error', messages,
+        rawValue: JSON.stringify(values.filter((_, column) => column !== 1)) }));
+      continue;
+    }
+    const athleteId = person.athlete.id;
+    const key = JSON.stringify([athleteId, eventDate]);
+    const order = (nextOrders.get(key) ?? Number(highestOrder.get(athleteId, eventDate)?.highest)) + 1;
+    nextOrders.set(key, order);
+    const details: TrainingRecordDetail[] = [];
+    const add = (field: string, unit: string, number: number | null) => {
+      if (number !== null) details.push({ order: 1, field, unit, number, text: null });
+    };
+    add('强度', intensityUnit, intensityValue);
+    add('次数', '次', repetitionCount);
+    add('组数', '组', setCount);
+    add('PRE', '', preValue);
+    items.push(itemBase({
+      ...source, itemType: 'training_session', athleteId, valueNum: durationMin, unit: 'min',
+      businessKey: `${athleteId}|${eventDate}|session|${order}`,
+      rawValue: JSON.stringify(values.filter((_, column) => column !== 1)),
+      payload: {
+        projectCode: project, team, dateSource: 'row', dateAddress: cellAddress(index, columns[2]),
+        sessionOrder: order, sessionOrderProvided: true, content: trainingContent,
+        durationMin, durationReported: durationMin !== null,
+        trainingRecordTeamId: teamId, trainingRecordName: DAILY_TRAINING_SHEET,
+        trainingRecordRowDetails: details, trainingRecordHasDetails: details.length > 0,
+      },
+    }));
+  }
+  return items;
+}
+
 function parseTrainingRecordSheet(matrix: Matrix, template: TrainingRecordDownload, filename: string, athletes: ImportAthlete[], team: string) {
   const headers = trainingRecordHeaders(template);
   if (headers.some((header, index) => matrix[0]?.[index] !== header))
@@ -2818,6 +2902,11 @@ export function analyzeDataImport(input: {
     cellStyles: false,
   });
   if (workbook.SheetNames.length > 100) throw new Error('工作表数量超过100张，已拒绝解析。');
+  const isDailyTrainingWorkbook = workbook.SheetNames.includes(DAILY_TRAINING_SHEET);
+  if (isDailyTrainingWorkbook && existing?.status === 'committed' &&
+      (JSON.parse(existing.summaryJson).recognizedSheets as { name: string; type: string }[] | undefined)
+        ?.some(sheet => sheet.name === DAILY_TRAINING_SHEET && sheet.type === DAILY_TRAINING_SHEET))
+    return getDataImportBatch(existing.id, input.userId, true);
   let testTemplate: TestTemplateDownload | undefined;
   const templateMeta = workbook.Sheets[TEST_TEMPLATE_META];
   const hasTemplateMarker = templateMeta?.A1?.v === TEST_TEMPLATE_FORMAT;
@@ -2872,7 +2961,12 @@ export function analyzeDataImport(input: {
     let parsed: ParsedImportItem[] = [];
     let type = '';
     let note = '';
-    if (trainingTemplate && sheetName === TRAINING_RECORD_SHEET) {
+    if (sheetName === DAILY_TRAINING_SHEET) {
+      if (!range || range.s.r !== 0 || range.s.c !== 0) throw new Error('每日训练模板表头须从 A1 开始。');
+      parsed = parseDailyTrainingSheet(matrix, input.project, team, input.athletes);
+      type = DAILY_TRAINING_SHEET;
+      note = '第 4 行起按姓名匹配所选队伍，一行记录一项训练';
+    } else if (trainingTemplate && sheetName === TRAINING_RECORD_SHEET) {
       if (!range || range.s.r !== 0 || range.s.c !== 0) throw new Error('训练记录模板表头须从 A1 开始。');
       parsed = parseTrainingRecordSheet(matrix, trainingTemplate, input.filename, input.athletes, team);
       type = '可配置训练记录';
@@ -3584,6 +3678,16 @@ function validateImportItem(
       }
     }
   } else if (item.itemType === 'training_session') {
+    const dailyTraining = item.sourceSheet === DAILY_TRAINING_SHEET;
+    if (dailyTraining) {
+      const project = text(payload.projectCode);
+      if (!text(payload.content)) messages.push('错误：请填写训练内容。');
+      if (item.eventDate > currentImportDate()) messages.push('错误：训练日期不能晚于今天。');
+      if (!db.prepare(`SELECT 1 FROM athletes a JOIN project_teams t ON t.id=a.team_id
+        WHERE a.id=? AND a.active=1 AND a.project=? AND t.project=a.project AND t.active=1 AND t.id=? AND t.name=?`)
+        .get(item.athleteId, project, Number(payload.trainingRecordTeamId), text(payload.team)))
+        messages.push('错误：运动员不在每日训练的导入队伍内，请重新上传。');
+    }
     try {
       importTrainingContext(item);
     } catch (error) { messages.push(`错误：${error instanceof Error ? error.message : '训练活动无效'}`); }
@@ -3594,17 +3698,19 @@ function validateImportItem(
       payload.srpe = duration === null || rpe === null ? null : duration * rpe;
     }
     const rpe = optionalNumber(payload.rpe);
-    if (rpe === null) messages.push('提示：未提供RPE，无法计算SRPE；训练记录仍可导入');
-    else if (rpe < 0 || rpe > 10) messages.push('错误：RPE须在0—10之间');
+    if (rpe === null && !dailyTraining) messages.push('提示：未提供RPE，无法计算SRPE；训练记录仍可导入');
+    if (rpe !== null && (rpe < 0 || rpe > 10)) messages.push('错误：RPE须在0—10之间');
     const order = optionalNumber(payload.sessionOrder);
     if (order === null || !Number.isInteger(order) || order < 1) messages.push('错误：课次序号须为正整数');
     const durationReported = Boolean(payload.durationReported) || isProvided(payload.durationMin);
     const distanceReported = Boolean(payload.distanceReported) || isProvided(payload.distanceKm);
-    if (!durationReported && !distanceReported && !payload.hasStrengthSets && !(payload.trainingRecordHasDetails))
+    if (!durationReported && !distanceReported && !payload.hasStrengthSets && !payload.trainingRecordHasDetails && !dailyTraining)
       messages.push('错误：时长分钟、距离千米至少填写一项；留空不等于 0。');
     const duration = optionalNumber(payload.durationMin);
     if (durationReported && (duration === null || duration < 0 || duration > 1440))
       messages.push('错误：时长分钟须为 0—1440 的数字。');
+    else if (dailyTraining && durationReported && duration === 0)
+      messages.push('错误：每日训练时长须大于 0 分钟，未记录请留空。');
     const distance = optionalNumber(payload.distanceKm);
     if (distanceReported && (distance === null || distance < 0 || distance > 500))
       messages.push('错误：距离千米须为 0—500 的数字。');
@@ -5017,6 +5123,8 @@ function upsertSessionItem(
   const existing = db
     .prepare("SELECT ts.*, (SELECT value_num FROM training_session_metrics WHERE training_session_id=ts.id AND metric_code='cadenceRpm') AS cadenceRpm FROM training_sessions ts WHERE athlete_id=? AND session_date=? AND session_order=?")
     .get(item.athleteId, item.eventDate, order) as Record<string, unknown> | undefined;
+  if (existing && item.sourceSheet === DAILY_TRAINING_SHEET)
+    throw new Error('每日训练的课次位置已被占用，请重新上传并校验。');
   if (existing && p.trainingRecordTeamId && !db.prepare(`SELECT 1 FROM training_record_session_scope
     WHERE session_id=? AND team_id=?`).get(Number(existing.id), Number(p.trainingRecordTeamId)))
     throw new Error('课次归属已变化，请重新上传并校验。');

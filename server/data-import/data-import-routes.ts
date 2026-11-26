@@ -197,10 +197,10 @@ export function registerDataImportRoutes(app: Express, legacyTestFixtures = fals
     requireAuth,
     requireRole('SCC', 'REG', 'TD', 'DMD'),
     (req, res) => {
-      const kind = cleanString(req.query.kind) as TemplateKind | 'team';
+      const kind = cleanString(req.query.kind) as TemplateKind | 'team' | 'daily-training';
       if (kind === 'test' && !legacyTestFixtures)
         return res.status(410).json({ message: '请下载基础数据模板，在「体能与专项测试」填写成绩。' });
-      if (!['profile', 'training', 'test', 'team'].includes(kind))
+      if (!['profile', 'training', 'test', 'team', 'daily-training'].includes(kind))
         return res.status(400).json({ message: '模板类型无效。' });
       try {
         const team = cleanString(req.query.team);
@@ -215,11 +215,11 @@ export function registerDataImportRoutes(app: Express, legacyTestFixtures = fals
           return res.status(403).json({ message: '当前账号无权导出该项目模板。' });
         if (team && !scope.allowedTeams.has(team))
           return res.status(403).json({ message: '所选队伍不存在、已停用或不在当前授权范围内。' });
-        if (kind === 'team') {
-          const variant = projectCapability(project) ? '水上' : '通用';
-          const filename = `竞迹队伍训练统计模板（${variant}）.xlsx`;
+        if (kind === 'team' || kind === 'daily-training') {
+          const filename = kind === 'daily-training' ? '每日训练模板.xlsx'
+            : `竞迹队伍训练统计模板（${projectCapability(project) ? '水上' : '通用'}）.xlsx`;
           const templatePath = importTemplatePath(filename);
-          if (!templatePath) return res.status(404).json({ message: '队伍训练统计模板尚未部署。' });
+          if (!templatePath) return res.status(404).json({ message: `${filename}尚未部署。` });
           res.type('application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
           return res.download(templatePath, filename);
         }
