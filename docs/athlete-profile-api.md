@@ -57,7 +57,7 @@
 
 | 字段组 | 字段与类型 |
 |---|---|
-| 主键与归属 | `id:number`、`athleteNumber:string`、`name:string`、`project:string`、`teamId:number|null`、`team:string`、`affiliatedTeams:{id:number,name:string}[]` |
+| 主键与归属 | `id:number`、`athleteNumber:string`、`name:string`、`project:string`、`teamId:number|null`、`team:string` |
 | 教练 | `coaches`、`headCoaches` 为展示字符串，`coachUsers:{id:number,displayName:string}[]` |
 | 个人信息 | `gender`、`region`、`province`、`city`、`county`、`ethnicity`、`phone`、`bloodType`、`emergencyContact`、`emergencyPhone`、`education`、`nativePlace`、`homeAddress` 为字符串，`birthDate:string|null` |
 | 训练档案 | `technicalLevel`、`athletePosition`、`healthStatus`、`bestResult`、`eventItem`、`representativeUnit`、`bestResultEvent`、`bestResultDate`、`athleteStatus`、`startSportDate`、`trainingVenue`、`currentEvent`、`trainingPhase`、`campPeriod`、`originPlace`、`originUnit`、`originCoach`、`specialties`、`notes` 为字符串，`trainingYears:number|null` |

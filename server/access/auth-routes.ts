@@ -226,10 +226,6 @@ export function registerAuthRoutes(
         if (existing) {
           db.prepare('UPDATE project_teams SET active = 1 WHERE id = ?').run(existing.id);
           db.prepare('UPDATE athletes SET team = ?, team_id = ? WHERE team_id = ?').run(name, existing.id, id);
-          db.prepare(`INSERT INTO athlete_team_affiliations (athlete_id, team_id)
-            SELECT l.athlete_id, ? FROM athlete_team_affiliations l JOIN athletes a ON a.id = l.athlete_id
-            WHERE l.team_id = ? AND a.team_id IS NOT ? ON CONFLICT DO NOTHING`).run(existing.id, id, existing.id);
-          db.prepare('DELETE FROM athlete_team_affiliations WHERE team_id = ?').run(id);
           db.prepare('UPDATE training_plans SET team_id = ? WHERE team_id = ?').run(existing.id, id);
           db.prepare('UPDATE project_teams SET active = 0 WHERE id = ?').run(id);
         } else {

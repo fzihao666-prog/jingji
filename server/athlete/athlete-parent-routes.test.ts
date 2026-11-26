@@ -46,7 +46,6 @@ beforeAll(async () => {
     CREATE TABLE athletes (id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT, project TEXT, team TEXT, team_id INTEGER,
       active INTEGER DEFAULT 1, gender TEXT, birth_date TEXT, region TEXT, city TEXT, county TEXT, profile_status TEXT, source TEXT);
     CREATE TABLE training_sessions (athlete_id INTEGER, session_date TEXT, is_demo INTEGER DEFAULT 0);
-    CREATE TABLE athlete_team_affiliations (athlete_id INTEGER, team_id INTEGER, PRIMARY KEY (athlete_id, team_id));
     CREATE TABLE athlete_origins (athlete_id INTEGER PRIMARY KEY, province TEXT, city TEXT, county TEXT);
     CREATE TABLE athlete_profiles (athlete_id INTEGER PRIMARY KEY, ethnicity TEXT, phone TEXT,
       blood_type TEXT, emergency_contact TEXT, emergency_phone TEXT, education TEXT, technical_level TEXT,
@@ -72,7 +71,7 @@ beforeEach(() =>
   database.exec(`
   DELETE FROM users; DELETE FROM user_area_permissions; DELETE FROM user_project_permissions;
   DELETE FROM user_team_permissions; DELETE FROM account_profiles; DELETE FROM audit_logs;
-  DELETE FROM training_sessions; DELETE FROM athlete_team_affiliations; DELETE FROM project_teams; DELETE FROM athletes; DELETE FROM athlete_origins; DELETE FROM athlete_profiles;
+  DELETE FROM training_sessions; DELETE FROM project_teams; DELETE FROM athletes; DELETE FROM athlete_origins; DELETE FROM athlete_profiles;
   INSERT INTO users (id, username, display_name, role, athlete_id) VALUES
     (1,'manager','管理者','DMD',NULL),(2,'old','原队教练','SCC',NULL),
     (3,'new','新队教练','SCC',NULL),(4,'athlete','测试队员','ATL',101),(5,'regional','区域管理','REG',NULL);
@@ -255,15 +254,6 @@ describe('小程序复用运动员创建接口', () => {
 });
 
 describe('小程序管理者复用运动员编辑接口', () => {
-  it('兼属队伍关联同一个运动员 ID 并校验目标队伍权限', async () => {
-    expect((await update({ ...payload, team: 'A队', affiliatedTeamIds: [11] }, 2)).status).toBe(400);
-    expect((await update({ ...payload, team: 'A队', affiliatedTeamIds: [11, 11] })).status).toBe(200);
-    expect(database.prepare('SELECT athlete_id, team_id FROM athlete_team_affiliations').all()).toEqual([{ athlete_id: 101, team_id: 11 }]);
-    expect(database.prepare('SELECT id, team_id FROM athletes').all()).toEqual([{ id: 101, team_id: 10 }]);
-    expect((await update({ ...payload, team: 'A队', affiliatedTeamIds: [] })).status).toBe(200);
-    expect(database.prepare('SELECT athlete_id, team_id FROM athlete_team_affiliations').all()).toEqual([]);
-  });
-
   it.each([2, 5, 1])('管理者 %s 可更新已有运动员，保留档案 ID 和账号关联', async (actor) => {
     const response = await update({ ...payload, team: 'A队', name: '更新队员', notes: '完善资料', phone: '13800000000', currentEvent: '单人双桨' }, actor);
     expect(response.status).toBe(200);

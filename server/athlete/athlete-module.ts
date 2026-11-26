@@ -217,7 +217,6 @@ export const adminAthleteProfileSchema = selfAthleteProfileSchema.partial().exte
   project: z.string().trim().min(1).max(16),
   team: z.string().trim().min(1).max(80),
   coachId: legacyCoachIdSchema,
-  affiliatedTeamIds: z.array(z.number().int().positive()).optional(),
   createAccount: z.boolean().optional(),
   username: athleteProfileText(24).optional(),
   password: z.string().max(72).optional(),

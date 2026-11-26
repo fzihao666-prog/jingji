@@ -400,15 +400,6 @@ export function registerAthleteRoutes(app: Express) {
       };
       const scopeError = athleteScopeError(currentUser, payload);
       if (scopeError) errors.push(scopeError);
-      const affiliations = parsed.data.affiliatedTeamIds;
-      const permissionsForTeams = accountPermissions(currentUser.id);
-      const managedTeams = affiliations === undefined ? [] : (db.prepare(
-        'SELECT id, name FROM project_teams WHERE project = ? AND active = 1'
-      ).all(payload.project) as Array<{ id: number; name: string }>).filter(
-        team => permissionsAllowProjectTeam(permissionsForTeams, payload.project, team.name)
-      );
-      if (affiliations?.some(id => !managedTeams.some(team => team.id === id)))
-        errors.push('兼属队伍必须在所属项目及当前账号权限内');
       const coach = payload.coachId ? userById(payload.coachId) : null;
       if (
         currentUser.role !== 'SCC' &&
@@ -442,15 +433,6 @@ export function registerAthleteRoutes(app: Express) {
           athleteProfileComplete(payload) ? 'complete' : 'incomplete',
           athleteId
         );
-        if (affiliations !== undefined) {
-          const unlink = db.prepare('DELETE FROM athlete_team_affiliations WHERE athlete_id = ? AND team_id = ?');
-          const link = db.prepare('INSERT INTO athlete_team_affiliations (athlete_id, team_id) VALUES (?, ?) ON CONFLICT DO NOTHING');
-          const selected = new Set(affiliations);
-          for (const team of managedTeams) {
-            if (selected.has(team.id) && team.id !== selectedTeam!.id) link.run(athleteId, team.id);
-            else unlink.run(athleteId, team.id);
-          }
-        }
         upsertAthleteOrigin({
           athleteId,
           province: payload.region,
@@ -481,9 +463,8 @@ export function registerAthleteRoutes(app: Express) {
             grantedBy: currentUser.id,
           });
         db.prepare(
-          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id, detail) VALUES (?, ?, ?, ?, ?)'
-        ).run(currentUser.id, 'UPDATE_ATHLETE_PROFILE', 'athlete', athleteId,
-          affiliations === undefined ? null : JSON.stringify({ affiliatedTeamIds: affiliations }));
+          'INSERT INTO audit_logs (user_id, action, entity_type, entity_id) VALUES (?, ?, ?, ?)'
+        ).run(currentUser.id, 'UPDATE_ATHLETE_PROFILE', 'athlete', athleteId);
         db.exec('COMMIT');
         res.json({ message: '运动员资料已更新。' });
       } catch (error) {
@@ -803,26 +784,12 @@ export function registerAthleteRoutes(app: Express) {
       createdAt: string;
       coaches: string | null;
     }>;
-    const affiliationRows = db.prepare(`
-      SELECT l.athlete_id AS athleteId, t.id, t.project, t.name
-      FROM athlete_team_affiliations l JOIN project_teams t ON t.id = l.team_id
-      WHERE l.athlete_id IN (${placeholders}) AND t.active = 1 ORDER BY t.name, t.id
-    `).all(...ids) as Array<{ athleteId: number; id: number; project: string; name: string }>;
-    const teamPermissions = req.authUser!.role === 'ATL' ? null : accountPermissions(req.authUser!.id);
-    const affiliationsByAthlete = new Map<number, Array<{ id: number; name: string }>>();
-    for (const { athleteId, id, project, name } of affiliationRows) {
-      if (teamPermissions && !permissionsAllowProjectTeam(teamPermissions, project, name)) continue;
-      const teams = affiliationsByAthlete.get(athleteId) ?? [];
-      teams.push({ id, name });
-      affiliationsByAthlete.set(athleteId, teams);
-    }
     const coachRows = readCoachAthleteRelations(db, ids);
     const headCoachRows = readCoachAthleteRelations(db, ids, true);
     res.json({
       athletes: athletes.map((athlete) => ({
         ...athlete,
         athleteNumber: formatAthleteNumber(athlete.id),
-        affiliatedTeams: affiliationsByAthlete.get(athlete.id) ?? [],
         headCoaches: headCoachRows.filter((coach) => coach.athleteId === athlete.id)
           .map((coach) => coach.displayName).join('、'),
         coaches: coachRows.filter((coach) => coach.athleteId === athlete.id)

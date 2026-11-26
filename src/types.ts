@@ -56,7 +56,6 @@ export type Athlete = {
   id: number;
   athleteNumber?: string;
   teamId?: number | null;
-  affiliatedTeams?: Array<{ id: number; name: string }>;
   name: string;
   project: string;
   team: string;
