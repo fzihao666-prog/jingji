@@ -1404,18 +1404,6 @@ export function AthleteManagementPage({
                           maxLength={11}
                         />
                       </label>
-                      <label>
-                        <span>籍贯</span>
-                        <input
-                          value={form.nativePlace}
-                          onChange={(event) =>
-                            setForm({
-                              ...form,
-                              nativePlace: event.target.value,
-                            })
-                          }
-                        />
-                      </label>
                       <label className="wide">
                         <span>家庭住址</span>
                         <input

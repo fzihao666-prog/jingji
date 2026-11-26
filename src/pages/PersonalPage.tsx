@@ -542,7 +542,6 @@ export function PersonalPage(props: Props) {
                   : `${ageAtDate(selectedAthlete.birthDate, props.to)} 岁 / ${selectedAthlete.gender || '未填写'}`,
             },
             ...(props.user.role === 'OBS' ? [] : [
-              { label: '籍贯', value: selectedAthlete.nativePlace },
             ]),
             { label: '专项特长', value: selectedAthlete.specialties },
           ] satisfies ProfileDetail[],

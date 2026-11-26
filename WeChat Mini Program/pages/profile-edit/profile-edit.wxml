@@ -42,7 +42,6 @@
       <view class="field"><text class="field-label">本人手机</text><input disabled="{{saving || saved}}" class="input" type="number" value="{{form.phone}}" data-field="phone" bindinput="onFieldInput" maxlength="11"/></view>
       <view class="form-grid"><view class="field"><text class="field-label">紧急联系人</text><input disabled="{{saving || saved}}" class="input" value="{{form.emergencyContact}}" data-field="emergencyContact" bindinput="onFieldInput"/></view><view class="field"><text class="field-label">紧急联系电话</text><input disabled="{{saving || saved}}" class="input" type="number" value="{{form.emergencyPhone}}" data-field="emergencyPhone" bindinput="onFieldInput" maxlength="11"/></view></view>
       <view class="field"><text class="field-label">家庭住址</text><input disabled="{{saving || saved}}" class="input" value="{{form.homeAddress}}" data-field="homeAddress" bindinput="onFieldInput"/></view>
-      <view class="field"><text class="field-label">籍贯</text><input disabled="{{saving || saved}}" class="input" value="{{form.nativePlace}}" data-field="nativePlace" bindinput="onFieldInput"/></view>
     </view>
 
     <view class="section-head"><view class="section-head-title">运动信息</view></view>
