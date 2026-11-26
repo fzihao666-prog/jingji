@@ -625,7 +625,6 @@ export default function App() {
             projects={shared.projects}
             onProjectChange={shared.onProjectChange}
             onViewEnode={() => changePage('strength-enode')}
-            onManageTests={() => changePage('data-management')}
             onViewTeamTraining={(id, date) => {
               const params = new URLSearchParams({ teamTraining: String(id), project });
               if (date) params.set('date', date);

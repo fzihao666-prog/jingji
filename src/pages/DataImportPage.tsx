@@ -1,5 +1,4 @@
 import { formatAthleteNumber } from '../../shared/athlete-number';
-import { TrainingRecordTemplatePanel } from '../components/TrainingRecordTemplatePanel';
 import { CollectionProgress } from '../components/CollectionProgress';
 import { TeamTrainingImport } from '../components/TeamTrainingImport';
 import { TeamPlanImport } from '../components/TeamPlanImport';
@@ -62,7 +61,6 @@ type Props = {
   onProjectChange: (project: Project) => void;
   athletes: Athlete[];
   onChanged: () => void;
-  onManageTests: () => void;
   onViewEnode: () => void;
   onViewTeamTraining: (teamId: number, date: string | null) => void;
   onNavigationGuardChange?: (guard: (() => boolean) | null) => void;
@@ -126,7 +124,7 @@ function payloadNumber(payload: Record<string, unknown>, key: string): string {
   return value === null || value === undefined ? '' : String(value);
 }
 
-export function DataImportPage({ user, project, projects, onProjectChange, athletes, onChanged, onNavigationGuardChange, onViewEnode, onViewTeamTraining, onManageTests }: Props) {
+export function DataImportPage({ user, project, projects, onProjectChange, athletes, onChanged, onNavigationGuardChange, onViewEnode, onViewTeamTraining }: Props) {
   const positionKey = `jingji:import-review:${user.id}:${project}`;
   const reviewRef = useRef<HTMLElement>(null);
   const reviewScrollRef = useRef<HTMLDivElement>(null);
@@ -142,8 +140,6 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
   const fileRef = useRef<HTMLInputElement>(null);
   const [file, setFile] = useState<File | null>(null);
   const [templateTeam, setTemplateTeam] = useState('');
-  const [trainingTemplateOpen, setTrainingTemplateOpen] = useState(false);
-  const trainingTemplateButton = useRef<HTMLButtonElement>(null);
   const [templateTeamsProject, setTemplateTeamsProject] = useState<Project | null>(null);
   const [teams, setTeams] = useState<ProjectTeam[]>([]);
   const [batch, setBatch] = useState<DataImportBatch | null>(null);
@@ -970,45 +966,7 @@ export function DataImportPage({ user, project, projects, onProjectChange, athle
           </button>
         </div>
       </section>
-      <section className="data-import-template-panel" aria-labelledby="data-import-custom-template-title">
-        <h2 id="data-import-custom-template-title">自定义模板</h2>
-        <div className="data-import-hero-actions">
-          <button
-            type="button"
-            className="data-import-template"
-            disabled={Boolean(busy) || templateTeamsProject !== project || !templateTeam}
-            ref={trainingTemplateButton}
-            aria-haspopup="dialog"
-            onClick={() => setTrainingTemplateOpen(true)}
-          >
-            <Download size={19} aria-hidden />
-            <div>
-              <strong>自定义训练记录模板</strong>
-              <span>选择字段并预览，一堂课可填多行</span>
-            </div>
-          </button>
-          <button
-            type="button"
-            className="data-import-template"
-            disabled={Boolean(busy)}
-            onClick={onManageTests}
-          >
-            <Download size={19} aria-hidden />
-            <div>
-              <strong>管理测试项目与指标</strong>
-              <span>前往指标与标准</span>
-            </div>
-          </button>
-        </div>
-      </section>
       {selectedTeam && <CollectionProgress key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name} lastCommit={batch?.status === 'committed' ? batch.id : undefined} />}
-      {trainingTemplateOpen && selectedTeam && (
-        <TrainingRecordTemplatePanel key={`${project}:${selectedTeam.id}`} project={project} team={selectedTeam.name}
-          onClose={() => {
-            setTrainingTemplateOpen(false);
-            requestAnimationFrame(() => trainingTemplateButton.current?.focus());
-          }} />
-      )}
       <div className="data-import-grid">
         <div className="data-import-sources">
           <section className="data-import-upload-card" aria-label="Excel 导入">
