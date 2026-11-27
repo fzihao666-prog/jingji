@@ -17,8 +17,8 @@ import type { ProfilePhysiologyRecord } from '../../shared/profile-physiology';
 import { projectLabel } from '../../shared/projects';
 import { trainingPeriodSummary } from '../../shared/training-period-summary';
 import { api } from '../api';
-import { EnodeTrends } from '../components/EnodeTrends';
 import { DailyTrainingPersonalCard } from '../components/DailyTrainingCards';
+import { EnodeTrends } from '../components/EnodeTrends';
 import { AppCard, ContentState, PageContainer, PageHeader } from '../components/PageLayout';
 import ProtectedAthletePhoto from '../components/ProtectedAthletePhoto';
 import type {
@@ -93,6 +93,19 @@ const FmsPersonalChart = lazy(() =>
     default: module.FmsPersonalChart,
   }))
 );
+
+// 仅控制运动员档案的模块展示，保留原组件、数据处理和其他页面功能。
+const PROFILE_MODULE_VISIBILITY = {
+  dailyTraining: false,
+  recentTestPerformance: false,
+  specialTest: false,
+  physicalTest: false,
+  trainingStatus: false,
+  physiologyAndRecovery: false,
+  enodeDailyStatus: false,
+  trainingRecords: false,
+  projectSpecial: false,
+};
 
 function daysBetweenInclusive(from: string, to: string) {
   const [fy, fm, fd] = from.split('-').map(Number);
@@ -805,11 +818,13 @@ export function PersonalPage(props: Props) {
             </section>
           </section>
 
-          <section className="personal-profile-section" aria-label="个人每日训练">
-            <DailyTrainingPersonalCard key={`${props.project}:${selectedAthlete.id}`}
-              project={props.project} teamId={selectedAthlete.teamId ?? null}
-              from={props.from} to={props.to} athleteId={selectedAthlete.id} />
-          </section>
+          {PROFILE_MODULE_VISIBILITY.dailyTraining && (
+            <section className="personal-profile-section" aria-label="个人每日训练">
+              <DailyTrainingPersonalCard key={`${props.project}:${selectedAthlete.id}`}
+                project={props.project} teamId={selectedAthlete.teamId ?? null}
+                from={props.from} to={props.to} athleteId={selectedAthlete.id} />
+            </section>
+          )}
 
           <section className="personal-profile-section personal-test-section" aria-label="测试模块">
             <div className="functional-test-grid">
@@ -869,166 +884,182 @@ export function PersonalPage(props: Props) {
                   </DeferredProfileContent>
                 )}
               </AppCard>
-              <DeferredProfileContent label="近期测试表现">
-                <RecentTestPerformance
-                  key={testScope}
-                  tests={recentStrength.key === testScope ? recentStrength.tests : []}
-                  events={specialTestScope === testScope ? specialTests : []}
+              {PROFILE_MODULE_VISIBILITY.recentTestPerformance && (
+                <DeferredProfileContent label="近期测试表现">
+                  <RecentTestPerformance
+                    key={testScope}
+                    tests={recentStrength.key === testScope ? recentStrength.tests : []}
+                    events={specialTestScope === testScope ? specialTests : []}
+                    athleteId={selectedAthlete.id}
+                    project={selectedAthlete.project}
+                    from={props.from}
+                    to={props.to}
+                    strengthLoading={recentStrength.key !== testScope || recentStrength.loading}
+                    specialLoading={specialTestScope !== testScope || dossierDataLoading}
+                    strengthError={recentStrength.key === testScope && recentStrength.error}
+                    specialError={specialTestScope === testScope && specialTestError}
+                  />
+                </DeferredProfileContent>
+              )}
+              {PROFILE_MODULE_VISIBILITY.specialTest && (
+                <AppCard
+                  variant="chart"
+                  className="professional-panel analysis-feature-panel athlete-radar-card"
+                >
+                  <header className="personal-analysis-card-heading">
+                    <div>
+                      <span>
+                        <h3>专项测试</h3>
+                        <p>当前周期实测成绩与正式参考标准对照</p>
+                      </span>
+                    </div>
+                  </header>
+                  <DeferredProfileContent label="专项测试">
+                    <AthleteRadarComparison
+                      title="专项测试"
+                      model={radarModels?.special ?? null}
+                      loading={radarModelsLoading}
+                    />
+                  </DeferredProfileContent>
+                </AppCard>
+              )}
+              {PROFILE_MODULE_VISIBILITY.physicalTest && (
+                <AppCard
+                  variant="chart"
+                  className="professional-panel analysis-feature-panel athlete-radar-card"
+                >
+                  <header className="personal-analysis-card-heading">
+                    <div>
+                      <span>
+                        <h3>体能测试</h3>
+                        <p>当前周期体能成绩、趋势与正式参考标准对照</p>
+                      </span>
+                    </div>
+                  </header>
+                  <DeferredProfileContent label="体能测试">
+                    <AthleteRadarComparison
+                      title="体能测试"
+                      model={radarModels?.physical ?? null}
+                      loading={radarModelsLoading}
+                    />
+                  </DeferredProfileContent>
+                </AppCard>
+              )}
+            </div>
+            {PROFILE_MODULE_VISIBILITY.trainingStatus && (
+              <ProfileSection
+                title="训练情况"
+                subtitle="与同项目、同队且在当前授权范围内的团队平均对照；所有数据跟随页面总周期。"
+              >
+                <ProfileTrainingStatus
+                  trainingStatus={trainingStatus}
+                  loading={trainingStatusLoading}
+                />
+              </ProfileSection>
+            )}
+          </section>
+
+          {PROFILE_MODULE_VISIBILITY.physiologyAndRecovery && (
+            <ProfileSection
+              title="生理生化与恢复状态"
+              subtitle="生理生化读取当前运动员在所选周期内的有效检测记录；恢复趋势跟随同一周期。"
+            >
+              <ProfilePhysiologyRecords
+                records={physiologyRecords}
+                from={props.from}
+                to={props.to}
+                loading={profileAnalysisLoading}
+                error={physiologyError}
+              />
+              <WellnessTrendCards
+                trends={wellnessTrends}
+                loading={dossierDataLoading}
+                error={dossierDataError}
+                from={props.from}
+                to={props.to}
+              />
+              {PROFILE_MODULE_VISIBILITY.enodeDailyStatus && (
+                <EnodeTrends
+                  key={`enode-wellness:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`}
                   athleteId={selectedAthlete.id}
                   project={selectedAthlete.project}
                   from={props.from}
                   to={props.to}
-                  strengthLoading={recentStrength.key !== testScope || recentStrength.loading}
-                  specialLoading={specialTestScope !== testScope || dossierDataLoading}
-                  strengthError={recentStrength.key === testScope && recentStrength.error}
-                  specialError={specialTestScope === testScope && specialTestError}
+                  kind="wellness"
                 />
-              </DeferredProfileContent>
-              <AppCard
-                variant="chart"
-                className="professional-panel analysis-feature-panel athlete-radar-card"
-              >
-                <header className="personal-analysis-card-heading">
-                  <div>
-                    <span>
-                      <h3>专项测试</h3>
-                      <p>当前周期实测成绩与正式参考标准对照</p>
-                    </span>
-                  </div>
-                </header>
-                <DeferredProfileContent label="专项测试">
-                  <AthleteRadarComparison
-                    title="专项测试"
-                    model={radarModels?.special ?? null}
-                    loading={radarModelsLoading}
-                  />
-                </DeferredProfileContent>
-              </AppCard>
-              <AppCard
-                variant="chart"
-                className="professional-panel analysis-feature-panel athlete-radar-card"
-              >
-                <header className="personal-analysis-card-heading">
-                  <div>
-                    <span>
-                      <h3>体能测试</h3>
-                      <p>当前周期体能成绩、趋势与正式参考标准对照</p>
-                    </span>
-                  </div>
-                </header>
-                <DeferredProfileContent label="体能测试">
-                  <AthleteRadarComparison
-                    title="体能测试"
-                    model={radarModels?.physical ?? null}
-                    loading={radarModelsLoading}
-                  />
-                </DeferredProfileContent>
-              </AppCard>
-            </div>
-            <ProfileSection
-              title="训练情况"
-              subtitle="与同项目、同队且在当前授权范围内的团队平均对照；所有数据跟随页面总周期。"
-            >
-              <ProfileTrainingStatus
-                trainingStatus={trainingStatus}
-                loading={trainingStatusLoading}
-              />
-            </ProfileSection>
-          </section>
-
-          <ProfileSection
-            title="生理生化与恢复状态"
-            subtitle="生理生化读取当前运动员在所选周期内的有效检测记录；恢复趋势跟随同一周期。"
-          >
-            <ProfilePhysiologyRecords
-              records={physiologyRecords}
-              from={props.from}
-              to={props.to}
-              loading={profileAnalysisLoading}
-              error={physiologyError}
-            />
-            <WellnessTrendCards
-              trends={wellnessTrends}
-              loading={dossierDataLoading}
-              error={dossierDataError}
-              from={props.from}
-              to={props.to}
-            />
-            <EnodeTrends
-              key={`enode-wellness:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`}
-              athleteId={selectedAthlete.id}
-              project={selectedAthlete.project}
-              from={props.from}
-              to={props.to}
-              kind="wellness"
-            />
-            {props.user.role !== 'OBS' && (
-              <InjuryRecoveryModule
+              )}
+              {props.user.role !== 'OBS' && (
+                <InjuryRecoveryModule
+                  athlete={selectedAthlete}
+                  user={props.user}
+                  asOfDate={props.to}
+                />
+              )}
+              <StrengthProfileModule
+                key={selectedAthlete.id}
                 athlete={selectedAthlete}
                 user={props.user}
-                asOfDate={props.to}
+                preloaded={
+                  recentStrength.key === testScope
+                    ? recentStrength
+                    : { tests: [], loading: true, error: false }
+                }
+                onTestsChanged={(tests) =>
+                  setRecentStrength((current) =>
+                    current.key === testScope
+                      ? { key: testScope, tests, loading: false, error: false }
+                      : current
+                  )
+                }
               />
-            )}
-            <StrengthProfileModule
-              key={selectedAthlete.id}
-              athlete={selectedAthlete}
-              user={props.user}
-              preloaded={
-                recentStrength.key === testScope
-                  ? recentStrength
-                  : { tests: [], loading: true, error: false }
+            </ProfileSection>
+          )}
+          {PROFILE_MODULE_VISIBILITY.trainingRecords && (
+            <ProfileSection
+              title="训练记录"
+              subtitle={
+                props.user.role === 'OBS'
+                  ? '训练课次与 RPE 趋势。'
+                  : '公共课次填写，按实际活动显示专项字段。'
               }
-              onTestsChanged={(tests) =>
-                setRecentStrength((current) =>
-                  current.key === testScope
-                    ? { key: testScope, tests, loading: false, error: false }
-                    : current
-                )
-              }
-            />
-          </ProfileSection>
-          <ProfileSection
-            title="训练记录"
-            subtitle={
-              props.user.role === 'OBS'
-                ? '训练课次与 RPE 趋势。'
-                : '公共课次填写，按实际活动显示专项字段。'
-            }
-          >
-            <EnodeTrends
-              key={`enode-rpe:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`}
-              athleteId={selectedAthlete.id}
-              project={selectedAthlete.project}
-              from={props.from}
-              to={props.to}
-              kind="sessionRpe"
-            />
-            {(props.user.role === 'ATL' ||
-              ['SCC', 'REG', 'TD', 'DMD'].includes(props.user.role)) && (
-              <>
-                {props.user.role !== 'ATL' && (
-                  <ProjectFactVerification
+            >
+              <EnodeTrends
+                key={`enode-rpe:${selectedAthlete.id}:${selectedAthlete.project}:${props.from}:${props.to}`}
+                athleteId={selectedAthlete.id}
+                project={selectedAthlete.project}
+                from={props.from}
+                to={props.to}
+                kind="sessionRpe"
+              />
+              {(props.user.role === 'ATL' ||
+                ['SCC', 'REG', 'TD', 'DMD'].includes(props.user.role)) && (
+                <>
+                  {props.user.role !== 'ATL' && (
+                    <ProjectFactVerification
+                      athleteId={selectedAthlete.id}
+                      project={selectedAthlete.project}
+                      onChanged={props.onChanged}
+                    />
+                  )}
+                  <TrainingSessionEntry
+                    key={`${selectedAthlete.id}:${selectedAthlete.project}`}
                     athleteId={selectedAthlete.id}
                     project={selectedAthlete.project}
-                    onChanged={props.onChanged}
+                    mode={props.user.role === 'ATL' ? 'self' : 'coach'}
+                    onSaved={props.onChanged}
                   />
-                )}
-                <TrainingSessionEntry
-                  key={`${selectedAthlete.id}:${selectedAthlete.project}`}
-                  athleteId={selectedAthlete.id}
-                  project={selectedAthlete.project}
-                  mode={props.user.role === 'ATL' ? 'self' : 'coach'}
-                  onSaved={props.onChanged}
-                />
-              </>
-            )}
-          </ProfileSection>
-          <ProfileSection
-            title="项目专项"
-            subtitle="按当前项目加载专项规则，公共内容沿用统一模块。"
-          >
-            <ProjectSpecialTraining project={selectedAthlete.project} records={selectedRecords} />
-          </ProfileSection>
+                </>
+              )}
+            </ProfileSection>
+          )}
+          {PROFILE_MODULE_VISIBILITY.projectSpecial && (
+            <ProfileSection
+              title="项目专项"
+              subtitle="按当前项目加载专项规则，公共内容沿用统一模块。"
+            >
+              <ProjectSpecialTraining project={selectedAthlete.project} records={selectedRecords} />
+            </ProfileSection>
+          )}
         </>
       )}
     </PageContainer>
